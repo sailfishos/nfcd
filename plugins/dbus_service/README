@@ -1,0 +1,4 @@
+dbus_service
+============
+
+This plugin provides D-Bus interfaces for nfcd.

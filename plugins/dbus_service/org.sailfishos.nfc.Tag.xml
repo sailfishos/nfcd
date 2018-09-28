@@ -1,0 +1,61 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.sailfishos.nfc.Tag">
+    <!--
+      Technologies:
+
+        0 - Unknown
+        1 - NFC-A
+        2 - NFC-B
+        4 - NFC-F
+
+      Protocols:
+
+        0 - Unknown
+        1 - Type 1 Tag
+        2 - Type 2 Tag
+        4 - Type 3 Tag
+        8 - Type 4A Tag (ISO-DEP, ISO 14443)
+        16 - Type 4B Tag,(ISO-DEP, ISO 14443)
+        32 - NFC-DEP Protocol (ISO 18092)
+
+      The above codes are bitmasks elsewhere, but here used as enum values.
+    -->
+    <method name="GetAll">
+      <arg name="version" type="i" direction="out"/>
+      <arg name="present" type="b" direction="out"/>
+      <arg name="technology" type="u" direction="out"/>
+      <arg name="protocol" type="u" direction="out"/>
+      <arg name="type" type="u" direction="out"/>
+      <arg name="interfaces" type="as" direction="out"/>
+      <arg name="ndef_records" type="ao" direction="out"/>
+    </method>
+    <method name="GetInterfaceVersion">
+      <arg name="version" type="i" direction="out"/>
+    </method>
+    <method name="GetPresent">
+      <arg name="present" type="b" direction="out"/>
+    </method>
+    <method name="GetTechnology">
+      <arg name="technology" type="u" direction="out"/>
+    </method>
+    <method name="GetProtocol">
+      <arg name="protocol" type="u" direction="out"/>
+    </method>
+    <method name="GetType">
+      <arg name="type" type="u" direction="out"/>
+    </method>
+    <method name="GetInterfaces">
+      <arg name="interfaces" type="as" direction="out"/>
+    </method>
+    <method name="GetNdefRecords">
+      <arg name="ndef_records" type="ao" direction="out"/>
+    </method>
+    <method name="Deactivate"/>
+    <!-- Signals -->  
+    <signal name="PresentChanged">
+      <arg name="present" type="b"/>
+    </signal>
+  </interface>
+</node>

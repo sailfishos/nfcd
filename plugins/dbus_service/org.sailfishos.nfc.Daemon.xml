@@ -1,0 +1,20 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.sailfishos.nfc.Daemon">
+    <method name="GetAll">
+      <arg name="version" type="i" direction="out"/>
+      <arg name="adapters" type="ao" direction="out"/>
+    </method>
+    <method name="GetInterfaceVersion">
+      <arg name="version" type="i" direction="out"/>
+    </method>
+    <method name="GetAdapters">
+      <arg name="adapters" type="ao" direction="out"/>
+    </method>
+    <!-- Signals -->  
+    <signal name="AdaptersChanged">
+      <arg name="adapters" type="ao"/>
+    </signal>
+  </interface>
+</node>

@@ -1,0 +1,72 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <!--
+    Flags:
+
+      0x01 - MB (first record)
+      0x02 - ME (last record)
+
+    TNF (Type Name Format):
+
+      0 - Empty
+      1 - NFC Forum well-known type
+      2 - Media-type as defined in RFC 2046
+      3 - Absolute URI as defined in RFC 3986
+      4 - NFC Forum external type
+  -->
+  <interface name="org.sailfishos.nfc.NDEF">
+    <method name="GetAll">
+      <arg name="version" type="i" direction="out"/>
+      <arg name="flags" type="u" direction="out"/>
+      <arg name="tnf" type="u" direction="out"/>
+      <arg name="interfaces" type="as" direction="out"/>
+      <arg name="type" type="ay" direction="out">
+        <annotation name="org.gtk.GDBus.C.ForceGVariant" value="true"/>
+      </arg>
+      <arg name="id" type="ay" direction="out">
+        <annotation name="org.gtk.GDBus.C.ForceGVariant" value="true"/>
+      </arg>
+      <arg name="payload" type="ay" direction="out">
+        <annotation name="org.gtk.GDBus.C.ForceGVariant" value="true"/>
+      </arg>
+    </method>
+    <method name="GetInterfaceVersion">
+      <arg name="version" type="i" direction="out"/>
+    </method>
+    <method name="GetFlags">
+      <arg name="present" type="u" direction="out"/>
+    </method>
+    <method name="GetTypeNameFormat">
+      <arg name="protocol" type="u" direction="out"/>
+    </method>
+    <method name="GetInterfaces">
+      <arg name="interfaces" type="as" direction="out"/>
+    </method>
+    <method name="GetType">
+      <arg name="type" type="ay" direction="out">
+        <annotation name="org.gtk.GDBus.C.ForceGVariant" value="true"/>
+      </arg>
+    </method>
+    <method name="GetId">
+      <arg name="id" type="ay" direction="out">
+        <annotation name="org.gtk.GDBus.C.ForceGVariant" value="true"/>
+      </arg>
+    </method>
+    <method name="GetPayload">
+      <arg name="payload" type="ay" direction="out">
+        <annotation name="org.gtk.GDBus.C.ForceGVariant" value="true"/>
+      </arg>
+    </method>
+    <!--
+      GetAll doesn't return raw data because it would contain type,
+      id and payloaded which in most cases would be a waste. If needed,
+      the raw data can be fetched with a separate method:
+    -->
+    <method name="GetRawData">
+      <arg name="data" type="ay" direction="out">
+        <annotation name="org.gtk.GDBus.C.ForceGVariant" value="true"/>
+      </arg>
+    </method>
+  </interface>
+</node>

@@ -1,0 +1,18 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+    <interface name="org.neard.Adapter">
+        <!-- Methods -->
+        <method name="StartPollLoop">
+            <arg name="name" type="s" direction="in"/>
+        </method>
+        <method name="StopPollLoop"/>
+        <!-- Properties -->
+        <property name="Mode" type="s" access="read"/>
+        <property name="Powered" type="b" access="readwrite"/>
+        <property name="Polling" type="b" access="read"/>
+        <property name="Protocols" type="as" access="read"/>
+        <!-- nfcd specific -->
+        <property name="Enabled" type="b" access="read"/>
+    </interface>
+</node>

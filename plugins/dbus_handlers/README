@@ -1,0 +1,104 @@
+dbus_handlers
+=============
+
+This plugin notifies NDEF handlers over D-Bus.
+
+Basically, nfcd calls interested parties over D-Bus (system bus)
+when it reads NDEF from an NFC tag. That way, a process can be
+auto-started by the D-Bus system when a tag is touched,
+
+There are two kinds of such components: Handlers and Listeners.
+All listeners are notified every time when a matching tag is
+touched. Handlers, on the other hand, are invoked in a stable
+order and once the handler says that it has handled the tag,
+no other handlers are notified.
+
+Config files are located in in /etc/nfcd/ndef-handlers
+
+Those are glib parseable conf files, with sections and key-value
+pairs.
+
+Special [Common] section contains values that are applied
+by default to all other configuration sections which describe
+which tags are handled by the component and how.
+
+Parameters of the D-Bus call depend on the type of NDEF being
+handled. Generic handlers receive raw NDEF and have to parse it
+themselves.
+
+All section support (at least) the following keys:
+
+  Service = <service name>
+  Path = <object path>
+  Method = <interface.method>
+
+If path is not specified, the default root path ("/") is assumed.
+Service and method names must be specified.
+
+Handlers
+========
+
+A handler's method returns an int32 ('i') value which tells whether
+the tag has been handled or not:
+
+  0 - tag has not been handled (no action performed)
+  1 - tag has been handled (silently or with a UI)
+
+If the handler doesn't return any value, it's assumed that it has
+handled the call. This makes it easier to integrate existing D-Bus
+services.
+
+Once one handler says that it has handled the call, no other handlers
+are called for this particular tag. The order in which they are called
+is defined by the order of their config files, sorted in alphabetical
+order.
+
+All listeners are still notified though, no matter what handlers
+return and whether or not there are any handlers at all. Handlers
+are notified before the listeners.
+
+Listeners
+=========
+
+Listeners take one a boolean ('b') argument indicating whether or not
+NDEF has been handled by a handler, followed by the same arguments as
+handlers. They do not return any value.
+
+Listeners are all called simultaneously (not sequentially, as handlers).
+
+NDEF specific sections
+======================
+
+"U" (URI) NDEF records:
+
+[URI-Handler]
+
+Method signature:
+
+  <method>
+    <arg name="uri" type="s" direction="in"/>
+    <arg name="status" type="i" direction="out"/>
+  </method>
+
+[URI-Listener]
+
+Method signature:
+
+  <method>
+    <arg name="handled" type="b" direction="in"/>
+    <arg name="uri" type="s" direction="in"/>
+  </method>
+
+Both [URI-Handler] and [URI-Listener] sections support additional
+key that specifies URI pattern to match:
+
+  URI = <pattern>
+
+The default pattern is '*' which matches everything.
+
+Example:
+
+[URI-Handler]
+Service = my.service
+Method = my.interface.HandleURI
+URI = https://*

@@ -1,0 +1,8 @@
+settings
+========
+
+This plugin provides settings for nfcd. It does two things:
+
+1. Powers down NFC chip when display is turned off.
+2. Provides org.sailfishos.nfc.Settings D-Bus API and stores the
+   settings across reboots.

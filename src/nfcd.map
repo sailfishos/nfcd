@@ -1,0 +1,12 @@
+{
+    global:
+        nfc_adapter_*;
+        nfc_crc_*;
+        nfc_manager_*;
+        nfc_ndef_rec_*;
+        nfc_plugin_*;
+        nfc_tag_*;
+        nfc_target_*;
+    local:
+        *;
+};

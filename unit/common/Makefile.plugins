@@ -1,0 +1,69 @@
+# -*- Mode: makefile-gmake -*-
+
+.PHONY: debug_plugins_lib release_plugins_lib coverage_plugins_lib
+
+#
+# Required packages
+#
+
+PKGS += gio-2.0
+
+#
+# Directories
+#
+
+PLUGINS_DIR = ../../plugins
+
+CLEAN_DIRS += $(PLUGINS_DIR)
+
+#
+# Tools and flags
+#
+
+INCLUDES += -I$(PLUGINS_DIR)
+
+#
+# libnfc-plugins.a
+#
+
+PLUGINS_LIB = libnfc-plugins.a
+PLUGINS_BUILD_DIR = $(PLUGINS_DIR)/build
+DEBUG_PLUGINS_LIB = $(PLUGINS_BUILD_DIR)/debug/$(PLUGINS_LIB)
+RELEASE_PLUGINS_LIB = $(PLUGINS_BUILD_DIR)/release/$(PLUGINS_LIB)
+COVERAGE_PLUGINS_LIB = $(PLUGINS_BUILD_DIR)/coverage/$(PLUGINS_LIB)
+
+DEBUG_LIBS += $(DEBUG_PLUGINS_LIB)
+RELEASE_LIBS += $(RELEASE_PLUGINS_LIB)
+COVERAGE_LIBS += $(COVERAGE_PLUGINS_LIB)
+
+#
+# Dependencies
+#
+
+$(DEBUG_PLUGINS_LIB): | debug_plugins_lib
+$(RELEASE_PLUGINS_LIB): | release_plugins_lib
+$(COVERAGE_PLUGINS_LIB): | coverage_plugins_lib
+
+DEBUG_DEPS += $(DEBUG_PLUGINS_LIB)
+RELEASE_DEPS += $(RELEASE_PLUGINS_LIB)
+COVERAGE_DEPS += $(COVERAGE_PLUGINS_LIB)
+
+#
+# Rules
+#
+
+debug_plugins_lib:
+	$(MAKE) -C $(PLUGINS_DIR) debug_lib
+
+release_plugins_lib:
+	$(MAKE) -C $(PLUGINS_DIR) release_lib
+
+coverage_plugins_lib:
+	$(MAKE) -C $(PLUGINS_DIR) coverage_lib
+
+
+#
+# Pull in the common makefile
+#
+
+include ../common/Makefile

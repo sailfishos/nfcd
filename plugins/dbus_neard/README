@@ -1,0 +1,7 @@
+dbus_neard
+==========
+
+This plugin implements a subset of neard D-Bus API to make QtNfc work.
+
+[1] https://git.kernel.org/pub/scm/network/nfc/neard.git
+[2] http://code.qt.io/cgit/qt/qtconnectivity.git/

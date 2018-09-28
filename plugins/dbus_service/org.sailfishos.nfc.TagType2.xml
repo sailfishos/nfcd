@@ -1,0 +1,63 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <!-- Type 2 specific extensions to org.sailfishos.nfc.Tag -->
+  <interface name="org.sailfishos.nfc.TagType2">
+    <method name="GetAll">
+      <arg name="version" type="i" direction="out"/>
+      <arg name="block_size" type="u" direction="out"/>
+      <arg name="data_size" type="u" direction="out"/>
+      <arg name="serial" type="ay" direction="out">
+        <annotation name="org.gtk.GDBus.C.ForceGVariant" value="true"/>
+      </arg>
+    </method>
+    <method name="GetInterfaceVersion">
+      <arg name="version" type="i" direction="out"/>
+    </method>
+    <method name="GetBlockSize">
+      <arg name="block_size" type="u" direction="out"/>
+    </method>
+    <method name="GetDataSize">
+      <arg name="data_size" type="u" direction="out"/>
+    </method>
+    <method name="GetSerial">
+      <arg name="serial" type="ay" direction="out">
+        <annotation name="org.gtk.GDBus.C.ForceGVariant" value="true"/>
+      </arg>
+    </method>
+    <method name="Read">
+      <arg name="sector" type="u" direction="in"/>
+      <arg name="block" type="u" direction="in"/>
+      <arg name="data" type="ay" direction="out">
+        <annotation name="org.gtk.GDBus.C.ForceGVariant" value="true"/>
+      </arg>
+    </method>
+    <method name="Write">
+      <arg name="sector" type="u" direction="in"/>
+      <arg name="block" type="u" direction="in"/>
+      <arg name="data" type="ay" direction="in">
+        <annotation name="org.gtk.GDBus.C.ForceGVariant" value="true"/>
+      </arg>
+      <arg name="written" type="u" direction="out"/>
+    </method>
+    <method name="ReadData">
+      <arg name="offset" type="u" direction="in"/>
+      <arg name="maxbytes" type="u" direction="in"/>
+      <arg name="data" type="ay" direction="out">
+        <annotation name="org.gtk.GDBus.C.ForceGVariant" value="true"/>
+      </arg>
+    </method>
+    <method name="ReadAllData">
+      <arg name="data" type="ay" direction="out">
+        <annotation name="org.gtk.GDBus.C.ForceGVariant" value="true"/>
+      </arg>
+    </method>
+    <method name="WriteData">
+      <arg name="offset" type="u" direction="in"/>
+      <arg name="data" type="ay" direction="in">
+        <annotation name="org.gtk.GDBus.C.ForceGVariant" value="true"/>
+      </arg>
+      <arg name="written" type="u" direction="out"/>
+    </method>
+  </interface>
+</node>

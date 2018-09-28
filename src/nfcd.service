@@ -1,0 +1,16 @@
+[Unit]
+Description=NFC daemon
+Requires=dbus.service
+After=dbus.service
+
+[Service]
+Type=dbus
+BusName=org.sailfishos.nfc.daemon
+User=root
+EnvironmentFile=-/var/lib/environment/nfcd/*.conf
+ExecStart=/usr/sbin/nfcd $NFCD_ARGS
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=basic.target

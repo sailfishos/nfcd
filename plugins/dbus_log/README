@@ -1,0 +1,4 @@
+dbus_log
+========
+
+Provides access to nfcd logs over D-Bus

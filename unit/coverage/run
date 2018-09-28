@@ -1,0 +1,65 @@
+#!/bin/bash
+#
+# This script requires lcov, dirname
+#
+
+TESTS="\
+core_adapter \
+core_crc \
+core_ndef_rec \
+core_ndef_rec_u \
+core_plugin \
+core_plugins \
+core_tag \
+core_tag_t2 \
+core_target \
+core_tlv \
+core_util \
+plugins_dbus_handlers_config"
+
+function err() {
+    echo "*** ERROR!" $1
+    exit 1
+}
+
+# Check the required tools
+which lcov >> /dev/null || err "Please install lcov"
+which dirname >> /dev/null || err "Please install dirname"
+
+# LCOV 1.10 has branch coverage disabled per default
+# Previous versions didn't have the --rc option
+if  [ ! -z "$(lcov --help | grep ' --rc ')" ] ; then
+    LCOV_OPT="--rc lcov_branch_coverage=1"
+    GENHTML_OPT="--branch-coverage"
+fi
+
+pushd `dirname $0` > /dev/null
+COV_DIR="$PWD"
+pushd .. > /dev/null
+TEST_DIR="$PWD"
+pushd .. > /dev/null
+TOP_DIR="$PWD"
+CORE_DIR="$TOP_DIR/core"
+PLUGINS_DIR="$TOP_DIR/plugins"
+popd > /dev/null
+popd > /dev/null
+popd > /dev/null
+
+make -C "$TOP_DIR" clean
+for t in $TESTS ; do
+    pushd "$TEST_DIR/$t"
+    make -C "$TEST_DIR/$t" clean coverage || exit 1
+    build/coverage/test_$t || exit 1
+    popd
+done
+
+CORE_COV="$COV_DIR/core.gcov"
+PLUGINS_COV="$COV_DIR/plugins.gcov"
+ALL_COV="$COV_DIR/all.gcov"
+FILTERED_COV="$COV_DIR/filtered.gcov"
+rm -f "$CORE_COV" "$PLUGINS_COV" "$ALL_COV" "$FILTERED_COV"
+lcov $LCOV_OPT -c -d "$CORE_DIR/build/coverage" -b "$CORE_DIR" -o "$CORE_COV" || exit 1
+lcov $LCOV_OPT -c -d "$PLUGINS_DIR/build/coverage" -b "$PLUGINS_DIR" -o "$PLUGINS_COV" || exit 1
+lcov $LCOV_OPT -a "$CORE_COV" -a "$PLUGINS_COV" -o "$ALL_COV"
+lcov $LCOV_OPT -e "$ALL_COV" "$CORE_DIR/src/*" "$PLUGINS_DIR/dbus_handlers/*" -o "$FILTERED_COV" || exit 1
+genhtml $GENHTML_OPT "$FILTERED_COV" -t "nfcd" --output-directory "$COV_DIR/report" || exit 1

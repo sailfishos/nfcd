@@ -1,0 +1,20 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+    "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+    <interface name="org.neard.Record">
+        <!-- Properties -->
+        <property name="Type" type="s" access="read"/>
+        <property name="URI" type="s" access="read"/>
+        <!-- There's no need to generate unsupported properties -->
+        <!--
+        <property name="Encoding" type="s" access="read"/>
+        <property name="Language" type="s" access="read"/>
+        <property name="Representation" type="s" access="read"/>
+        <property name="Action" type="s" access="read"/>
+        <property name="MIMEType" type="s" access="read"/>
+        <property name="Size" type="u" access="read"/>
+        <property name="MIME" type="s" access="read"/>
+        <property name="MIMEPayload" type="ay" access="read"/>
+        -->
+    </interface>
+</node>
