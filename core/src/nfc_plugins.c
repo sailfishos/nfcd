@@ -41,7 +41,6 @@
 #include <dlfcn.h>
 
 typedef struct nfc_plugin_data {
-    const NfcPluginDesc* desc;
     NfcPlugin* plugin;
     gboolean started;
 } NfcPluginData;
@@ -119,16 +118,14 @@ nfc_plugins_find(
     NfcPlugins* self,
     const char* name)
 {
-    if (name) {
-        GSList* l = self->plugins;
+    GSList* l = self->plugins;
 
-        for (l = self->plugins; l; l = l->next) {
-            NfcPluginData* data = l->data;
-            const NfcPluginDesc* desc = data->plugin->desc;
+    for (l = self->plugins; l; l = l->next) {
+        NfcPluginData* data = l->data;
+        const NfcPluginDesc* desc = data->plugin->desc;
 
-            if (!g_strcmp0(desc->name, name)) {
-                return data;
-            }
+        if (!g_strcmp0(desc->name, name)) {
+            return data;
         }
     }
     return NULL;
@@ -297,6 +294,7 @@ nfc_plugins_new(
             const NfcPluginDesc* desc = *pdesc;
 
             /* External plugins take precedence over builtins */
+            GASSERT(desc->name);
             if (nfc_plugins_find(self, desc->name)) {
                 GINFO("Builtin plugin \"%s\" is replaced by external",
                     desc->name);

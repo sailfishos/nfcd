@@ -261,6 +261,7 @@ test_replace(
     memset(&pi, 0, sizeof(pi));
     pi.plugin_dir = test_dir;
     pi.builtins = builtins;
+    pi.flags = NFC_PLUGINS_DONT_UNLOAD;
 
     plugins = nfc_plugins_new(&pi);
     g_assert(plugins);
