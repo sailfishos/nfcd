@@ -42,8 +42,10 @@ make KEEP_SYMBOLS=1 release
 
 %install
 %define target_wants_dir %{_lib}/systemd/system/network.target.wants
+%define settings_dir %{_sharedstatedir}/nfcd/
 rm -rf %{buildroot}
 make install DESTDIR=%{buildroot}
+install -d -m 0700 %{buildroot}/%{settings_dir}
 mkdir -p %{buildroot}/%{target_wants_dir}
 ln -s ../nfcd.service %{buildroot}/%{target_wants_dir}/nfcd.service
 
@@ -58,6 +60,7 @@ systemctl daemon-reload ||:
 
 %files
 %defattr(-,root,root,-)
+%dir %{settings_dir}
 %{_sbindir}/*
 %{_sysconfdir}/dbus-1/system.d/*.conf
 /%{target_wants_dir}/nfcd.service

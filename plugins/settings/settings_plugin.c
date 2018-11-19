@@ -47,6 +47,9 @@
 
 #include <gutil_misc.h>
 
+#include <sys/stat.h>
+#include <errno.h>
+
 #define GLOG_MODULE_NAME settings_log
 #include <gutil_log.h>
 
@@ -78,6 +81,8 @@ typedef struct settings_plugin {
     MceDisplay* display;
     OrgSailfishosNfcSettings* iface;
     DAPolicy* policy;
+    char* storage_dir;
+    char* storage_file;
     guint own_name_id;
     gulong dbus_call_id[SETTINGS_DBUS_CALL_COUNT];
     gulong mce_event_id[MCE_EVENT_COUNT];
@@ -100,13 +105,17 @@ G_DEFINE_TYPE(SettingsPlugin, settings_plugin, NFC_TYPE_PLUGIN)
 
 #define SETTINGS_STORAGE_DIR             "/var/lib/nfcd"
 #define SETTINGS_STORAGE_FILE            "settings"
+#define SETTINGS_STORAGE_DIR_PERM        0700
+#define SETTINGS_STORAGE_FILE_PERM       0600
+#define SETTINGS_GROUP                   "Settings"
+#define SETTINGS_KEY_ENABLED             "Enabled"
 
 typedef enum settings_error {
     SETTINGS_ERROR_ACCESS_DENIED,        /* AccessDenied */
     SETTINGS_NUM_ERRORS
 } SETTINGS_ERROR;
 
-#define SETTINGS_DBUS_ERROR (settings_error_quark())
+#define SETTINGS_DBUS_ERROR (settings_plugin_error_quark())
 
 typedef enum nfc_settings_action {
     SETTINGS_ACTION_GET_ALL = 1,
@@ -135,8 +144,87 @@ static const char settings_default_policy[] =
     ((display) && (display)->valid && (display)->state != MCE_DISPLAY_STATE_OFF)
 
 static
+GKeyFile*
+settings_plugin_load_config(
+    SettingsPlugin* self)
+{
+    GKeyFile* config = g_key_file_new();
+
+    g_key_file_load_from_file(config, self->storage_file, 0, NULL);
+    return config;
+}
+
+static
+void
+settings_plugin_save_config(
+    SettingsPlugin* self,
+    GKeyFile* config)
+{
+    if (!g_mkdir_with_parents(self->storage_dir, SETTINGS_STORAGE_DIR_PERM)) {
+        GError* error = NULL;
+        gsize len;
+        gchar* data = g_key_file_to_data(config, &len, NULL);
+
+        if (g_file_set_contents(self->storage_file, data, len, &error)) {
+            if (chmod(self->storage_file, SETTINGS_STORAGE_FILE_PERM) < 0) {
+                GWARN("Failed to set %s permissions: %s", self->storage_file,
+                    strerror(errno));
+            } else {
+                GDEBUG("Wrote %s", self->storage_file);
+            }
+        } else {
+            GWARN("%s", GERRMSG(error));
+            g_error_free(error);
+        }
+        g_free(data);
+    } else {
+        GWARN("Failed to create directory %s", self->storage_dir);
+    }
+}
+
+static
+gboolean
+settings_plugin_nfc_enabled(
+    GKeyFile* config)
+{
+    GError* error = NULL;
+    gboolean value = g_key_file_get_boolean(config, SETTINGS_GROUP,
+        SETTINGS_KEY_ENABLED, &error);
+
+    if (error) {
+        g_error_free(error);
+        /* Default */
+        return TRUE;
+    } else {
+        return value;
+    }
+}
+
+static
+void
+settings_plugin_update_config(
+    SettingsPlugin* self)
+{
+    GKeyFile* config = settings_plugin_load_config(self);
+    const gboolean enabled = settings_plugin_nfc_enabled(config);
+    gboolean save = FALSE;
+
+    if (enabled != self->nfc_enabled) {
+        save = TRUE;
+        g_key_file_set_boolean(config, SETTINGS_GROUP, SETTINGS_KEY_ENABLED,
+            self->nfc_enabled);
+    }
+
+    if (save) {
+        settings_plugin_save_config(self, config);
+    }
+
+    g_key_file_unref(config);
+}
+
+static
 GQuark
-settings_error_quark()
+settings_plugin_error_quark()
 {
     static volatile gsize settings_error_quark_value = 0;
     static const GDBusErrorEntry errors[] = {
@@ -236,6 +324,7 @@ settings_plugin_set_nfc_enabled(
         }
         org_sailfishos_nfc_settings_emit_enabled_changed(self->iface, enabled);
         settings_plugin_update_nfc_state(self);
+        settings_plugin_update_config(self);
     }
 }
 
@@ -348,6 +437,7 @@ settings_plugin_start(
     NfcManager* manager)
 {
     SettingsPlugin* self = SETTINGS_PLUGIN(plugin);
+    GKeyFile* config;
 
     GVERBOSE("Starting");
     self->manager = nfc_manager_ref(manager);
@@ -374,9 +464,10 @@ settings_plugin_start(
         settings_plugin_dbus_name_acquired,
         settings_plugin_dbus_name_lost, self, NULL);
 
-#pragma message("Load settings from file")
-    settings_plugin_set_nfc_enabled(self, TRUE);
+    config = settings_plugin_load_config(self);
+    settings_plugin_set_nfc_enabled(self, settings_plugin_nfc_enabled(config));
     settings_plugin_update_nfc_state(self);
+    g_key_file_unref(config);
     return TRUE;
 }
 
@@ -415,6 +506,9 @@ void
 settings_plugin_init(
     SettingsPlugin* self)
 {
+    self->storage_dir = g_strdup(SETTINGS_STORAGE_DIR);
+    self->storage_file = g_build_filename(self->storage_dir,
+        SETTINGS_STORAGE_FILE, NULL);
     self->policy = da_policy_new_full(settings_default_policy,
         settings_policy_actions);
     self->auto_mode = (NFC_MODE_P2P_INITIATOR | NFC_MODE_READER_WRITER |
@@ -429,6 +523,8 @@ settings_plugin_finalize(
     SettingsPlugin* self = SETTINGS_PLUGIN(plugin);
 
     da_policy_unref(self->policy);
+    g_free(self->storage_dir);
+    g_free(self->storage_file);
     G_OBJECT_CLASS(settings_plugin_parent_class)->finalize(plugin);
 }
 
