@@ -219,7 +219,7 @@ test_adapter_submit_mode_request(
     TestAdapter* self = TEST_ADAPTER(adapter);
 
     g_assert(!self->mode_request_pending);
-    if (TEST_ADAPTER(adapter)->fail_mode_request) {
+    if (self->fail_mode_request) {
         return NFC_ADAPTER_CLASS(test_adapter_parent_class)->
             submit_mode_request(adapter, mode);
     } else {

@@ -131,12 +131,11 @@ void
 nfc_manager_unref_adapters(
     NfcAdapter** adapters)
 {
-    if (adapters) {
-        NfcAdapter** ptr = adapters;
+    NfcAdapter** ptr = adapters;
 
-        while (*ptr) nfc_adapter_unref(*ptr++);
-        g_free(adapters);
-    }
+    /* Caller checks adapters for NULL */
+    while (*ptr) nfc_adapter_unref(*ptr++);
+    g_free(adapters);
 }
 
 /*==========================================================================*

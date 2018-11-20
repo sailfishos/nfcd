@@ -4,6 +4,7 @@ all:
 %:
 	@$(MAKE) -C core_adapter $*
 	@$(MAKE) -C core_crc $*
+	@$(MAKE) -C core_manager $*
 	@$(MAKE) -C core_ndef_rec $*
 	@$(MAKE) -C core_ndef_rec_u $*
 	@$(MAKE) -C core_plugin $*
