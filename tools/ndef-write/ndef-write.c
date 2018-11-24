@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -138,18 +138,32 @@ write_ndef_to_type2_tag(
                 }
             }
 
+            /* Add space for type, length (up to 3 bytes) and terminator */
             tlv_size = ndef.size + 3;
+            if (ndef.size >= 0xff) {
+                tlv_size += 2; /* Will use three consecutive bytes format */
+            }
             if (size >= tlv_size) {
                 guint8* data = g_malloc(size);
                 guint written = 0;
                 guint bytes_to_write;
+                guint i = 0;
 
                 /* Build TLV block */
-                data[0] = 0x03; /* NDEF Message */
-                data[1] = ndef.size; /* Length must fit in one byte */
-                memcpy(data + 2, ndef.bytes, ndef.size);
-                data[2 + ndef.size] = 0xfe; /* Terminator */
-                memset(data + ndef.size + 3, 0, size - ndef.size - 3);
+                data[i++] = 0x03; /* NDEF Message */
+                if (ndef.size < 0xff) {
+                    /* One byte format */
+                    data[i++] = (guint8)ndef.size;
+                } else {
+                    /* Three consecutive bytes format */
+                    data[i++] = 0xff;
+                    data[i++] = (guint8)(ndef.size >> 8);
+                    data[i++] = (guint8)ndef.size;
+                }
+                memcpy(data + i, ndef.bytes, ndef.size);
+                i += ndef.size;
+                data[i++] = 0xfe; /* Terminator */
+                memset(data + i, 0, size - i);
                 bytes_to_write = write_ndef_data_diff(data, read_data, size);
 
                 if (!bytes_to_write) {
@@ -173,7 +187,7 @@ write_ndef_to_type2_tag(
             } else {
                 GERR("%s: NDEF is too big (%u > %u)",
                     g_dbus_proxy_get_object_path(G_DBUS_PROXY(t2)),
-                     tlv_size, (guint)size);
+                    tlv_size, (guint)size);
             }
             if (u) {
                 nfc_ndef_rec_unref(&u->rec);
@@ -409,7 +423,7 @@ int main(int argc, char* argv[])
                 GUtilData bin;
 
                 if (g_file_get_contents(file, &contents, &bin.size, &error)) {
-                    if (bin.size >= 0xff) {
+                    if (bin.size > 0xffff) {
                         fprintf(stderr, "File too big (%u bytes)\n",
                             (guint)bin.size);
                     } else {
