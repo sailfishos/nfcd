@@ -42,15 +42,13 @@ dbus_handlers_type_uri_new_handler_config(
     GKeyFile* file,
     NfcNdefRec* ndef)
 {
-    if (NFC_IS_NFC_NDEF_REC_U(ndef)) {
-        const char* group = "URI-Handler";
-        NfcNdefRecU* u = NFC_NDEF_REC_U(ndef);
-        char* pattern = dbus_handlers_config_get_string(file, group,
-            dbus_handlers_type_uri_key);
+    const char* group = "URI-Handler";
+    NfcNdefRecU* u = NFC_NDEF_REC_U(ndef);
+    char* pattern = dbus_handlers_config_get_string(file, group,
+        dbus_handlers_type_uri_key);
 
-        if (!pattern || g_pattern_match_simple(pattern, u->uri)) {
-            return dbus_handlers_new_handler_config(file, group);
-        }
+    if (!pattern || g_pattern_match_simple(pattern, u->uri)) {
+        return dbus_handlers_new_handler_config(file, group);
     }
     return NULL;
 }
@@ -61,15 +59,13 @@ dbus_handlers_type_uri_new_listener_config(
     GKeyFile* file,
     NfcNdefRec* ndef)
 {
-    if (NFC_IS_NFC_NDEF_REC_U(ndef)) {
-        const char* group = "URI-Listener";
-        NfcNdefRecU* u = NFC_NDEF_REC_U(ndef);
-        char* pattern = dbus_handlers_config_get_string(file, group,
-            dbus_handlers_type_uri_key);
+    const char* group = "URI-Listener";
+    NfcNdefRecU* u = NFC_NDEF_REC_U(ndef);
+    char* pattern = dbus_handlers_config_get_string(file, group,
+        dbus_handlers_type_uri_key);
 
-        if (!pattern || g_pattern_match_simple(pattern, u->uri)) {
-            return dbus_handlers_new_listener_config(file, group);
-        }
+    if (!pattern || g_pattern_match_simple(pattern, u->uri)) {
+        return dbus_handlers_new_listener_config(file, group);
     }
     return NULL;
 }
