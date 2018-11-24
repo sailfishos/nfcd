@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -75,8 +75,6 @@ G_DEFINE_TYPE(TestTarget, test_target, NFC_TYPE_TARGET)
 #define TEST_TYPE_TARGET (test_target_get_type())
 #define TEST_TARGET(obj) (G_TYPE_CHECK_INSTANCE_CAST(obj, \
         TEST_TYPE_TARGET, TestTarget))
-#define NFC_TARGET_CLASS(klass) G_TYPE_CHECK_CLASS_CAST(klass, \
-        NFC_TYPE_TARGET, NfcTargetClass)
 
 TestTarget*
 test_target_new(
