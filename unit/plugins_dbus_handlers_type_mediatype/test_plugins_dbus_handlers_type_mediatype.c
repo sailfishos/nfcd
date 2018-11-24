@@ -227,7 +227,7 @@ test_basic(
     g_unlink(fname2);
     g_unlink(fname3);
     g_unlink(fname4);
-    g_unlink(fname3);
+    g_unlink(fname5);
     g_rmdir(dir);
 
     g_assert(handlers);
