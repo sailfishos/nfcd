@@ -87,58 +87,53 @@ nfc_ndef_rec_parse(
     GUtilData* block,
     NfcNdefData* ndef)
 {
-    if (block->size < 4) {
-        /* At least 4 bytes is required for anything meaningful */
+    if (block->size < 3) {
+        /* At least 3 bytes is required for anything meaningful */
         GDEBUG("Block is too short to be an NDEF record");
         return FALSE;
     } else {
         const guint8 hdr = block->bytes[0];
+        guint total_len = 1;
 
         memset(ndef, 0, sizeof(*ndef));
         ndef->type_length = block->bytes[1];
 
-        if (ndef->type_length) {
-            guint total_len = 1;
+        /* Type */
+        total_len += 1 + ndef->type_length;
+        ndef->type_offset = 2;
 
-            /* Type */
-            total_len += 1 + ndef->type_length;
-            ndef->type_offset = 2;
-
-            /* Payload length */
-            if (hdr & NFC_NDEF_HDR_SR) {
-                /* Short record */
-                ndef->payload_length = block->bytes[ndef->type_offset++];
-                total_len += 1 + ndef->payload_length;
-            } else {
-                /* 4 bytes for length */
-                ndef->payload_length =
-                    (((guint)block->bytes[ndef->type_offset]) << 24) |
-                    (((guint)block->bytes[ndef->type_offset + 1]) << 16) |
-                    (((guint)block->bytes[ndef->type_offset + 2]) << 8) |
-                    ((guint)block->bytes[ndef->type_offset + 3]);
-                    total_len += 4 + ndef->payload_length;
-                    ndef->type_offset += 4;
-                }
-
-            /* ID Length */
-            if (hdr & NFC_NDEF_HDR_IL) {
-                ndef->id_length = block->bytes[ndef->type_offset++];
-                total_len += 1 + ndef->id_length;
-            }
-
-            /* Check for overflow */
-            if (ndef->payload_length < 0x80000000 && total_len <= block->size) {
-                /* Cut the garbage if there is any */
-                ndef->rec.bytes = block->bytes;
-                ndef->rec.size = total_len;
-                block->bytes += total_len;
-                block->size -= total_len;
-               return TRUE;
-            } else {
-                GDEBUG("Garbage (lengths don't add up)");
-            }
+        /* Payload length */
+        if (hdr & NFC_NDEF_HDR_SR) {
+            /* Short record */
+            ndef->payload_length = block->bytes[ndef->type_offset++];
+            total_len += 1 + ndef->payload_length;
         } else {
-            GDEBUG("Garbage (zero type length)");
+            /* 4 bytes for length */
+            ndef->payload_length =
+                (((guint)block->bytes[ndef->type_offset]) << 24) |
+                (((guint)block->bytes[ndef->type_offset + 1]) << 16) |
+                (((guint)block->bytes[ndef->type_offset + 2]) << 8) |
+                ((guint)block->bytes[ndef->type_offset + 3]);
+            total_len += 4 + ndef->payload_length;
+            ndef->type_offset += 4;
+        }
+
+        /* ID Length */
+        if (hdr & NFC_NDEF_HDR_IL) {
+            ndef->id_length = block->bytes[ndef->type_offset++];
+            total_len += 1 + ndef->id_length;
+        }
+
+        /* Check for overflow */
+        if (ndef->payload_length < 0x80000000 && total_len <= block->size) {
+            /* Cut the garbage if there is any */
+            ndef->rec.bytes = block->bytes;
+            ndef->rec.size = total_len;
+            block->bytes += total_len;
+            block->size -= total_len;
+            return TRUE;
+        } else {
+            GDEBUG("Garbage (lengths don't add up)");
         }
         return FALSE;
     }

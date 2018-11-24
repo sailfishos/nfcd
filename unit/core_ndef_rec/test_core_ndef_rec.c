@@ -385,11 +385,16 @@ void
 test_no_type(
     void)
 {
-    static const guint8 data[] = { 0xd1, 0x00, 0x00, 0x00 };
+    static const guint8 data[] = { 0xd0, 0x00, 0x00 };
+    NfcNdefRec* rec;
     GUtilData bytes;
 
     TEST_BYTES_SET(bytes, data);
-    g_assert(!nfc_ndef_rec_new(&bytes));
+    rec = nfc_ndef_rec_new(&bytes);
+    g_assert(rec);
+    g_assert(rec->tnf == NFC_NDEF_TNF_EMPTY);
+    g_assert(!rec->type.size);
+    nfc_ndef_rec_unref(rec);
 }
 
 /*==========================================================================*
