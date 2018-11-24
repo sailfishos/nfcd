@@ -46,11 +46,10 @@ dbus_handlers_type_uri_new_handler_config(
     NfcNdefRecU* u = NFC_NDEF_REC_U(ndef);
     char* pattern = dbus_handlers_config_get_string(file, group,
         dbus_handlers_type_uri_key);
+    gboolean match = (!pattern || g_pattern_match_simple(pattern, u->uri));
 
-    if (!pattern || g_pattern_match_simple(pattern, u->uri)) {
-        return dbus_handlers_new_handler_config(file, group);
-    }
-    return NULL;
+    g_free(pattern);
+    return match ? dbus_handlers_new_handler_config(file, group) : NULL;
 }
 
 static
@@ -63,11 +62,10 @@ dbus_handlers_type_uri_new_listener_config(
     NfcNdefRecU* u = NFC_NDEF_REC_U(ndef);
     char* pattern = dbus_handlers_config_get_string(file, group,
         dbus_handlers_type_uri_key);
+    gboolean match = (!pattern || g_pattern_match_simple(pattern, u->uri));
 
-    if (!pattern || g_pattern_match_simple(pattern, u->uri)) {
-        return dbus_handlers_new_listener_config(file, group);
-    }
-    return NULL;
+    g_free(pattern);
+    return match ? dbus_handlers_new_listener_config(file, group) : NULL;
 }
 
 static
