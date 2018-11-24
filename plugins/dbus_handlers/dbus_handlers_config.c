@@ -111,14 +111,16 @@ dbus_handlers_config_add_handlers(
     DBusHandlerConfigList* list,
     DBusHandlerConfigList* list2)
 {
-    if (list->last) {
-        list->last->next = list2->first;
-    } else {
-        GASSERT(!list->first);
-        list->first = list2->first;
+    if (list2->first) {
+        if (list->last) {
+            list->last->next = list2->first;
+        } else {
+            GASSERT(!list->first);
+            list->first = list2->first;
+        }
+        list->last = list2->last;
+        list2->first = list2->last = NULL;
     }
-    list->last = list2->last;
-    list2->first = list2->last = NULL;
 }
 
 static
@@ -143,14 +145,16 @@ dbus_handlers_config_add_listeners(
     DBusListenerConfigList* list,
     DBusListenerConfigList* list2)
 {
-    if (list->last) {
-        list->last->next = list2->first;
-    } else {
-        GASSERT(!list->first);
-        list->first = list2->first;
+    if (list2->first) {
+        if (list->last) {
+            list->last->next = list2->first;
+        } else {
+            GASSERT(!list->first);
+            list->first = list2->first;
+        }
+        list->last = list2->last;
+        list2->first = list2->last = NULL;
     }
-    list->last = list2->last;
-    list2->first = list2->last = NULL;
 }
 
 static
