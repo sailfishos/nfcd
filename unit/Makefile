@@ -15,6 +15,7 @@ all:
 	@$(MAKE) -C core_tlv $*
 	@$(MAKE) -C core_util $*
 	@$(MAKE) -C plugins_dbus_handlers_config $*
+	@$(MAKE) -C plugins_dbus_handlers_type_mediatype $*
 
 clean: unitclean
 	rm -f *~
