@@ -88,6 +88,12 @@ typedef struct dbus_handlers_config {
 
 extern const DBusHandlerType dbus_handlers_type_uri;
 extern const DBusHandlerType dbus_handlers_type_generic;
+extern const DBusHandlerType dbus_handlers_type_mediatype_wildcard;
+extern const DBusHandlerType dbus_handlers_type_mediatype_exact;
+
+gboolean
+dbus_handlers_type_mediatype_record(
+    NfcNdefRec* ndef);
 
 /* DBusHandlersConfig */
 

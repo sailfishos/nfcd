@@ -107,6 +107,22 @@ dbus_handlers_config_add_handler(
 
 static
 void
+dbus_handlers_config_add_handlers(
+    DBusHandlerConfigList* list,
+    DBusHandlerConfigList* list2)
+{
+    if (list->last) {
+        list->last->next = list2->first;
+    } else {
+        GASSERT(!list->first);
+        list->first = list2->first;
+    }
+    list->last = list2->last;
+    list2->first = list2->last = NULL;
+}
+
+static
+void
 dbus_handlers_config_add_listener(
     DBusListenerConfigList* list,
     DBusListenerConfig* listener)
@@ -119,6 +135,22 @@ dbus_handlers_config_add_listener(
         list->first = listener;
     }
     list->last = listener;
+}
+
+static
+void
+dbus_handlers_config_add_listeners(
+    DBusListenerConfigList* list,
+    DBusListenerConfigList* list2)
+{
+    if (list->last) {
+        list->last->next = list2->first;
+    } else {
+        GASSERT(!list->first);
+        list->first = list2->first;
+    }
+    list->last = list2->last;
+    list2->first = list2->last = NULL;
 }
 
 static
@@ -145,9 +177,10 @@ dbus_handlers_config_add(
 
 static
 DBusHandlersConfig*
-dbus_handlers_config_load_type(
+dbus_handlers_config_load_types(
     const char* dir,
     const DBusHandlerType* type,
+    const DBusHandlerType* type2,
     NfcNdefRec* ndef)
 {
     GStrV* files = dbus_handlers_config_files(dir);
@@ -156,14 +189,18 @@ dbus_handlers_config_load_type(
 
     if (files) {
         char** ptr = files;
-        DBusHandlerConfigList handlers;
-        DBusListenerConfigList listeners;
+        DBusHandlerConfigList handlers, handlers2, handlers3;
+        DBusListenerConfigList listeners, listeners2, listeners3;
         GString* path = g_string_new(dir);
         const guint baselen = path->len + 1;
 
         g_string_append_c(path, G_DIR_SEPARATOR);
         memset(&handlers, 0, sizeof(handlers));
+        memset(&handlers2, 0, sizeof(handlers2));
+        memset(&handlers3, 0, sizeof(handlers3));
         memset(&listeners, 0, sizeof(listeners));
+        memset(&listeners2, 0, sizeof(listeners2));
+        memset(&listeners3, 0, sizeof(listeners3));
         while (*ptr) {
             const char* fname = *ptr++;
 
@@ -174,13 +211,21 @@ dbus_handlers_config_load_type(
                     dbus_handlers_config_add(&handlers, &listeners,
                         type, k, ndef);
                 }
-                dbus_handlers_config_add(&handlers, &listeners,
+                if (type2) {
+                    dbus_handlers_config_add(&handlers2, &listeners2,
+                        type2, k, ndef);
+                }
+                dbus_handlers_config_add(&handlers3, &listeners3,
                     &dbus_handlers_type_generic, k, ndef);
             }
         }
         g_strfreev(files);
         g_string_free(path, TRUE);
 
+        dbus_handlers_config_add_handlers(&handlers, &handlers2);
+        dbus_handlers_config_add_handlers(&handlers, &handlers3);
+        dbus_handlers_config_add_listeners(&listeners, &listeners2);
+        dbus_handlers_config_add_listeners(&listeners, &listeners3);
         if (handlers.first || listeners.first) {
             config = g_slice_new0(DBusHandlersConfig);
             config->handlers = handlers.first;
@@ -315,11 +360,16 @@ dbus_handlers_config_load(
     NfcNdefRec* ndef)
 {
     if (dir && ndef) {
-        const DBusHandlerType* type = 
-            NFC_IS_NFC_NDEF_REC_U(ndef) ? &dbus_handlers_type_uri :
-            NULL;
+        const DBusHandlerType* type = NULL;
+        const DBusHandlerType* type2 = NULL;
 
-        return dbus_handlers_config_load_type(dir, type, ndef);
+        if (NFC_IS_NFC_NDEF_REC_U(ndef)) {
+            type = &dbus_handlers_type_uri;
+        } else if (dbus_handlers_type_mediatype_record(ndef)) {
+            type = &dbus_handlers_type_mediatype_exact;
+            type2 = &dbus_handlers_type_mediatype_wildcard;
+        }
+        return dbus_handlers_config_load_types(dir, type, type2, ndef);
     }
     return NULL;
 }

@@ -69,7 +69,49 @@ Listeners are all called simultaneously (not sequentially, as handlers).
 NDEF specific sections
 ======================
 
-"U" (URI) NDEF records:
+Media-type record
+-----------------
+
+[MediaType-Handler]
+
+Method signature:
+
+  <method>
+    <arg name="media-type" type="s" direction="in"/>
+    <arg name="content" type="ay" direction="in"/>
+    <arg name="status" type="i" direction="out"/>
+  </method>
+
+[MediaType-Listener]
+
+Method signature:
+
+  <method>
+    <arg name="handled" type="b" direction="in"/>
+    <arg name="media-type" type="s" direction="in"/>
+    <arg name="content" type="ay" direction="in"/>
+  </method>
+
+Both [MediaType-Handler] and [MediaType-Listener] must contain additional
+key that specifies whichi mime type is handled:
+
+  MimeType = type/subtype
+
+or
+
+  MimeType = type/*
+
+The exact matches are tried first, followed by type/* style wildcards.
+
+Example:
+
+[MediaType-Handler]
+MediaType = image/jpeg
+Service = my.service
+Method = my.interface.HandleJPEG
+
+"U" (URI) NDEF record
+---------------------
 
 [URI-Handler]
 

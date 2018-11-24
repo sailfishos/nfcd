@@ -198,6 +198,7 @@ DBUS_HANDLERS_SRC = \
   dbus_handlers_plugin.c \
   dbus_handlers_tag.c \
   dbus_handlers_type_generic.c \
+  dbus_handlers_type_mediatype.c \
   dbus_handlers_type_uri.c \
   dbus_handlers.c
 
