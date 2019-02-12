@@ -120,9 +120,41 @@ NfcNdefRecU*
 nfc_ndef_rec_u_new(
     const char* uri);
 
+/* Text */
+
+typedef struct nfc_ndef_rec_t_priv NfcNdefRecTPriv;
+
+typedef struct nfc_ndef_rec_t {
+    NfcNdefRec rec;
+    NfcNdefRecTPriv* priv;
+    const char* language;
+    const char* text;
+} NfcNdefRecT;
+
+GType nfc_ndef_rec_t_get_type(void);
+#define NFC_TYPE_NDEF_REC_T (nfc_ndef_rec_t_get_type())
+#define NFC_NDEF_REC_T(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
+        NFC_TYPE_NDEF_REC_T, NfcNdefRecT))
+#define NFC_IS_NFC_NDEF_REC_T(obj) G_TYPE_CHECK_INSTANCE_TYPE(obj, \
+        NFC_TYPE_NDEF_REC_T)
+
+typedef enum nfc_ndef_rec_t_encoding {
+    NFC_NDEF_REC_T_ENCODING_UTF8,
+    NFC_NDEF_REC_T_ENCODING_UTF16BE,
+    NFC_NDEF_REC_T_ENCODING_UTF16LE
+} NFC_NDEF_REC_T_ENCODING;
+
+NfcNdefRecT*
+nfc_ndef_rec_t_new_enc(
+    const char* text,
+    const char* language,
+    NFC_NDEF_REC_T_ENCODING enc);
+
+#define nfc_ndef_rec_t_new(text,lang) \
+        nfc_ndef_rec_t_new_enc(text, lang, NFC_NDEF_REC_T_ENCODING_UTF8)
+
 /* These are not yet implemented: */
 
-typedef struct nfc_ndef_rec_t NfcNdefRecT;    /* Text */
 typedef struct nfc_ndef_rec_sp NfcNdefRecSp;  /* Smart poster */
 typedef struct nfc_ndef_rec_hs NfcNdefRecHs;  /* Handover select */
 typedef struct nfc_ndef_rec_hr NfcNdefRecHr;  /* Handover request */

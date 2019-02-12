@@ -9,6 +9,7 @@ core_crc \
 core_manager \
 core_ndef_rec \
 core_ndef_rec_u \
+core_ndef_rec_t \
 core_plugin \
 core_plugins \
 core_tag \

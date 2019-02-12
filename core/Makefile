@@ -34,6 +34,7 @@ SRC = \
   nfc_manager.c \
   nfc_ndef_rec.c \
   nfc_ndef_rec_u.c \
+  nfc_ndef_rec_t.c \
   nfc_plugins.c \
   nfc_plugin.c \
   nfc_tag.c \

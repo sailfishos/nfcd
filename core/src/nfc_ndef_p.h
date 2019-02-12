@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2018 Jolla Ltd.
  * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018 Bogdan Pankovsky <b.pankovsky@omprussia.ru>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -41,8 +42,10 @@
 #define nfc_ndef_payload _nfc_ndef_payload
 #define nfc_ndef_rec_initialize _nfc_ndef_rec_initialize
 #define nfc_ndef_rec_u_new_from_data _nfc_ndef_rec_u_new_from_data
+#define nfc_ndef_rec_t_new_from_data _nfc_ndef_rec_t_new_from_data
 #define nfc_ndef_rec_new_well_known _nfc_ndef_rec_new_well_known
 #define nfc_ndef_rec_type_u _nfc_ndef_rec_type_u
+#define nfc_ndef_rec_type_t _nfc_ndef_rec_type_t
 
 typedef struct nfc_ndef_rec_class {
     GObjectClass parent;
@@ -65,6 +68,7 @@ typedef struct nfc_ndef_data {
 #define NFC_NDEF_HDR_TNF_MASK (0x07)
 
 extern const GUtilData nfc_ndef_rec_type_u; /* "U" */
+extern const GUtilData nfc_ndef_rec_type_t; /* "T" */
 
 gboolean
 nfc_ndef_type(
@@ -92,6 +96,10 @@ nfc_ndef_rec_new_well_known(
 NfcNdefRecU*
 nfc_ndef_rec_u_new_from_data(
     const NfcNdefData* ndef);
+
+NfcNdefRecT*
+nfc_ndef_rec_t_new_from_data(
+        const NfcNdefData* ndef);
 
 #endif /* NFC_NDEF_PRIVATE_H */
 
