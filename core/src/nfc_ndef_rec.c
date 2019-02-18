@@ -43,7 +43,6 @@ struct nfc_ndef_rec_priv {
 
 G_DEFINE_TYPE(NfcNdefRec, nfc_ndef_rec, G_TYPE_OBJECT)
 
-static const GUtilData nfc_ndef_rec_type_t = { (const guint8*) "T", 1 };
 static const GUtilData nfc_ndef_rec_type_sp = { (const guint8*) "Sp", 2 };
 static const GUtilData nfc_ndef_rec_type_hs = { (const guint8*) "Hs", 2 };
 static const GUtilData nfc_ndef_rec_type_hr = { (const guint8*) "Hr", 2 };
@@ -69,6 +68,15 @@ nfc_ndef_rec_alloc(
                 /* URI Record */
                 GDEBUG("URI Record: %s", uri_rec->uri);
                 return NFC_NDEF_REC(uri_rec);
+            }
+        } else if (gutil_data_equal(&type, &nfc_ndef_rec_type_t)) {
+            NfcNdefRecT* text_rec = nfc_ndef_rec_t_new_from_data(ndef);
+
+            if (text_rec) {
+                /* TEXT Record */
+                GDEBUG("Text Record Language: %s", text_rec->language);
+                GDEBUG("Text Record: %s", text_rec->text);
+                return NFC_NDEF_REC(text_rec);
             }
         }
 
