@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Bogdan Pankovsky <b.pankovsky@omprussia.ru>
+ * Copyright (C) 2019 Jolla Ltd.
+ * Copyright (C) 2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -35,12 +35,12 @@
 
 #include <gutil_misc.h>
 
+#include <locale.h>
+
 /* NFCForum-TS-RTD_TEXT_1.0 */
-/* standard field structure
-status byte*1 byte* encoding*n - bytes* text*
-*/
+
 struct nfc_ndef_rec_t_priv {
-    char* language;
+    char* lang;
     char* text;
 };
 
@@ -49,167 +49,71 @@ G_DEFINE_TYPE(NfcNdefRecT, nfc_ndef_rec_t, NFC_TYPE_NDEF_REC)
 
 const GUtilData nfc_ndef_rec_type_t = { (const guint8*) "T", 1 };
 
-#define LANGUAGE_LENGTH_MASK 0x3f
-#define ENCODING_UTF16_BIT 0x80 /* 0 - utf-8;  1 - utf-16*/
+#define STATUS_LANG_LEN_MASK (0x3f)
+#define STATUS_ENC_UTF16 (0x80) /* Otherwise UTF-8 */
+
+static const char ENC_UTF8[] = "UTF-8";
+static const char ENC_UTF16_LE[] = "UTF-16LE";
+static const char ENC_UTF16_BE[] = "UTF-16BE";
+
+/* UTF-16 Byte Order Marks */
+static const guint8 UTF16_BOM_LE[] = {0xff, 0xfe};
+static const guint8 UTF16_BOM_BE[] = {0xfe, 0xff};
 
 static
 GBytes*
 nfc_ndef_rec_t_build(
-  const char* text,
-  const char* language,
-  NFC_NDEF_REC_T_ENCODING enc)
+    const char* text,
+    const char* lang,
+    NFC_NDEF_REC_T_ENC enc)
 {
-    GByteArray* buf = g_byte_array_new();
-    const guint8 language_length = strlen(language);
-    const guint8 text_length = strlen(text);
+    const guint8 lang_len = strlen(lang);
+    const guint8 text_len = strlen(text);
+    const guint8 status_byte = (lang_len & STATUS_LANG_LEN_MASK) |
+        ((enc == NFC_NDEF_REC_T_ENC_UTF8) ? 0 : STATUS_ENC_UTF16);
+    const guint8* bom = NULL;
+    const void* enc_text = NULL;
+    void* enc_text_tmp = NULL;
+    gsize enc_text_len;
+    gsize bom_len = 0;
     GError* err = NULL;
-    guint8 status_byte = language_length & LANGUAGE_LENGTH_MASK; /* encoding by default utf-8 */
-    status_byte = status_byte | ( enc == NFC_NDEF_REC_T_ENCODING_UTF8 ? 0 : ENCODING_UTF16_BIT );
 
-    g_byte_array_append(buf, &status_byte, 1);
-    g_byte_array_append(buf, (const guint8*)language, language_length);
-
-    if (enc == NFC_NDEF_REC_T_ENCODING_UTF16BE ) {
-        gsize enc_length;
-        gchar* text_encoded;
-        text_encoded = g_convert(
-                          text,
-                          text_length,
-                          "UTF-16BE",
-                          "UTF-8",
-                          NULL,
-                          &enc_length,
-                          &err);
-
-        g_byte_array_append(buf, (const guint8*) text_encoded, enc_length);
-        g_free(text_encoded);
-    } else if (enc == NFC_NDEF_REC_T_ENCODING_UTF16LE) {
-        static const guint8 BOM[2] = {0xff , 0xfe};
-        gsize enc_length;
-        gchar* text_encoded;
-        text_encoded = g_convert(
-                          text,
-                          text_length,
-                          "UTF-16LE",
-                          "UTF-8",
-                          NULL,
-                          &enc_length,
-                          &err);
-
-        g_byte_array_append(buf, BOM , 2); /* BOM */
-        g_byte_array_append(buf, (const guint8*) text_encoded, enc_length);
-        g_free(text_encoded);
-    } else if (enc == NFC_NDEF_REC_T_ENCODING_UTF8) {
-        g_byte_array_append(buf, (const guint8*) text, text_length);
-    } else {
-        GDEBUG ("Unable to encode tag: Wrong encoding\n");
+    switch (enc) {
+    case NFC_NDEF_REC_T_ENC_UTF8:
+        enc_text = text;
+        enc_text_len = text_len;
+        break;
+    case NFC_NDEF_REC_T_ENC_UTF16BE:
+         enc_text = enc_text_tmp = g_convert(text, text_len, ENC_UTF16_BE,
+            ENC_UTF8, NULL, &enc_text_len, &err);
+         break;
+    case NFC_NDEF_REC_T_ENC_UTF16LE:
+        bom = UTF16_BOM_LE;
+        bom_len = sizeof(UTF16_BOM_LE);
+        enc_text = enc_text_tmp = g_convert(text, text_len, ENC_UTF16_LE,
+            ENC_UTF8, NULL, &enc_text_len, &err);
+        break;
     }
 
-    if (err) {
-        /* Report error to user, and free error */
-        GDEBUG ("Unable to encode tag: %s\n", err->message);
-        g_error_free (err);
-    }
+    if (enc_text) {
+        GByteArray* buf = g_byte_array_sized_new(1 + lang_len + bom_len +
+            enc_text_len);
 
-    return g_byte_array_free_to_bytes(buf);
-}
-
-static
-gchar*
-nfc_ndef_rec_t_convert_to_utf8(
-  const GUtilData* payload)
-{
-    /* nfc_ndef_payload() makes sure that payload length > 0 */
-    const guint8 status_byte = payload->bytes[0];
-    const gsize language_length = status_byte & LANGUAGE_LENGTH_MASK;
-    const glong len = payload->size - 1 - language_length;
-
-    gchar *parsedtext = NULL;
-    const gchar* text = (gchar*)(payload->bytes + 1 + language_length);
-
-    if (!(status_byte & ENCODING_UTF16_BIT)) {
-        if (g_utf8_validate(text, len , NULL)) {
-            parsedtext = g_strndup(text, len);
-        }
+        g_byte_array_append(buf, &status_byte, 1);
+        g_byte_array_append(buf, (const guint8*)lang, lang_len);
+        if (bom) g_byte_array_append(buf, bom, bom_len);
+        g_byte_array_append(buf, enc_text, enc_text_len);
+        g_free(enc_text_tmp);
+        return g_byte_array_free_to_bytes(buf);
     } else {
-        /* convert to UTF8 */
-        GError* err = NULL;
-        const guint8 bom_byte_first = payload->bytes[1 + language_length];
-        const guint8 bom_byte_second = payload->bytes[2 + language_length];
-
-        if (bom_byte_first == 0xff && bom_byte_second == 0xfe) {
-            parsedtext = g_convert(
-                        text + 2,
-                        len - 4,
-                        "UTF-8",
-                        "UTF-16LE",
-                        NULL,
-                        NULL,
-                        &err);
-        } else if (bom_byte_first == 0xfe && bom_byte_second == 0xff) {
-            parsedtext = g_convert(
-                        text + 2,
-                        len - 4,
-                        "UTF-8",
-                        "UTF-16BE",
-                        NULL,
-                        NULL,
-                        &err);
-        } else {
-            parsedtext = g_convert(
-                        text,
-                        len,
-                        "UTF-8",
-                        "UTF-16BE",
-                        NULL,
-                        NULL,
-                        &err);
-        }
         if (err) {
-            /* Report error to user, and free error*/
-            GDEBUG ("Unable to encode tag: %s\n", err->message);
-            g_error_free (err);
-            g_free(parsedtext);
-            parsedtext = NULL;
+            GWARN("Failed to encode Text record: %s", err->message);
+            g_error_free(err);
+        } else {
+            GWARN("Failed to encode Text record");
         }
+        return NULL;
     }
-
-    return parsedtext;
-}
-
-static
-NfcNdefRecT*
-nfc_ndef_rec_t_parse(
-    const GUtilData* payload)
-{
-    NfcNdefRecT* self = g_object_new(NFC_TYPE_NDEF_REC_T, NULL);
-    NfcNdefRecTPriv* priv = self->priv;
-    guint8 len = payload->size - 1;
-    gsize language_length = payload->bytes[0] & LANGUAGE_LENGTH_MASK;
-    char* text = NULL;
-
-    if (language_length < len) {
-        text = nfc_ndef_rec_t_convert_to_utf8(payload);
-    }
-
-    if (text) {
-      self->text = priv->text = text;
-    } else {
-      self->text = priv->text = NULL;
-    }
-
-    if (language_length > 0 ) {
-        gchar* parsed_language = g_strndup(
-                          (const gchar*)(payload->bytes + 1),
-                          language_length);
-        self->language = priv->language = parsed_language;
-        len -= language_length;
-    } else {
-        GDEBUG("Missing language");
-        self->language= priv->language = NULL;
-    }
-
-    return self;
 }
 
 /*==========================================================================*
@@ -223,10 +127,72 @@ nfc_ndef_rec_t_new_from_data(
     GUtilData payload;
 
     if (nfc_ndef_payload(ndef, &payload)) {
-        NfcNdefRecT* self = nfc_ndef_rec_t_parse(&payload);
-        if(self){
-            nfc_ndef_rec_initialize(&self->rec, NFC_NDEF_RTD_TEXT, ndef);
-            return self;
+        const guint8 status_byte = payload.bytes[0];
+        const guint lang_len = (status_byte & STATUS_LANG_LEN_MASK);
+        const char* lang = (char*)payload.bytes + 1;
+
+        if ((lang_len < payload.size) && /* Empty or ASCII (at least UTF-8) */
+            (!lang_len || g_utf8_validate(lang, lang_len, NULL))) {
+            const char* text = (char*)payload.bytes + lang_len + 1;
+            const guint text_len = payload.size - lang_len - 1;
+            const char* utf8;
+            gsize utf8_len;
+            char* utf8_buf;
+
+            if (status_byte & STATUS_ENC_UTF16) {
+                GError* err = NULL;
+                if (text_len >= sizeof(UTF16_BOM_BE) &&
+                    !memcmp(text, UTF16_BOM_BE, sizeof(UTF16_BOM_BE))) {
+                    utf8_buf = g_convert(text + sizeof(UTF16_BOM_BE),
+                        text_len - sizeof(UTF16_BOM_BE), ENC_UTF8,
+                        ENC_UTF16_BE, NULL, &utf8_len, &err);
+                } else if (text_len >= sizeof(UTF16_BOM_LE) &&
+                    !memcmp(text, UTF16_BOM_LE, sizeof(UTF16_BOM_LE))) {
+                    utf8_buf = g_convert(text + sizeof(UTF16_BOM_LE),
+                        text_len - sizeof(UTF16_BOM_LE), ENC_UTF8,
+                        ENC_UTF16_LE, NULL, &utf8_len, &err);
+                } else {
+                    /*
+                     * 3.4 UTF-16 Byte Order
+                     *
+                     * ... If the BOM is omitted, the byte order shall be
+                     * big-endian (UTF-16 BE).
+                     */
+                    utf8_buf = g_convert(text, text_len, ENC_UTF8,
+                        ENC_UTF16_BE, NULL, &utf8_len, &err);
+                }
+                if (err) {
+                    GWARN("Failed to decode Text record: %s", err->message);
+                    g_free(utf8_buf); /* Should be NULL already */
+                    g_error_free(err);
+                    utf8 = NULL;
+                } else {
+                    utf8 = utf8_buf;
+                }
+            } else if (!text_len) {
+                utf8 = "";
+                utf8_buf = NULL;
+            } else if (g_utf8_validate(text, text_len, NULL)) {
+                utf8 = utf8_buf = g_strndup(text, text_len);
+                utf8_len = text_len;
+            } else {
+                utf8 = NULL;
+            }
+
+            if (utf8) {
+                NfcNdefRecT* self = g_object_new(NFC_TYPE_NDEF_REC_T, NULL);
+                NfcNdefRecTPriv* priv = self->priv;
+
+                nfc_ndef_rec_initialize(&self->rec, NFC_NDEF_RTD_TEXT, ndef);
+                self->text = utf8;
+                priv->text = utf8_buf;
+                if (lang_len) {
+                    self->lang = priv->lang = g_strndup(lang, lang_len);
+                } else {
+                    self->lang = "";
+                }
+                return self;
+            }
         }
     }
     return NULL;
@@ -235,23 +201,59 @@ nfc_ndef_rec_t_new_from_data(
 NfcNdefRecT*
 nfc_ndef_rec_t_new_enc(
     const char* text,
-    const char* language,
-    NFC_NDEF_REC_T_ENCODING enc)
+    const char* lang,
+    NFC_NDEF_REC_T_ENC enc)
 {
-    if (G_LIKELY(language)) {
-        GUtilData payload;
+    GBytes* payload_bytes;
+    char* lang_tmp = NULL;
+    static const char lang_default[] = "en";
+    static const char text_default[] = "";
 
-        GBytes* payload_bytes = nfc_ndef_rec_t_build(text,language, enc);
+    if (!lang) {
+        /* Use LC_MESSAGES locale as a default */
+        const char* locale = setlocale(LC_MESSAGES, NULL);
+
+        if (locale && strcmp(locale, "C") && strcmp(locale, "POSIX")) {
+            /* language[_territory][.codeset][@modifier] */
+            const char* codeset = strchr(locale, '.');
+            const char* modifier = strchr(locale, '@');
+
+            if (!codeset && !modifier) {
+                lang = locale;
+            } else {
+                const char* sep = (!codeset) ? modifier :
+                    (!modifier) ? codeset :
+                    MIN(codeset, modifier);
+
+                lang = lang_tmp = g_strndup(locale, sep - locale);
+            }
+        }
+    }
+
+    payload_bytes = nfc_ndef_rec_t_build(text ? text : text_default,
+        lang ? lang : lang_default, enc);
+    if (payload_bytes) {
+        GUtilData payload;
         NfcNdefRecT* self = NFC_NDEF_REC_T(nfc_ndef_rec_new_well_known
             (NFC_TYPE_NDEF_REC_T, NFC_NDEF_RTD_TEXT, &nfc_ndef_rec_type_t,
                  gutil_data_from_bytes(&payload, payload_bytes)));
         NfcNdefRecTPriv* priv = self->priv;
-        self->language = priv->language = g_strdup(language);
-        self->text = priv->text = g_strdup(text);
 
+        /* Avoid unnecessary allocations */
+        if (lang) {
+            self->lang = priv->lang = (lang_tmp ? lang_tmp : g_strdup(lang));
+        } else {
+            self->lang = lang_default;
+        }
+        if (text) {
+            self->text = priv->text = g_strdup(text);
+        } else {
+            self->text = text_default;
+        }
         g_bytes_unref(payload_bytes);
         return self;
     }
+    g_free(lang_tmp);
     return NULL;
 }
 
@@ -276,7 +278,7 @@ nfc_ndef_rec_t_finalize(
     NfcNdefRecT* self = NFC_NDEF_REC_T(object);
     NfcNdefRecTPriv* priv = self->priv;
 
-    g_free(priv->language);
+    g_free(priv->lang);
     g_free(priv->text);
     G_OBJECT_CLASS(nfc_ndef_rec_t_parent_class)->finalize(object);
 }

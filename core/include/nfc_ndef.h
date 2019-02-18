@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -127,7 +127,7 @@ typedef struct nfc_ndef_rec_t_priv NfcNdefRecTPriv;
 typedef struct nfc_ndef_rec_t {
     NfcNdefRec rec;
     NfcNdefRecTPriv* priv;
-    const char* language;
+    const char* lang;
     const char* text;
 } NfcNdefRecT;
 
@@ -135,23 +135,23 @@ GType nfc_ndef_rec_t_get_type(void);
 #define NFC_TYPE_NDEF_REC_T (nfc_ndef_rec_t_get_type())
 #define NFC_NDEF_REC_T(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
         NFC_TYPE_NDEF_REC_T, NfcNdefRecT))
-#define NFC_IS_NFC_NDEF_REC_T(obj) G_TYPE_CHECK_INSTANCE_TYPE(obj, \
+#define NFC_IS_NDEF_REC_T(obj) G_TYPE_CHECK_INSTANCE_TYPE(obj, \
         NFC_TYPE_NDEF_REC_T)
 
-typedef enum nfc_ndef_rec_t_encoding {
-    NFC_NDEF_REC_T_ENCODING_UTF8,
-    NFC_NDEF_REC_T_ENCODING_UTF16BE,
-    NFC_NDEF_REC_T_ENCODING_UTF16LE
-} NFC_NDEF_REC_T_ENCODING;
+typedef enum nfc_ndef_rec_t_enc {
+    NFC_NDEF_REC_T_ENC_UTF8,
+    NFC_NDEF_REC_T_ENC_UTF16BE,
+    NFC_NDEF_REC_T_ENC_UTF16LE
+} NFC_NDEF_REC_T_ENC;
 
 NfcNdefRecT*
 nfc_ndef_rec_t_new_enc(
     const char* text,
-    const char* language,
-    NFC_NDEF_REC_T_ENCODING enc);
+    const char* lang,
+    NFC_NDEF_REC_T_ENC enc);
 
 #define nfc_ndef_rec_t_new(text,lang) \
-        nfc_ndef_rec_t_new_enc(text, lang, NFC_NDEF_REC_T_ENCODING_UTF8)
+    nfc_ndef_rec_t_new_enc(text, lang, NFC_NDEF_REC_T_ENC_UTF8)
 
 /* These are not yet implemented: */
 

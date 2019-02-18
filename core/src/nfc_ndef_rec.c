@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -74,7 +74,7 @@ nfc_ndef_rec_alloc(
 
             if (text_rec) {
                 /* TEXT Record */
-                GDEBUG("Text Record Language: %s", text_rec->language);
+                GVERBOSE("Text Record Language: %s", text_rec->lang);
                 GDEBUG("Text Record: %s", text_rec->text);
                 return NFC_NDEF_REC(text_rec);
             }
