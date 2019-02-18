@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -367,7 +367,7 @@ dbus_handlers_config_load(
         const DBusHandlerType* type = NULL;
         const DBusHandlerType* type2 = NULL;
 
-        if (NFC_IS_NFC_NDEF_REC_U(ndef)) {
+        if (NFC_IS_NDEF_REC_U(ndef)) {
             type = &dbus_handlers_type_uri;
         } else if (dbus_handlers_type_mediatype_record(ndef)) {
             type = &dbus_handlers_type_mediatype_exact;

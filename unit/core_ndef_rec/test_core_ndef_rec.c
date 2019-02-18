@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -422,7 +422,7 @@ test_uri(
 
     g_assert(rec);
     g_assert(!rec->next);
-    g_assert(NFC_IS_NFC_NDEF_REC_U(rec));
+    g_assert(NFC_IS_NDEF_REC_U(rec));
     g_assert(!g_strcmp0(NFC_NDEF_REC_U(rec)->uri, "https://www.jolla.com"));
     g_assert(rec->raw.size == sizeof(data));
     g_assert(rec->raw.bytes);
@@ -457,7 +457,7 @@ test_well_known_short(
 
     /* Re-parse it */
     urec = nfc_ndef_rec_new(&rec->raw);
-    g_assert(NFC_IS_NFC_NDEF_REC_U(urec));
+    g_assert(NFC_IS_NDEF_REC_U(urec));
     g_assert(!g_strcmp0(NFC_NDEF_REC_U(urec)->uri, "https://www.jolla.com"));
     nfc_ndef_rec_unref(rec);
     nfc_ndef_rec_unref(urec);
@@ -518,7 +518,7 @@ test_well_known_long(
 
     /* Re-parse it */
     urec = nfc_ndef_rec_new(&rec->raw);
-    g_assert(NFC_IS_NFC_NDEF_REC_U(urec));
+    g_assert(NFC_IS_NDEF_REC_U(urec));
     g_assert(!g_strcmp0(NFC_NDEF_REC_U(urec)->uri, "http://www.example.com/"
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -554,7 +554,7 @@ test_broken_uri(
 
     g_assert(rec);
     g_assert(!rec->next);
-    g_assert(!NFC_IS_NFC_NDEF_REC_U(rec)); /* We treat it as a generic one */
+    g_assert(!NFC_IS_NDEF_REC_U(rec)); /* We treat it as a generic one */
     g_assert(rec->raw.size == sizeof(data));
     g_assert(rec->raw.bytes);
     g_assert(rec->type.size == rec->raw.bytes[1]);

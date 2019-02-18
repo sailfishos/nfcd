@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -195,7 +195,7 @@ test_from_uri(
     g_assert(urec);
     rec = nfc_ndef_rec_new(&urec->rec.raw);
     g_assert(rec);
-    g_assert(NFC_IS_NFC_NDEF_REC_U(rec));
+    g_assert(NFC_IS_NDEF_REC_U(rec));
     g_assert(!g_strcmp0(NFC_NDEF_REC_U(rec)->uri, uri));
     nfc_ndef_rec_unref(&urec->rec);
     nfc_ndef_rec_unref(rec);

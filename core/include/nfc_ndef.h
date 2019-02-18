@@ -113,7 +113,7 @@ GType nfc_ndef_rec_u_get_type(void);
 #define NFC_TYPE_NDEF_REC_U (nfc_ndef_rec_u_get_type())
 #define NFC_NDEF_REC_U(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
         NFC_TYPE_NDEF_REC_U, NfcNdefRecU))
-#define NFC_IS_NFC_NDEF_REC_U(obj) G_TYPE_CHECK_INSTANCE_TYPE(obj, \
+#define NFC_IS_NDEF_REC_U(obj) G_TYPE_CHECK_INSTANCE_TYPE(obj, \
         NFC_TYPE_NDEF_REC_U)
 
 NfcNdefRecU*

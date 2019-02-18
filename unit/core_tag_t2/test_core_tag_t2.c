@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -950,7 +950,7 @@ test_read_data_start(
 
     g_assert(rec);
     g_assert(!rec->next);
-    g_assert(NFC_IS_NFC_NDEF_REC_U(rec));
+    g_assert(NFC_IS_NDEF_REC_U(rec));
     g_assert(!g_strcmp0(NFC_NDEF_REC_U(rec)->uri, "http://google.com"));
 
     /* First two data blocks must have been read */
@@ -1032,7 +1032,7 @@ test_read_data_872_start(
 
     g_assert(rec);
     g_assert(!rec->next);
-    g_assert(NFC_IS_NFC_NDEF_REC_U(rec));
+    g_assert(NFC_IS_NDEF_REC_U(rec));
     g_assert(!g_strcmp0(NFC_NDEF_REC_U(rec)->uri,
         "https://www.merproject.org"));
 
