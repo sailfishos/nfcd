@@ -5,7 +5,7 @@ This plugin notifies NDEF handlers over D-Bus.
 
 Basically, nfcd calls interested parties over D-Bus (system bus)
 when it reads NDEF from an NFC tag. That way, a process can be
-auto-started by the D-Bus system when a tag is touched,
+auto-started by the D-Bus system when a tag is touched.
 
 There are two kinds of such components: Handlers and Listeners.
 All listeners are notified every time when a matching tag is
