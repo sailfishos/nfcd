@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -88,6 +88,7 @@ typedef struct settings_plugin {
     gulong mce_event_id[MCE_EVENT_COUNT];
     gulong nfc_event_id[NFC_EVENT_COUNT];
     gboolean nfc_enabled;
+    gboolean nfc_always_on;
     NFC_MODE auto_mode;
 } SettingsPlugin;
 
@@ -109,6 +110,7 @@ G_DEFINE_TYPE(SettingsPlugin, settings_plugin, NFC_TYPE_PLUGIN)
 #define SETTINGS_STORAGE_FILE_PERM       0600
 #define SETTINGS_GROUP                   "Settings"
 #define SETTINGS_KEY_ENABLED             "Enabled"
+#define SETTINGS_KEY_ALWAYS_ON           "AlwaysOn"
 
 typedef enum settings_error {
     SETTINGS_ERROR_ACCESS_DENIED,        /* AccessDenied */
@@ -184,20 +186,37 @@ settings_plugin_save_config(
 
 static
 gboolean
-settings_plugin_nfc_enabled(
-    GKeyFile* config)
+settings_plugin_get_boolean(
+    GKeyFile* config,
+    const char* key,
+    gboolean defval)
 {
     GError* error = NULL;
-    gboolean value = g_key_file_get_boolean(config, SETTINGS_GROUP,
-        SETTINGS_KEY_ENABLED, &error);
+    gboolean val = g_key_file_get_boolean(config, SETTINGS_GROUP, key, &error);
 
     if (error) {
         g_error_free(error);
         /* Default */
-        return TRUE;
+        return defval;
     } else {
-        return value;
+        return val;
     }
+}
+
+static
+gboolean
+settings_plugin_nfc_enabled(
+    GKeyFile* config)
+{
+    return settings_plugin_get_boolean(config, SETTINGS_KEY_ENABLED, TRUE);
+}
+
+static
+gboolean
+settings_plugin_nfc_always_on(
+    GKeyFile* config)
+{
+    return settings_plugin_get_boolean(config, SETTINGS_KEY_ALWAYS_ON, FALSE);
 }
 
 static
@@ -207,12 +226,19 @@ settings_plugin_update_config(
 {
     GKeyFile* config = settings_plugin_load_config(self);
     const gboolean enabled = settings_plugin_nfc_enabled(config);
+    const gboolean always_on = settings_plugin_nfc_always_on(config);
     gboolean save = FALSE;
 
     if (enabled != self->nfc_enabled) {
         save = TRUE;
         g_key_file_set_boolean(config, SETTINGS_GROUP, SETTINGS_KEY_ENABLED,
             self->nfc_enabled);
+    }
+
+    if (always_on != self->nfc_always_on) {
+        save = TRUE;
+        g_key_file_set_boolean(config, SETTINGS_GROUP, SETTINGS_KEY_ALWAYS_ON,
+            self->nfc_always_on);
     }
 
     if (save) {
@@ -260,6 +286,15 @@ settings_plugin_access_allowed(
 }
 
 static
+gboolean
+settings_plugin_adapter_enabled(
+    SettingsPlugin* self)
+{
+    return self->nfc_enabled &&
+        (self->nfc_always_on || mce_display_on(self->display));
+}
+
+static
 void
 settings_plugin_adapter_added(
     NfcManager* manager,
@@ -267,7 +302,7 @@ settings_plugin_adapter_added(
     void* plugin)
 {
     SettingsPlugin* self = SETTINGS_PLUGIN(plugin);
-    gboolean enable = self->nfc_enabled && mce_display_on(self->display);
+    const gboolean enable = settings_plugin_adapter_enabled(self);
 
     if (enable && self->auto_mode != NFC_MODE_NONE) {
         nfc_adapter_request_power(adapter, TRUE);
@@ -280,7 +315,7 @@ void
 settings_plugin_update_nfc_state(
     SettingsPlugin* self)
 {
-    gboolean enable = self->nfc_enabled && mce_display_on(self->display);
+    const gboolean enable = settings_plugin_adapter_enabled(self);
 
     nfc_manager_set_enabled(self->manager, enable);
     if (enable && self->auto_mode != NFC_MODE_NONE) {
@@ -300,6 +335,18 @@ settings_plugin_display_state_handler(
 
 static
 void
+settings_plugin_drop_display(
+    SettingsPlugin* self)
+{
+    if (self->display) {
+        mce_display_remove_all_handlers(self->display, self->mce_event_id);
+        mce_display_unref(self->display);
+        self->display = NULL;
+    }
+}
+
+static
+void
 settings_plugin_set_nfc_enabled(
     SettingsPlugin* self,
     gboolean enabled)
@@ -309,18 +356,18 @@ settings_plugin_set_nfc_enabled(
         /* We only need to follow display state when NFC is enabled */
         if (enabled) {
             GINFO("NFC enabled");
-            self->display = mce_display_new();
-            self->mce_event_id[DISPLAY_VALID] =
-                mce_display_add_valid_changed_handler(self->display,
-                    settings_plugin_display_state_handler, self);
-            self->mce_event_id[DISPLAY_STATE] =
-                mce_display_add_state_changed_handler(self->display,
-                    settings_plugin_display_state_handler, self);
+            if (!self->nfc_always_on) {
+                self->display = mce_display_new();
+                self->mce_event_id[DISPLAY_VALID] =
+                    mce_display_add_valid_changed_handler(self->display,
+                        settings_plugin_display_state_handler, self);
+                self->mce_event_id[DISPLAY_STATE] =
+                    mce_display_add_state_changed_handler(self->display,
+                        settings_plugin_display_state_handler, self);
+            }
         } else {
             GINFO("NFC disabled");
-            mce_display_remove_all_handlers(self->display, self->mce_event_id);
-            mce_display_unref(self->display);
-            self->display = NULL;
+            settings_plugin_drop_display(self);
         }
         org_sailfishos_nfc_settings_emit_enabled_changed(self->iface, enabled);
         settings_plugin_update_nfc_state(self);
@@ -465,6 +512,7 @@ settings_plugin_start(
         settings_plugin_dbus_name_lost, self, NULL);
 
     config = settings_plugin_load_config(self);
+    self->nfc_always_on = settings_plugin_nfc_always_on(config);
     settings_plugin_set_nfc_enabled(self, settings_plugin_nfc_enabled(config));
     settings_plugin_update_nfc_state(self);
     g_key_file_unref(config);
@@ -479,11 +527,7 @@ settings_plugin_stop(
     SettingsPlugin* self = SETTINGS_PLUGIN(plugin);
 
     GVERBOSE("Stopping");
-    if (self->display) {
-        mce_display_remove_all_handlers(self->display, self->mce_event_id);
-        mce_display_unref(self->display);
-        self->display = NULL;
-    }
+    settings_plugin_drop_display(self);
     if (self->own_name_id) {
         g_bus_unown_name(self->own_name_id);
         self->own_name_id = 0;
