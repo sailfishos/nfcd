@@ -33,7 +33,7 @@
 #ifndef NFC_NDEF_H
 #define NFC_NDEF_H
 
-#include <nfc_types.h>
+#include "nfc_types.h"
 
 #include <glib-object.h>
 
