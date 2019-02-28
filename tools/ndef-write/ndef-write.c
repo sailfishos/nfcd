@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -53,8 +53,7 @@
 
 typedef struct app_data {
     char** tags;
-    const char* uri;
-    const GUtilData* binary;
+    GUtilData ndef;
     GMainLoop* loop;
     gboolean stopped;
 } AppData;
@@ -123,24 +122,12 @@ write_ndef_to_type2_tag(
         GDEBUG("Read %u bytes:", (guint)size);
         write_ndef_debug_hexdump(read_data, size);
         if (size > 0) {
-            GUtilData ndef;
-            NfcNdefRecU* u = NULL;
+            const GUtilData* ndef = &app->ndef;
             guint tlv_size;
 
-            if (app->binary) {
-                ndef = *(app->binary);
-            } else {
-                u = nfc_ndef_rec_u_new(app->uri);
-                if (u) {
-                    ndef = u->rec.raw;
-                } else {
-                    memset(&ndef, 0, sizeof(ndef));
-                }
-            }
-
             /* Add space for type, length (up to 3 bytes) and terminator */
-            tlv_size = ndef.size + 3;
-            if (ndef.size >= 0xff) {
+            tlv_size = ndef->size + 3;
+            if (ndef->size >= 0xff) {
                 tlv_size += 2; /* Will use three consecutive bytes format */
             }
             if (size >= tlv_size) {
@@ -151,17 +138,17 @@ write_ndef_to_type2_tag(
 
                 /* Build TLV block */
                 data[i++] = 0x03; /* NDEF Message */
-                if (ndef.size < 0xff) {
+                if (ndef->size < 0xff) {
                     /* One byte format */
-                    data[i++] = (guint8)ndef.size;
+                    data[i++] = (guint8)ndef->size;
                 } else {
                     /* Three consecutive bytes format */
                     data[i++] = 0xff;
-                    data[i++] = (guint8)(ndef.size >> 8);
-                    data[i++] = (guint8)ndef.size;
+                    data[i++] = (guint8)(ndef->size >> 8);
+                    data[i++] = (guint8)ndef->size;
                 }
-                memcpy(data + i, ndef.bytes, ndef.size);
-                i += ndef.size;
+                memcpy(data + i, ndef->bytes, ndef->size);
+                i += ndef->size;
                 data[i++] = 0xfe; /* Terminator */
                 memset(data + i, 0, size - i);
                 bytes_to_write = write_ndef_data_diff(data, read_data, size);
@@ -184,13 +171,11 @@ write_ndef_to_type2_tag(
                         g_error_free(error);
                     }
                 }
+                g_free(data);
             } else {
                 GERR("%s: NDEF is too big (%u > %u)",
                     g_dbus_proxy_get_object_path(G_DBUS_PROXY(t2)),
                     tlv_size, (guint)size);
-            }
-            if (u) {
-                nfc_ndef_rec_unref(&u->rec);
             }
         } else {
             GERR("%s: no data was read, giving up",
@@ -384,12 +369,15 @@ int main(int argc, char* argv[])
 {
     int ret = RET_ERR;
     char* uri = NULL;
+    char* text = NULL;
     gboolean verbose = FALSE;
     GOptionEntry entries[] = {
         { "verbose", 'v', 0, G_OPTION_ARG_NONE, &verbose,
           "Enable verbose output", NULL },
         { "uri", 'u', 0, G_OPTION_ARG_STRING, &uri,
           "Write URI record", "URI" },
+        { "text", 't', 0, G_OPTION_ARG_STRING, &text,
+          "Write Text record", "TEXT" },
         { NULL }
     };
     GOptionContext* options = g_option_context_new("[FILE]");
@@ -398,7 +386,7 @@ int main(int argc, char* argv[])
     g_option_context_add_main_entries(options, entries, NULL);
     g_option_context_set_summary(options, "Writes NDEF record to tag.");
     if (g_option_context_parse(options, &argc, &argv, &error)) {
-        if (!uri && argc != 2) {
+        if ((!uri && !text && argc != 2) || (uri && text)) {
             char* help = g_option_context_get_help(options, TRUE, NULL);
             gsize len = strlen(help);
 
@@ -414,21 +402,41 @@ int main(int argc, char* argv[])
                 GLOG_LEVEL_INFO;
 
             memset(&app, 0, sizeof(app));
-            if (uri) {
-                app.uri = uri;
+            if (uri || text) {
+                NfcNdefRec* rec = NULL;
+
+                if (uri) {
+                    NfcNdefRecU* u = nfc_ndef_rec_u_new(uri);
+
+                    if (u) {
+                        rec = &u->rec;
+                    }
+                } else {
+                    NfcNdefRecT* t = nfc_ndef_rec_t_new(text, NULL);
+
+                    if (t) {
+                        rec = &t->rec;
+                    }
+                }
+
+                if (rec) {
+                    app.ndef = rec->raw;
+                }
+
                 ret = write_ndef(&app);
+                nfc_ndef_rec_unref(rec);
             } else {
                 const char* file = (argc > 1) ? argv[1] : NULL;
                 gchar* contents;
-                GUtilData bin;
+                gsize size;
 
-                if (g_file_get_contents(file, &contents, &bin.size, &error)) {
-                    if (bin.size > 0xffff) {
+                if (g_file_get_contents(file, &contents, &size, &error)) {
+                    if (size > 0xffff) {
                         fprintf(stderr, "File too big (%u bytes)\n",
-                            (guint)bin.size);
+                            (guint)size);
                     } else {
-                        bin.bytes = (void*)contents;
-                        app.binary = &bin;
+                        app.ndef.bytes = (void*)contents;
+                        app.ndef.size = size;
                         ret = write_ndef(&app);
                     }
                     g_free(contents);
@@ -444,6 +452,7 @@ int main(int argc, char* argv[])
         g_error_free(error);
     }
     g_free(uri);
+    g_free(text);
     g_option_context_free(options);
     return ret;
 }
