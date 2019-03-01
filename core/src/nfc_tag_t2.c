@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -118,6 +118,10 @@ struct nfc_tag_t2_priv {
     NfcTagType2Sector* sectors;
     guint init_id;
 };
+
+typedef struct nfc_tag_t2_class {
+    GObjectClass parent;
+} NfcTagType2Class;
 
 G_DEFINE_TYPE(NfcTagType2, nfc_tag_t2, NFC_TYPE_TAG)
 

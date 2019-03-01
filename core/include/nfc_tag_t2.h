@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -54,10 +54,6 @@ struct nfc_tag_t2 {
     guint data_size;    /* Valid only when initialized */
     GUtilData serial;   /* Valid only when initialized */
 };
-
-typedef struct nfc_tag_t2_class {
-    GObjectClass parent;
-} NfcTagType2Class;
 
 GType nfc_tag_t2_get_type();
 #define NFC_TYPE_TAG_T2 (nfc_tag_t2_get_type())
