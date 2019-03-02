@@ -120,7 +120,7 @@ struct nfc_tag_t2_priv {
 };
 
 typedef struct nfc_tag_t2_class {
-    GObjectClass parent;
+    NfcTagClass parent;
 } NfcTagType2Class;
 
 G_DEFINE_TYPE(NfcTagType2, nfc_tag_t2, NFC_TYPE_TAG)
