@@ -268,6 +268,14 @@ nfc_tag_t2_generate_id(
 
 static
 void
+nfc_tag_t2_cmd_destroy(
+    void* data)
+{
+    g_slice_free(NfcTagType2Cmd, data);
+}
+
+static
+void
 nfc_tag_t2_cmd_resp(
     NfcTarget* target,
     NFC_TRANSMIT_STATUS status,
@@ -292,22 +300,20 @@ nfc_tag_t2_cmd(
     void* user_data)
 {
     NfcTag* tag = &self->tag;
-    NfcTagType2Cmd* data = g_malloc(sizeof(NfcTagType2Cmd) + size);
-    guint8* frame = (guint8*)(data + 1);
+    NfcTagType2Cmd* data = g_slice_new(NfcTagType2Cmd);
     guint id;
 
     data->t2 = self;
     data->resp = resp;
     data->destroy = destroy;
     data->user_data = user_data;
-    memcpy(frame, cmd, size);
 
-    id = nfc_target_transmit(tag->target, frame, size, seq,
-        resp ? nfc_tag_t2_cmd_resp : NULL, g_free, data);
+    id = nfc_target_transmit(tag->target, cmd, size, seq,
+        resp ? nfc_tag_t2_cmd_resp : NULL, nfc_tag_t2_cmd_destroy, data);
     if (id) {
         return id;
     } else {
-        g_free(data);
+        g_slice_free(NfcTagType2Cmd, data);
         return 0;
     }
 }
