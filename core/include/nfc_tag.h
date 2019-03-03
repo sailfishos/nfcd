@@ -62,6 +62,11 @@ GType nfc_tag_get_type(void);
 #define NFC_TAG(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
         NFC_TYPE_TAG, NfcTag))
 
+struct nfc_param_poll_a {
+    guint8 sel_res;  /* (SAK)*/
+    GUtilData nfcid1;
+};
+
 typedef
 void
 (*NfcTagFunc)(

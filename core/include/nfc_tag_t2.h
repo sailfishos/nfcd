@@ -64,11 +64,6 @@ GType nfc_tag_t2_get_type();
 
 #define NFC_TAG_T2_DATA_BLOCK0  (4) /* Index of the first data block */
 
-struct nfc_tag_param_t2 {
-    guint8 sel_res;  /* (SAK)*/
-    GUtilData nfcid1;
-};
-
 typedef
 void
 (*NfcTagType2ReadFunc)(

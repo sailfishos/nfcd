@@ -948,18 +948,18 @@ void
 nfc_tag_t2_init2(
     NfcTagType2* self,
     NfcTarget* target,
-    const NfcTagParamT2* t2)
+    const NfcParamPollA* param)
 {
     NfcTagType2Priv* priv = self->priv;
 
     nfc_tag_set_target(&self->tag, target);
     priv->init_seq = nfc_target_sequence_new(target);
-    if (t2) {
-         priv->nfcid1 = g_memdup(t2->nfcid1.bytes, t2->nfcid1.size);
-         self->sel_res = t2->sel_res;
-         self->nfcid1.size = t2->nfcid1.size;
-         self->nfcid1.bytes = priv->nfcid1;
-     }
+    if (param) {
+        priv->nfcid1 = g_memdup(param->nfcid1.bytes, param->nfcid1.size);
+        self->sel_res = param->sel_res;
+        self->nfcid1.size = param->nfcid1.size;
+        self->nfcid1.bytes = priv->nfcid1;
+    }
 }
 
 /*==========================================================================*
@@ -969,21 +969,21 @@ nfc_tag_t2_init2(
 NfcTagType2*
 nfc_tag_t2_new(
     NfcTarget* target,
-    const NfcTagParamT2* t2)
+    const NfcParamPollA* param)
 {
-    if (G_LIKELY(target) && G_LIKELY(t2)) {
+    if (G_LIKELY(target) && G_LIKELY(param)) {
         NfcTagType2* self = g_object_new(NFC_TYPE_TAG_T2, NULL);
         NfcTagType2Priv* priv = self->priv;
         NfcTag* tag = &self->tag;
         const char* desc = "";
 
-        if (t2->nfcid1.size == 7 &&
-            t2->nfcid1.bytes[0] == NXP_MANUFACTURER_ID &&
-            t2->sel_res == 0) {
+        if (param->nfcid1.size == 7 &&
+            param->nfcid1.bytes[0] == NXP_MANUFACTURER_ID &&
+            param->sel_res == 0) {
             tag->type = NFC_TAG_TYPE_MIFARE_ULTRALIGHT;
             desc = " (MIFARE Ultralight)";
         } else {
-            switch (t2->sel_res) {
+            switch (param->sel_res) {
             case 0x01:
             case 0x08:
             case 0x88:
@@ -1025,7 +1025,7 @@ nfc_tag_t2_new(
         }
 
         GDEBUG("Type 2 tag%s", desc);
-        nfc_tag_t2_init2(self, target, t2);
+        nfc_tag_t2_init2(self, target, param);
 
         /* Start initialization by reading first blocks of sector 0 */
         priv->init_id = nfc_tag_t2_cmd_read(self, 0, priv->init_seq,
