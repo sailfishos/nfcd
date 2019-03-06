@@ -217,15 +217,14 @@ nfc_plugins_validate_plugin(
     const char* path)
 {
     if (!desc->name) {
-        GWARN("Invalid plugin %s is ignored", path);
+        GWARN("Invalid plugin %s (ignored)", path);
     } else if (nfc_plugins_find(self, desc->name)) {
-        GWARN("Duplicate plugin \"%s\" from %s is ignored", desc->name, path);
+        GWARN("Duplicate plugin \"%s\" from %s (ignored)", desc->name, path);
     } else if (desc->nfc_core_version > NFC_CORE_VERSION) {
-        GWARN("Plugin %s %d.%d.%d is newer than nfcd %d.%d.%d", path,
+        GWARN("Plugin %s requries nfcd %d.%d.%d (ignored)", path,
             NFC_VERSION_GET_MAJOR(desc->nfc_core_version),
             NFC_VERSION_GET_MINOR(desc->nfc_core_version),
-            NFC_VERSION_GET_NANO(desc->nfc_core_version),
-            NFC_VERSION_MAJOR, NFC_VERSION_MINOR, NFC_VERSION_NANO);
+            NFC_VERSION_GET_NANO(desc->nfc_core_version));
     } else {
         return TRUE;
     }
