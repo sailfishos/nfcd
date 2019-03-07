@@ -38,8 +38,9 @@
 #include <nfc_tag.h>
 
 /* Add _ prefix so that they don't get exported */
+#define nfc_tag_new _nfc_tag_new
 #define nfc_tag_t2_new _nfc_tag_t2_new
-#define nfc_tag_set_target _nfc_tag_set_target
+#define nfc_tag_init_base _nfc_tag_init_base
 #define nfc_tag_set_name _nfc_tag_set_name
 #define nfc_tag_set_initialized _nfc_tag_set_initialized
 
@@ -47,13 +48,17 @@ typedef struct nfc_tag_class {
     GObjectClass parent;
 } NfcTagClass;
 
+NfcTag*
+nfc_tag_new(
+    NfcTarget* target);
+
 NfcTagType2*
 nfc_tag_t2_new(
     NfcTarget* target,
     const NfcParamPollA* param);
 
 void
-nfc_tag_set_target(
+nfc_tag_init_base(
     NfcTag* tag,
     NfcTarget* target);
 

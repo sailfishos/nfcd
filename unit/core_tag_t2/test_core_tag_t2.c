@@ -437,12 +437,15 @@ test_tag_new(
     guint8 sel_res)
 {
     static const guint8 nfcid1[] = {0x04, 0x9b, 0xfb, 0x4a, 0xeb, 0x2b, 0x80};
-    NfcTagParamT2 t2p;
+    NfcParamPollA param;
+    NfcTagType2* tag;
 
-    memset(&t2p, 0, sizeof(t2p));
-    TEST_BYTES_SET(t2p.nfcid1, nfcid1);
-    t2p.sel_res = sel_res;
-    return nfc_tag_t2_new(&test->target, &t2p);
+    memset(&param, 0, sizeof(param));
+    TEST_BYTES_SET(param.nfcid1, nfcid1);
+    param.sel_res = sel_res;
+    tag = nfc_tag_t2_new(&test->target, &param);
+    g_assert(tag);
+    return tag;
 }
 
 static

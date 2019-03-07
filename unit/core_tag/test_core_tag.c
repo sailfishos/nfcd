@@ -131,7 +131,7 @@ test_basic(
     gulong init_id;
     gulong gone_id;
 
-    nfc_tag_set_target(tag, target);
+    nfc_tag_init_base(tag, target);
     g_assert(tag->target == target);
     g_assert(tag->present == TRUE);
 

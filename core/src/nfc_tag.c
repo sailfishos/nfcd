@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -43,8 +43,6 @@ struct nfc_tag_priv {
 };
 
 G_DEFINE_TYPE(NfcTag, nfc_tag, G_TYPE_OBJECT)
-#define NFC_TAG_GET_CLASS(obj) G_TYPE_INSTANCE_GET_CLASS((obj), \
-        NFC_TYPE_TAG, NfcTagClass)
 
 enum nfc_tag_signal {
     SIGNAL_INITIALIZED,
@@ -74,6 +72,19 @@ nfc_tag_gone(
 /*==========================================================================*
  * Interface
  *==========================================================================*/
+
+NfcTag*
+nfc_tag_new(
+    NfcTarget* target)
+{
+    if (G_LIKELY(target)) {
+        NfcTag* self = g_object_new(NFC_TYPE_TAG, NULL);
+
+        nfc_tag_init_base(self, target);
+        return self;
+    }
+    return NULL;
+}
 
 NfcTag*
 nfc_tag_ref(
@@ -147,7 +158,7 @@ nfc_tag_remove_handlers(
  *==========================================================================*/
 
 void
-nfc_tag_set_target(
+nfc_tag_init_base(
     NfcTag* self,
     NfcTarget* target)
 {

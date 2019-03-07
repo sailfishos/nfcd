@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -394,8 +394,12 @@ nfc_adapter_add_tag_t2(
     NfcTarget* target,
     const NfcTagParamT2* params)
 {
-    if (G_LIKELY(self) && G_LIKELY(target)) {
-        return nfc_adapter_add_tag(self, &nfc_tag_t2_new(target, params)->tag);
+    if (G_LIKELY(self)) {
+        NfcTagType2* t2 = nfc_tag_t2_new(target, params);
+
+        if (t2) {
+            return nfc_adapter_add_tag(self, NFC_TAG(t2));
+        }
     }
     return NULL;
 }
@@ -405,11 +409,12 @@ nfc_adapter_add_other_tag(
     NfcAdapter* self,
     NfcTarget* target)
 {
-    if (G_LIKELY(self) && G_LIKELY(target)) {
-        NfcTag* tag = g_object_new(NFC_TYPE_TAG, NULL);
+    if (G_LIKELY(self)) {
+        NfcTag* tag = nfc_tag_new(target);
 
-        nfc_tag_set_target(tag, target);
-        return nfc_adapter_add_tag(self, tag);
+        if (tag) {
+            return nfc_adapter_add_tag(self, tag);
+        }
     }
     return NULL;
 }

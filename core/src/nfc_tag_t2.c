@@ -952,7 +952,7 @@ nfc_tag_t2_init2(
 {
     NfcTagType2Priv* priv = self->priv;
 
-    nfc_tag_set_target(&self->tag, target);
+    nfc_tag_init_base(&self->tag, target);
     priv->init_seq = nfc_target_sequence_new(target);
     if (param) {
         priv->nfcid1 = g_memdup(param->nfcid1.bytes, param->nfcid1.size);
@@ -963,7 +963,7 @@ nfc_tag_t2_init2(
 }
 
 /*==========================================================================*
- * Interface
+ * Internal interface
  *==========================================================================*/
 
 NfcTagType2*
@@ -1034,6 +1034,10 @@ nfc_tag_t2_new(
     }
     return NULL;
 }
+
+/*==========================================================================*
+ * Interface
+ *==========================================================================*/
 
 guint
 nfc_tag_t2_read(

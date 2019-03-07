@@ -629,7 +629,7 @@ test_tags(
     NfcTag* tag1;
     gulong id[3];
     int tag_added = 0, tag_removed = 0, presence_changed_count = 0;
-    NfcTagParamT2 params;
+    NfcParamPollA poll_a;
 
     id[0] = nfc_adapter_add_tag_added_handler(adapter,
         test_adapter_tag_inc, &tag_added);
@@ -653,8 +653,8 @@ test_tags(
     g_assert(adapter->target_present);
     g_assert(presence_changed_count == 1);
 
-    memset(&params, 0, sizeof(params));
-    tag0 = nfc_adapter_add_tag_t2(adapter, target0, &params);
+    memset(&poll_a, 0, sizeof(poll_a));
+    tag0 = nfc_adapter_add_tag_t2(adapter, target0, &poll_a);
     tag1 = nfc_adapter_add_other_tag(adapter, target1);
     g_assert(tag0);
     g_assert(tag1);
