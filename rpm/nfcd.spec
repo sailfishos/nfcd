@@ -13,8 +13,11 @@ BuildRequires: pkgconfig(libglibutil) >= 1.0.34
 BuildRequires: pkgconfig(libdbuslogserver-gio) >= 1.0.14
 Requires: libglibutil >= 1.0.34
 Requires: libdbuslogserver-gio >= 1.0.14
-Requires(post): /sbin/ldconfig
-Requires(postun): /sbin/ldconfig
+Requires: systemd
+Requires(pre): systemd
+Requires(post): systemd
+Requires(post): coreutils
+Requires(postun): systemd
 
 %description
 Provides D-Bus interfaces to NFC functionality.
@@ -52,15 +55,21 @@ ln -s ../nfcd.service %{buildroot}/%{target_wants_dir}/nfcd.service
 %check
 make -C unit test
 
+%pre
+systemctl stop nfcd ||:
+
 %post
+chown nfc:nfc %{settings_dir}/* ||:
+chmod 600 %{settings_dir}/* ||:
 systemctl daemon-reload ||:
+systemctl start nfcd ||:
 
 %postun
 systemctl daemon-reload ||:
 
 %files
 %defattr(-,root,root,-)
-%dir %{settings_dir}
+%dir %attr(700,nfc,nfc) %{settings_dir}
 %{_sbindir}/*
 %{_sysconfdir}/dbus-1/system.d/*.conf
 /%{target_wants_dir}/nfcd.service
