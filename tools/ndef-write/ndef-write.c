@@ -155,13 +155,15 @@ write_ndef_to_type2_tag(
 
                 if (!bytes_to_write) {
                     printf("Nothing to write.\n");
+                    g_free(data);
                 } else {
+                    GVariant* data_variant = g_variant_ref_sink
+                        (g_variant_new_from_data(G_VARIANT_TYPE("ay"),
+                            data, bytes_to_write, TRUE, g_free, data));
                     GDEBUG("Writing %u bytes:", bytes_to_write);
                     write_ndef_debug_hexdump(data, size);
                     if (org_sailfishos_nfc_tag_type2_call_write_data_sync(t2,
-                        0, g_variant_new_from_data(G_VARIANT_TYPE("ay"),
-                        data, bytes_to_write, TRUE, g_free, data), &written,
-                        NULL, &error)) {
+                        0, data_variant, &written, NULL, &error)) {
                         printf("%u bytes written.\n", written);
                         ret = RET_OK;
                     } else {
@@ -170,8 +172,8 @@ write_ndef_to_type2_tag(
                             GERRMSG(error));
                         g_error_free(error);
                     }
+                    g_variant_unref(data_variant);
                 }
-                g_free(data);
             } else {
                 GERR("%s: NDEF is too big (%u > %u)",
                     g_dbus_proxy_get_object_path(G_DBUS_PROXY(t2)),
