@@ -37,6 +37,8 @@
 
 #include <gutil_misc.h>
 
+#include <locale.h>
+
 struct nfc_ndef_rec_priv {
     void* data;
 };
@@ -74,6 +76,7 @@ nfc_ndef_rec_alloc(
 
             if (text_rec) {
                 /* TEXT Record */
+                GVERBOSE("Locale: %s", setlocale(LC_MESSAGES, NULL));
                 GVERBOSE("Text Record Language: %s", text_rec->lang);
                 GDEBUG("Text Record: %s", text_rec->text);
                 return NFC_NDEF_REC(text_rec);

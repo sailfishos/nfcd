@@ -8,6 +8,7 @@ Type=dbus
 BusName=org.sailfishos.nfc.daemon
 User=nfc
 EnvironmentFile=-/var/lib/environment/nfcd/*.conf
+EnvironmentFile=-/var/lib/environment/nemo/locale.conf
 ExecStart=/usr/sbin/nfcd $NFCD_ARGS
 Restart=always
 RestartSec=3

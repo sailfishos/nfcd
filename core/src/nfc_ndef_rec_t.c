@@ -213,6 +213,7 @@ nfc_ndef_rec_t_new_enc(
         /* Use LC_MESSAGES locale as a default */
         const char* locale = setlocale(LC_MESSAGES, NULL);
 
+        GDEBUG("Locale: %s", locale);
         if (locale && strcmp(locale, "C") && strcmp(locale, "POSIX")) {
             /* language[_territory][.codeset][@modifier] */
             const char* codeset = strchr(locale, '.');
