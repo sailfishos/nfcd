@@ -44,6 +44,8 @@
 #include <gio/gio.h>
 #include <glib-unix.h>
 
+#include <locale.h>
+
 static const NfcPluginDesc* const nfcd_builtin_plugins[] = {
     &NFC_PLUGIN_DESC(dbus_log),
     &NFC_PLUGIN_DESC(dbus_handlers),
@@ -307,7 +309,9 @@ int main(int argc, char* argv[])
 {
     int ret;
     NfcdOpt opt;
+
     gutil_log_default.name = "nfcd";
+    setlocale(LC_ALL, "");
     nfcd_opt_init(&opt);
     if (nfcd_opt_parse(&opt, argc, argv)) {
         GINFO("Starting");
