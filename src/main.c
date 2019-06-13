@@ -237,6 +237,28 @@ nfcd_opt_log_file(
 
 static
 gboolean
+nfcd_opt_log_type(
+    const gchar* name,
+    const gchar* value,
+    gpointer data,
+    GError** error)
+{
+    if (gutil_log_set_type(value, NULL)) {
+        if (nfcd_forward_log_func) {
+            /* Update nfcd_forward_log_func and restore gutil_log_func */
+            nfcd_forward_log_func = gutil_log_func;
+            gutil_log_func = nfcd_log;
+        }
+        return TRUE;
+    } else {
+        *error = g_error_new(G_OPTION_ERROR, G_OPTION_ERROR_BAD_VALUE,
+            "Invalid log type \'%s\'", value);
+        return FALSE;
+    }
+}
+
+static
+gboolean
 nfcd_opt_debug(
     const gchar* name,
     const gchar* value,
@@ -260,6 +282,8 @@ nfcd_opt_parse(
           "Plugin directory [" DEFAULT_PLUGIN_DIR "]", "DIR" },
         { "verbose", 'v', G_OPTION_FLAG_NO_ARG, G_OPTION_ARG_CALLBACK,
           nfcd_opt_debug, "Enable verbose log (repeat to increase verbosity)" },
+        { "log-output", 'o', 0, G_OPTION_ARG_CALLBACK, nfcd_opt_log_type,
+          "Log output type (stdout|syslog|glib) [stdout]", "TYPE" },
         { "log-file", 'l', 0, G_OPTION_ARG_CALLBACK, nfcd_opt_log_file,
           "Write log to a file", "FILE"},
         { "enable", 'e', 0, G_OPTION_ARG_CALLBACK, nfcd_opt_enable_plugins,
