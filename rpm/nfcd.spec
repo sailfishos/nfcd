@@ -1,10 +1,10 @@
 Name: nfcd
-Version: 1.0.11
+Version: 1.0.12
 Release: 0
 Summary: NFC daemon
 Group: Development/Libraries
 License: BSD
-URL: https://git.merproject.org/mer-core/nfcd
+URL: https://git.sailfishos.org/mer-core/nfcd
 Source: %{name}-%{version}.tar.bz2
 BuildRequires: pkgconfig(glib-2.0)
 BuildRequires: pkgconfig(libmce-glib)
