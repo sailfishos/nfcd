@@ -11,7 +11,7 @@ BuildRequires: pkgconfig(libmce-glib)
 BuildRequires: pkgconfig(libdbusaccess)
 BuildRequires: pkgconfig(libglibutil) >= 1.0.34
 BuildRequires: pkgconfig(libdbuslogserver-gio) >= 1.0.14
-Requires: libglibutil >= 1.0.34
+Requires: libglibutil >= 1.0.36
 Requires: libdbuslogserver-gio >= 1.0.14
 Requires: systemd
 Requires(pre): systemd
