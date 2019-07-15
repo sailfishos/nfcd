@@ -46,6 +46,7 @@ make KEEP_SYMBOLS=1 release
 %install
 %define target_wants_dir %{_lib}/systemd/system/network.target.wants
 %define settings_dir %{_sharedstatedir}/nfcd/
+%define settings_file %{settings_dir}/settings
 rm -rf %{buildroot}
 make install DESTDIR=%{buildroot}
 install -d -m 0700 %{buildroot}/%{settings_dir}
@@ -59,8 +60,10 @@ make -C unit test
 systemctl stop nfcd ||:
 
 %post
-chown nfc:nfc %{settings_dir}/* ||:
-chmod 600 %{settings_dir}/* ||:
+if [ -f %{settings_file} ] ; then
+  chown nfc:nfc %{settings_file} ||:
+  chmod 600 %{settings_file} ||:
+fi
 systemctl daemon-reload ||:
 systemctl start nfcd ||:
 
