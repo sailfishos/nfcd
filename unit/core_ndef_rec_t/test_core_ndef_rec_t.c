@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2018 Bogdan Pankovsky <b.pankovsky@omprussia.ru>
  *
  * You may use this file under the terms of BSD license as follows:
@@ -38,6 +39,16 @@
 #include <locale.h>
 
 static TestOpt test_opt;
+static const char* test_system_locale = NULL;
+
+/* Stubs */
+
+const char*
+nfc_system_locale(
+    void)
+{
+    return test_system_locale;
+}
 
 /*==========================================================================*
  * null
@@ -90,7 +101,7 @@ test_default_lang(
 {
     NfcNdefRecT* trec;
 
-    setlocale(LC_ALL, "C");
+    test_system_locale = "C";
     trec = nfc_ndef_rec_t_new(NULL, NULL);
     g_assert(trec);
     g_assert(!g_strcmp0(trec->lang, "en"));
@@ -109,12 +120,17 @@ test_locale(
 {
     NfcNdefRecT* trec;
 
-    /* Locale behavior is very platform specific, it's hard to write
-     * portable tests for it. */
-    setlocale(LC_ALL, "");
+    test_system_locale = "en_US.UTF-8";
     trec = nfc_ndef_rec_t_new(NULL, NULL);
     g_assert(trec);
-    g_assert(trec->lang && trec->lang[0]);
+    g_assert(!g_strcmp0(trec->lang, "en-US"));
+    g_assert(!g_strcmp0(trec->text, ""));
+    nfc_ndef_rec_unref(&trec->rec);
+
+    test_system_locale = "ru";
+    trec = nfc_ndef_rec_t_new(NULL, NULL);
+    g_assert(trec);
+    g_assert(!g_strcmp0(trec->lang, "ru"));
     g_assert(!g_strcmp0(trec->text, ""));
     nfc_ndef_rec_unref(&trec->rec);
 }
@@ -326,6 +342,7 @@ static const guint8 invalid_utf16_rec[] = {
     'e', 'n',       /* Language */
     0xff            /* Too short UTF16 */
 };
+
 static const TestInvalid tests_invalid[] = {
     {
         "lang_len",

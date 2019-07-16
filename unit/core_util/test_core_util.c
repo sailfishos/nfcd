@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -36,7 +36,7 @@
 #include "nfc_log.h"
 
 static TestOpt test_opt;
-
+static const char* test_system_locale;
 static GString* test_log_buf;
 
 static
@@ -49,6 +49,13 @@ test_log_proc(
 {
     g_string_append_vprintf(test_log_buf, format, va);
     g_string_append(test_log_buf, "\n");
+}
+
+const char*
+nfc_system_locale(
+    void)
+{
+    return test_system_locale;
 }
 
 /*==========================================================================*
@@ -96,6 +103,60 @@ test_hexdump(
 }
 
 /*==========================================================================*
+ * language_none
+ *==========================================================================*/
+
+static
+void
+test_language_none(
+    void)
+{
+    test_system_locale = NULL;
+    g_assert(!nfc_system_language());
+
+    test_system_locale = "C";
+    g_assert(!nfc_system_language());
+
+    test_system_locale = "POSIX";
+    g_assert(!nfc_system_language());
+}
+
+/*==========================================================================*
+ * language
+ *==========================================================================*/
+
+typedef struct test_language_data {
+    const char* locale;
+    const char* language;
+    const char* territory;
+} TestLanguageData;
+
+static const TestLanguageData tests_language[] = {
+    { "en", "en", NULL },
+    { "en.UTF-8", "en", NULL },
+    { "en_US", "en", "US" },
+    { "en_US.UTF-8", "en", "US" },
+    { "en_US@modifier", "en", "US" },
+    { "en_US.UTF-8@modifier", "en", "US" }
+};
+
+static
+void
+test_language(
+    gconstpointer data)
+{
+    const TestLanguageData* test = data;
+    NfcLanguage* result;
+
+    test_system_locale = test->locale;
+    result = nfc_system_language();
+    g_assert(result);
+    g_assert(!g_strcmp0(result->language, test->language));
+    g_assert(!g_strcmp0(result->territory, test->territory));
+    g_free(result);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -103,8 +164,19 @@ test_hexdump(
 
 int main(int argc, char* argv[])
 {
+    guint i;
+
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("hexdump"), test_hexdump);
+    g_test_add_func(TEST_("language/none"), test_language_none);
+    for (i = 0; i < G_N_ELEMENTS(tests_language); i++) {
+        const TestLanguageData* test = tests_language + i;
+        char* path = g_strconcat(TEST_("language/"), test->locale, NULL);
+
+        g_test_add_data_func(path, test, test_language);
+        g_free(path);
+    }
+
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }
