@@ -31,11 +31,10 @@
  */
 
 #include "nfc_ndef_p.h"
+#include "nfc_util.h"
 #include "nfc_log.h"
 
 #include <gutil_misc.h>
-
-#include <locale.h>
 
 /* NFCForum-TS-RTD_TEXT_1.0 */
 
@@ -210,24 +209,14 @@ nfc_ndef_rec_t_new_enc(
     static const char text_default[] = "";
 
     if (!lang) {
-        /* Use LC_MESSAGES locale as a default */
-        const char* locale = setlocale(LC_MESSAGES, NULL);
+        NfcLanguage* system = nfc_system_language();
 
-        GDEBUG("Locale: %s", locale);
-        if (locale && strcmp(locale, "C") && strcmp(locale, "POSIX")) {
-            /* language[_territory][.codeset][@modifier] */
-            const char* codeset = strchr(locale, '.');
-            const char* modifier = strchr(locale, '@');
-
-            if (!codeset && !modifier) {
-                lang = locale;
-            } else {
-                const char* sep = (!codeset) ? modifier :
-                    (!modifier) ? codeset :
-                    MIN(codeset, modifier);
-
-                lang = lang_tmp = g_strndup(locale, sep - locale);
-            }
+        if (system) {
+            lang = lang_tmp = system->territory ?
+                g_strconcat(system->language, "-", system->territory, NULL) :
+                g_strdup(system->language);
+            g_free(system);
+            GDEBUG("System language: %s", lang);
         }
     }
 

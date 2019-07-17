@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -34,6 +34,7 @@
 #include "nfc_log.h"
 
 #include <gutil_misc.h>
+#include <gutil_macros.h>
 
 /* sub-module, to turn prefix off */
 GLogModule _nfc_dump_log = {
@@ -74,6 +75,68 @@ nfc_hexdump_data(
     if (G_LIKELY(data)) {
         nfc_hexdump(data->bytes, data->size);
     }
+}
+
+NfcLanguage*
+nfc_system_language(
+    void)
+{
+    const char* locale = nfc_system_locale();
+
+    /* Ignore special "C" and "POSIX" values */
+    if (locale && strcmp(locale, "C") && strcmp(locale, "POSIX")) {
+        /* language[_territory][.codeset][@modifier] */
+        NfcLanguage* result;
+        const char* codeset = strchr(locale, '.');
+        const char* modifier = strchr(locale, '@');
+        const char* lang = locale;
+        const char* terr;
+        const char* sep;
+        char* ptr;
+        gsize len, lang_len, terr_len, total;
+
+        /* Cut off codeset and/or modifier */
+        if (!codeset && !modifier) {
+            len = strlen(locale);
+        } else if (!codeset) {
+            len = modifier - locale;
+        } else if (!modifier) {
+            len = codeset - locale;
+        } else {
+            len = MIN(codeset, modifier) - locale;
+        }
+
+        /* Split language from territory and calculate total size */
+        total = sizeof(NfcLanguage);
+        sep = memchr(locale, '_', len);
+        if (sep) {
+            lang_len = sep - locale;
+            terr_len = len - lang_len - 1;
+            terr = sep + 1;
+            total += G_ALIGN8(lang_len + 1) + terr_len + 1;
+        } else {
+            lang_len = len;
+            terr_len = 0;
+            terr = NULL;
+            total += len + 1;
+        }
+
+        /*
+         * Copy parsed data to single memory block so that the whole thing
+         * can be deallocated with a single g_free() call.
+         */
+        result = g_malloc0(total);
+        ptr = (char*)(result + 1);
+        memcpy(ptr, lang, lang_len);
+        result->language = ptr;
+        if (terr) {
+            ptr += G_ALIGN8(lang_len + 1);
+            result->territory = ptr;
+            memcpy(ptr, terr, terr_len);
+        }
+        return result;
+    }
+    return NULL;
 }
 
 /*
