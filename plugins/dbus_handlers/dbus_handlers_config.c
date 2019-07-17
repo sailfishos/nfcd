@@ -32,8 +32,6 @@
 
 #include "dbus_handlers.h"
 
-#include <nfc_ndef.h>
-
 #include <gutil_strv.h>
 
 #include <stdlib.h>
@@ -53,6 +51,39 @@ typedef struct dbus_listener_config_list {
     DBusListenerConfig* first;
     DBusListenerConfig* last;
 } DBusListenerConfigList;
+
+typedef struct dbus_any_config DBusAnyConfig;
+
+struct dbus_any_config {
+    const DBusHandlerType* type;
+    DBusAnyConfig* next;
+    DBusConfig dbus;
+};
+
+typedef struct dbus_any_config_list {
+    DBusAnyConfig* first;
+    DBusAnyConfig* last;
+} DBusAnyConfigList;
+
+/* Make sure that structure layouts match */
+#define ASSERT_CONFIG_OFFSET_MATCH(x,field) G_STATIC_ASSERT( \
+    G_STRUCT_OFFSET(x,field) == G_STRUCT_OFFSET(DBusAnyConfig,field))
+#define ASSERT_CONFIG_MATCH(x) \
+    G_STATIC_ASSERT(sizeof(DBusAnyConfig) == sizeof(x)); \
+    ASSERT_CONFIG_OFFSET_MATCH(x,type); \
+    ASSERT_CONFIG_OFFSET_MATCH(x,next); \
+    ASSERT_CONFIG_OFFSET_MATCH(x,dbus)
+#define ASSERT_LIST_OFFSET_MATCH(x,field) G_STATIC_ASSERT( \
+    G_STRUCT_OFFSET(x,field) == G_STRUCT_OFFSET(DBusAnyConfigList,field))
+#define ASSERT_LIST_MATCH(x) \
+    G_STATIC_ASSERT(sizeof(DBusAnyConfigList) == sizeof(x)); \
+    ASSERT_LIST_OFFSET_MATCH(x,first); \
+    ASSERT_LIST_OFFSET_MATCH(x,last)
+
+ASSERT_CONFIG_MATCH(DBusHandlerConfig);
+ASSERT_CONFIG_MATCH(DBusListenerConfig);
+ASSERT_LIST_MATCH(DBusHandlerConfigList);
+ASSERT_LIST_MATCH(DBusListenerConfigList);
 
 static
 int
@@ -91,69 +122,40 @@ dbus_handlers_config_files(
 
 static
 void
-dbus_handlers_config_add_handler(
-    DBusHandlerConfigList* list,
-    DBusHandlerConfig* handler)
+dbus_handlers_config_add_any(
+    DBusAnyConfigList* list,
+    DBusAnyConfig* entry)
 {
-    handler->next = NULL;
-    if (list->last) {
-        list->last->next = handler;
-    } else {
+    const DBusHandlerType* type = entry->type;
+
+    if (!list->last) {
+        /* The first entry */
         GASSERT(!list->first);
-        list->first = handler;
-    }
-    list->last = handler;
-}
-
-static
-void
-dbus_handlers_config_add_handlers(
-    DBusHandlerConfigList* list,
-    DBusHandlerConfigList* list2)
-{
-    if (list2->first) {
-        if (list->last) {
-            list->last->next = list2->first;
-        } else {
-            GASSERT(!list->first);
-            list->first = list2->first;
-        }
-        list->last = list2->last;
-        list2->first = list2->last = NULL;
-    }
-}
-
-static
-void
-dbus_handlers_config_add_listener(
-    DBusListenerConfigList* list,
-    DBusListenerConfig* listener)
-{
-    listener->next = NULL;
-    if (list->last) {
-        list->last->next = listener;
+        entry->next = NULL;
+        list->first = list->last = entry;
+    } else if (list->last->type->priority >= type->priority) {
+        /* Becomes last in the list */
+        entry->next = NULL;
+        list->last->next = entry;
+        list->last = entry;
+    } else if (list->first->type->priority < type->priority) {
+        /* Becomes first in the list */
+        entry->next = list->first;
+        list->first = entry;
     } else {
-        GASSERT(!list->first);
-        list->first = listener;
-    }
-    list->last = listener;
-}
+        /* Gets inserted somewhere in the middle */
+        DBusAnyConfig* ptr = list->first;
 
-static
-void
-dbus_handlers_config_add_listeners(
-    DBusListenerConfigList* list,
-    DBusListenerConfigList* list2)
-{
-    if (list2->first) {
-        if (list->last) {
-            list->last->next = list2->first;
-        } else {
-            GASSERT(!list->first);
-            list->first = list2->first;
+        /*
+         * Priority of the last entry is smaller than ours (checked
+         * above), therefore ptr->next can't be NULL.
+         */
+        while (ptr->next->type->priority >= type->priority) {
+            ptr = ptr->next;
         }
-        list->last = list2->last;
-        list2->first = list2->last = NULL;
+
+        entry->next = ptr->next;
+        ptr->next = entry;
     }
 }
 
@@ -166,16 +168,21 @@ dbus_handlers_config_add(
     GKeyFile* file,
     NfcNdefRec* ndef)
 {
-    DBusHandlerConfig* handler = type->new_handler_config(file, ndef);
-    DBusListenerConfig* listener = type->new_listener_config(file, ndef);
+    NfcNdefRec* rec = dbus_handlers_config_find_supported_record(ndef, type);
+    if (rec) {
+        DBusHandlerConfig* handler = type->new_handler_config(file, rec);
+        DBusListenerConfig* listener = type->new_listener_config(file, rec);
 
-    if (handler) {
-        handler->type = type;
-        dbus_handlers_config_add_handler(handlers, handler);
-    }
-    if (listener) {
-        listener->type = type;
-        dbus_handlers_config_add_listener(listeners, listener);
+        if (handler) {
+            handler->type = type;
+            dbus_handlers_config_add_any((DBusAnyConfigList*)handlers,
+                (DBusAnyConfig*)handler);
+        }
+        if (listener) {
+            listener->type = type;
+            dbus_handlers_config_add_any((DBusAnyConfigList*)listeners,
+                (DBusAnyConfig*)listener);
+        }
     }
 }
 
@@ -183,53 +190,52 @@ static
 DBusHandlersConfig*
 dbus_handlers_config_load_types(
     const char* dir,
-    const DBusHandlerType* type,
-    const DBusHandlerType* type2,
+    GSList* types,
     NfcNdefRec* ndef)
 {
     GStrV* files = dbus_handlers_config_files(dir);
     DBusHandlersConfig* config = NULL;
-    GKeyFile* k = g_key_file_new();
 
     if (files) {
         char** ptr = files;
-        DBusHandlerConfigList handlers, handlers2, handlers3;
-        DBusListenerConfigList listeners, listeners2, listeners3;
+        DBusHandlerConfigList handlers;
+        DBusListenerConfigList listeners;
         GString* path = g_string_new(dir);
         const guint baselen = path->len + 1;
+        GSList* keyfiles = NULL;
 
         g_string_append_c(path, G_DIR_SEPARATOR);
         memset(&handlers, 0, sizeof(handlers));
-        memset(&handlers2, 0, sizeof(handlers2));
-        memset(&handlers3, 0, sizeof(handlers3));
         memset(&listeners, 0, sizeof(listeners));
-        memset(&listeners2, 0, sizeof(listeners2));
-        memset(&listeners3, 0, sizeof(listeners3));
         while (*ptr) {
             const char* fname = *ptr++;
+            GKeyFile* kf = g_key_file_new();
 
             g_string_set_size(path, baselen);
             g_string_append(path, fname);
-            if (g_key_file_load_from_file(k, path->str, 0, NULL)) {
-                if (type) {
-                    dbus_handlers_config_add(&handlers, &listeners,
-                        type, k, ndef);
-                }
-                if (type2) {
-                    dbus_handlers_config_add(&handlers2, &listeners2,
-                        type2, k, ndef);
-                }
-                dbus_handlers_config_add(&handlers3, &listeners3,
-                    &dbus_handlers_type_generic, k, ndef);
+            if (g_key_file_load_from_file(kf, path->str, 0, NULL)) {
+                keyfiles = g_slist_append(keyfiles, kf);
+            } else {
+                g_key_file_unref(kf);
             }
+        }
+
+        if (keyfiles) {
+            GSList* l;
+
+            for (l = types; l; l = l->next) {
+                GSList* k;
+
+                for (k = keyfiles; k; k = k->next) {
+                    dbus_handlers_config_add(&handlers, &listeners,
+                        (const DBusHandlerType*)l->data,
+                        (GKeyFile*)k->data, ndef);
+                }
+            }
+            g_slist_free_full(keyfiles, (GDestroyNotify)g_key_file_unref);
         }
         g_strfreev(files);
         g_string_free(path, TRUE);
-
-        dbus_handlers_config_add_handlers(&handlers, &handlers2);
-        dbus_handlers_config_add_handlers(&handlers, &handlers3);
-        dbus_handlers_config_add_listeners(&listeners, &listeners2);
-        dbus_handlers_config_add_listeners(&listeners, &listeners3);
         if (handlers.first || listeners.first) {
             config = g_slice_new0(DBusHandlersConfig);
             config->handlers = handlers.first;
@@ -237,7 +243,6 @@ dbus_handlers_config_load_types(
         }
     }
 
-    g_key_file_unref(k);
     return config;
 }
 
@@ -320,6 +325,20 @@ dbus_handlers_free_listener_config(
     g_slice_free(DBusListenerConfig, listener);
 }
 
+NfcNdefRec*
+dbus_handlers_config_find_record(
+    NfcNdefRec* ndef,
+    gboolean (*check)(NfcNdefRec* ndef))
+{
+    while (ndef) {
+        if (check(ndef)) {
+            return ndef;
+        }
+        ndef = ndef->next;
+    }
+    return NULL;
+}
+
 /*==========================================================================*
  * Interface
  *==========================================================================*/
@@ -363,19 +382,60 @@ dbus_handlers_config_load(
     const char* dir,
     NfcNdefRec* ndef)
 {
-    if (dir && ndef) {
-        const DBusHandlerType* type = NULL;
-        const DBusHandlerType* type2 = NULL;
+    DBusHandlersConfig* config = NULL;
 
-        if (NFC_IS_NDEF_REC_U(ndef)) {
-            type = &dbus_handlers_type_uri;
-        } else if (dbus_handlers_type_mediatype_record(ndef)) {
-            type = &dbus_handlers_type_mediatype_exact;
-            type2 = &dbus_handlers_type_mediatype_wildcard;
+    if (dir && ndef) {
+        /*
+         * dbus_handlers_type_generic doesn't need to be here.
+         * It's a special case - we always try it and it's always
+         * the last one. Only non-trivial handlers are here.
+         *
+         * Also, there's no need to have both dbus_handlers_type_mediatype
+         * handlers in this array. They are buddies - when one matches,
+         * the other one gets added too. This way we don't have to call
+         * the same matching function twice.
+         *
+         * And it must be dbus_handlers_type_mediatype_exact rather than
+         * dbus_handlers_type_mediatype_wildcard for exact matches to be
+         * handled first.
+         */
+        static const DBusHandlerType* available_types[] = {
+            &dbus_handlers_type_uri,
+            &dbus_handlers_type_mediatype_exact
+        };
+        GSList* types = NULL;
+        guint remaining_count = G_N_ELEMENTS(available_types);
+        const DBusHandlerType* remaining_types[G_N_ELEMENTS(available_types)];
+        NfcNdefRec* rec;
+
+        /*
+         * Add relevant types in the order in which their NDEF records
+         * appear on the tag.
+         */
+        memcpy(remaining_types, available_types, sizeof(remaining_types));
+        for(rec = ndef; rec && remaining_count; rec = rec->next) {
+            guint i;
+
+            for (i = 0; i < G_N_ELEMENTS(remaining_types); i++) {
+                const DBusHandlerType* type = remaining_types[i];
+
+                if (type && type->supported_record(rec)) {
+                    types = g_slist_append(types, (gpointer)type);
+                    if (type->buddy) {
+                        /* Buddies share the recognizer function */
+                        types = g_slist_append(types, (gpointer)type->buddy);
+                    }
+                    remaining_types[i] = NULL;
+                    remaining_count--;
+                }
+            }
         }
-        return dbus_handlers_config_load_types(dir, type, type2, ndef);
+
+        types = g_slist_append(types, (gpointer)&dbus_handlers_type_generic);
+        config = dbus_handlers_config_load_types(dir, types, ndef);
+        g_slist_free(types);
     }
-    return NULL;
+    return config;
 }
 
 void

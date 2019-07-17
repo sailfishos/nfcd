@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -34,8 +34,6 @@
 
 #include "test_common.h"
 
-#include <nfc_ndef.h>
-
 #include <glib/gstdio.h>
 
 static TestOpt test_opt;
@@ -49,16 +47,8 @@ void
 test_basic(
     void)
 {
-    GVariant* args;
-    char* dir = g_dir_make_tmp("test_XXXXXX", NULL);
-    char* fname1 = g_build_filename(dir, "test1.conf", NULL);
-    char* fname2 = g_build_filename(dir, "test2.conf", NULL);
-    char* fname3 = g_build_filename(dir, "test3.conf", NULL);
-    NfcNdefRec* http = NFC_NDEF_REC(nfc_ndef_rec_u_new("http://jolla.com"));
-    NfcNdefRec* https = NFC_NDEF_REC(nfc_ndef_rec_u_new("https://jolla.com"));
-    DBusHandlersConfig* handlers_http;
-    DBusHandlersConfig* handlers_https;
-    const char* contents1 =
+    static const char* contents[] = {
+        /* test0.conf */
         "[URI-Handler]\n"
         "URI = http://*\n"
         "Path = /h1\n"
@@ -69,8 +59,9 @@ test_basic(
         "URI = http://*\n"
         "Path = /l1\n"
         "Service = l1.s\n"
-        "Method = l1.m\n";
-    const char* contents2 =
+        "Method = l1.m\n",
+
+        /* test1.conf */
         "[URI-Handler]\n"
         "URI = https://*\n"
         "Path = /h2\n"
@@ -81,8 +72,9 @@ test_basic(
         "URI = https://*\n"
         "Path = /l2\n"
         "Service = l2.s\n"
-        "Method = l2.m\n";
-    const char* contents3 =
+        "Method = l2.m\n",
+
+        /* test2.conf */
         "[URI-Handler]\n"
         "Path = /h3\n"
         "Service = h3.s\n"
@@ -91,21 +83,30 @@ test_basic(
         "[URI-Listener]\n"
         "Path = /l3\n"
         "Service = l3.s\n"
-        "Method = l3.m\n";
+        "Method = l3.m\n"
+    };
+    guint i;
+    GVariant* args;
+    NfcNdefRec* http = NFC_NDEF_REC(nfc_ndef_rec_u_new("http://jolla.com"));
+    NfcNdefRec* https = NFC_NDEF_REC(nfc_ndef_rec_u_new("https://jolla.com"));
+    DBusHandlersConfig* handlers_http;
+    DBusHandlersConfig* handlers_https;
+    char* fname[G_N_ELEMENTS(contents)];
+    char* dir = g_dir_make_tmp("test_XXXXXX", NULL);
 
     GDEBUG("created %s", dir);
-    g_assert(g_file_set_contents(fname1, contents1, -1, NULL));
-    g_assert(g_file_set_contents(fname2, contents2, -1, NULL));
-    g_assert(g_file_set_contents(fname3, contents3, -1, NULL));
+    for (i = 0; i < G_N_ELEMENTS(contents); i++) {
+        char name[16];
+
+        sprintf(name, "test%u.conf", i);
+        fname[i] = g_build_filename(dir, name, NULL);
+        g_assert(g_file_set_contents(fname[i], contents[i], -1, NULL));
+    }
 
     g_assert(http);
     g_assert(https);
     handlers_http = dbus_handlers_config_load(dir, http);
     handlers_https = dbus_handlers_config_load(dir, https);
-    g_unlink(fname1);
-    g_unlink(fname2);
-    g_unlink(fname3);
-    g_rmdir(dir);
 
     g_assert(handlers_http);
     g_assert(handlers_http->handlers);
@@ -157,9 +158,11 @@ test_basic(
     dbus_handlers_config_free(handlers_https);
     nfc_ndef_rec_unref(http);
     nfc_ndef_rec_unref(https);
-    g_free(fname1);
-    g_free(fname2);
-    g_free(fname3);
+    for (i = 0; i < G_N_ELEMENTS(fname); i++) {
+        g_unlink(fname[i]);
+        g_free(fname[i]);
+    }
+    g_rmdir(dir);
     g_free(dir);
 }
 

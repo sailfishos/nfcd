@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -31,8 +31,6 @@
  */
 
 #include "dbus_handlers.h"
-
-#include <nfc_ndef.h>
 
 static const char dbus_handlers_type_mediatype_handler_group [] =
     "MediaType-Handler";
@@ -182,6 +180,15 @@ dbus_handlers_type_mediatype_new_listener(
 }
 
 static
+gboolean
+dbus_handlers_type_mediatype_supported_record(
+    NfcNdefRec* ndef)
+{
+    return ndef->tnf == NFC_NDEF_TNF_MEDIA_TYPE &&
+        dbus_handlers_type_mediatype_is_valid_mediatype(&ndef->type, FALSE);
+}
+
+static
 DBusHandlerConfig*
 dbus_handlers_type_mediatype_wildcard_new_handler(
     GKeyFile* file,
@@ -276,6 +283,9 @@ dbus_handlers_type_mediatype_listener_args(
 
 const DBusHandlerType dbus_handlers_type_mediatype_wildcard = {
     .name = "MediaType (wildcard)",
+    .priority = DBUS_HANDLER_PRIORITY_DEFAULT,
+    .buddy = &dbus_handlers_type_mediatype_exact,
+    .supported_record = dbus_handlers_type_mediatype_supported_record,
     .new_handler_config = dbus_handlers_type_mediatype_wildcard_new_handler,
     .new_listener_config = dbus_handlers_type_mediatype_wildcard_new_listener,
     .free_handler_config = dbus_handlers_free_handler_config,
@@ -286,6 +296,9 @@ const DBusHandlerType dbus_handlers_type_mediatype_wildcard = {
 
 const DBusHandlerType dbus_handlers_type_mediatype_exact = {
     .name = "MediaType (exact)",
+    .priority = DBUS_HANDLER_PRIORITY_DEFAULT,
+    .buddy = &dbus_handlers_type_mediatype_wildcard,
+    .supported_record = dbus_handlers_type_mediatype_supported_record,
     .new_handler_config = dbus_handlers_type_mediatype_exact_new_handler,
     .new_listener_config = dbus_handlers_type_mediatype_exact_new_listener,
     .free_handler_config = dbus_handlers_free_handler_config,
@@ -293,14 +306,6 @@ const DBusHandlerType dbus_handlers_type_mediatype_exact = {
     .handler_args = dbus_handlers_type_mediatype_handler_args,
     .listener_args = dbus_handlers_type_mediatype_listener_args
 };
-
-gboolean
-dbus_handlers_type_mediatype_record(
-    NfcNdefRec* ndef)
-{
-    return ndef && ndef->tnf == NFC_NDEF_TNF_MEDIA_TYPE &&
-        dbus_handlers_type_mediatype_is_valid_mediatype(&ndef->type, FALSE);
-}
 
 /*
  * Local Variables:

@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -32,8 +32,6 @@
 
 #include "dbus_handlers.h"
 
-#include <nfc_ndef.h>
-
 static
 GVariant*
 dbus_handlers_type_generic_ndef_to_variant(
@@ -52,6 +50,14 @@ dbus_handlers_type_generic_ndef_to_variant(
     data = g_byte_array_free(buf, FALSE);
     return g_variant_new_from_data(G_VARIANT_TYPE("ay"), data, size, TRUE,
         g_free, data);
+}
+
+static
+gboolean
+dbus_handlers_type_generic_supported_record(
+    NfcNdefRec* ndef)
+{
+    return TRUE;
 }
 
 static
@@ -93,6 +99,8 @@ dbus_handlers_type_generic_listener_args(
 
 const DBusHandlerType dbus_handlers_type_generic = {
     .name = "generic",
+    .priority = DBUS_HANDLER_PRIORITY_LOW,
+    .supported_record = dbus_handlers_type_generic_supported_record,
     .new_handler_config = dbus_handlers_type_generic_new_handler_config,
     .new_listener_config = dbus_handlers_type_generic_new_listener_config,
     .free_handler_config = dbus_handlers_free_handler_config,

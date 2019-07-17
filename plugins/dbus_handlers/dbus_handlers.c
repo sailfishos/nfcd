@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -31,8 +31,6 @@
  */
 
 #include "dbus_handlers.h"
-
-#include <nfc_ndef.h>
 
 typedef struct dbus_handler_call DBusHandlerCall;
 
@@ -192,13 +190,15 @@ dbus_handlers_run_handler(
 {
     DBusHandlerCall* call = dbus_handler_call_new(run);
     DBusHandlerConfig* handler = run->handler;
+    const DBusHandlerType* type = handler->type;
     const DBusConfig* dbus = &handler->dbus;
-    GVariant* parameters = handler->type->handler_args(run->ndef);
+    GVariant* args = type->handler_args
+        (dbus_handlers_config_find_supported_record(run->ndef, type));
 
     GASSERT(!run->handler_call);
     run->handler_call = call;
     g_dbus_connection_call(run->handlers->connection, dbus->service,
-        dbus->path, dbus->iface, dbus->method, parameters, NULL,
+        dbus->path, dbus->iface, dbus->method, args, NULL,
         G_DBUS_CALL_FLAGS_NONE, -1, run->cancellable,
         dbus_handlers_run_handler_call_done, call);
 }
@@ -213,13 +213,15 @@ dbus_handlers_run_listeners(
 
     while (listener) {
         const DBusConfig* dbus = &listener->dbus;
+        const DBusHandlerType* type = listener->type;
         DBusHandlerCall* call = dbus_handler_call_new(run);
-        GVariant* arg = listener->type->listener_args(run->handled, run->ndef);
+        GVariant* args = type->listener_args(run->handled,
+            dbus_handlers_config_find_supported_record(run->ndef, type));
 
         call->next = run->listener_calls;
         run->listener_calls = call;
         g_dbus_connection_call(handlers->connection, dbus->service,
-            dbus->path, dbus->iface, dbus->method, arg, NULL,
+            dbus->path, dbus->iface, dbus->method, args, NULL,
             G_DBUS_CALL_FLAGS_NONE, -1, run->cancellable,
             dbus_handlers_run_listener_call_done, call);
         listener = listener->next;

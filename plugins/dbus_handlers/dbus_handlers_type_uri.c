@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -32,9 +32,30 @@
 
 #include "dbus_handlers.h"
 
-#include <nfc_ndef.h>
-
 static const char dbus_handlers_type_uri_key[] = "URI";
+
+static
+gboolean
+dbus_handlers_type_uri_supported_record(
+    NfcNdefRec* ndef)
+{
+    return G_TYPE_CHECK_INSTANCE_TYPE(ndef, NFC_TYPE_NDEF_REC_U);
+}
+
+static
+gboolean
+dbus_handlers_type_uri_match(
+    GKeyFile* file,
+    const char* group,
+    NfcNdefRecU* rec)
+{
+    char* pattern = dbus_handlers_config_get_string(file, group,
+        dbus_handlers_type_uri_key);
+    gboolean match = (!pattern || g_pattern_match_simple(pattern, rec->uri));
+
+    g_free(pattern);
+    return match;
+}
 
 static
 DBusHandlerConfig*
@@ -42,14 +63,10 @@ dbus_handlers_type_uri_new_handler_config(
     GKeyFile* file,
     NfcNdefRec* ndef)
 {
-    const char* group = "URI-Handler";
-    NfcNdefRecU* u = NFC_NDEF_REC_U(ndef);
-    char* pattern = dbus_handlers_config_get_string(file, group,
-        dbus_handlers_type_uri_key);
-    gboolean match = (!pattern || g_pattern_match_simple(pattern, u->uri));
+    static const char group[] = "URI-Handler";
 
-    g_free(pattern);
-    return match ? dbus_handlers_new_handler_config(file, group) : NULL;
+    return dbus_handlers_type_uri_match(file, group, NFC_NDEF_REC_U(ndef)) ?
+        dbus_handlers_new_handler_config(file, group) : NULL;
 }
 
 static
@@ -58,14 +75,10 @@ dbus_handlers_type_uri_new_listener_config(
     GKeyFile* file,
     NfcNdefRec* ndef)
 {
-    const char* group = "URI-Listener";
-    NfcNdefRecU* u = NFC_NDEF_REC_U(ndef);
-    char* pattern = dbus_handlers_config_get_string(file, group,
-        dbus_handlers_type_uri_key);
-    gboolean match = (!pattern || g_pattern_match_simple(pattern, u->uri));
+    static const char group[] = "URI-Listener";
 
-    g_free(pattern);
-    return match ? dbus_handlers_new_listener_config(file, group) : NULL;
+    return dbus_handlers_type_uri_match(file, group, NFC_NDEF_REC_U(ndef)) ?
+        dbus_handlers_new_listener_config(file, group) : NULL;
 }
 
 static
@@ -91,6 +104,8 @@ dbus_handlers_type_uri_listener_args(
 
 const DBusHandlerType dbus_handlers_type_uri = {
     .name = "URI",
+    .priority = DBUS_HANDLER_PRIORITY_DEFAULT,
+    .supported_record = dbus_handlers_type_uri_supported_record,
     .new_handler_config = dbus_handlers_type_uri_new_handler_config,
     .new_listener_config = dbus_handlers_type_uri_new_listener_config,
     .free_handler_config = dbus_handlers_free_handler_config,
