@@ -18,6 +18,7 @@ all:
 	@$(MAKE) -C plugins_dbus_handlers_config $*
 	@$(MAKE) -C plugins_dbus_handlers_type_generic $*
 	@$(MAKE) -C plugins_dbus_handlers_type_mediatype $*
+	@$(MAKE) -C plugins_dbus_handlers_type_text $*
 	@$(MAKE) -C plugins_dbus_handlers_type_uri $*
 
 clean: unitclean

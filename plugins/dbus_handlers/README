@@ -144,3 +144,34 @@ Example:
 Service = my.service
 Method = my.interface.HandleURI
 URI = https://*
+
+"T" (Text) NDEF record
+----------------------
+
+[Text-Handler]
+
+Method signature:
+
+  <method>
+    <arg name="text" type="s" direction="in"/>
+    <arg name="status" type="i" direction="out"/>
+  </method>
+
+[Text-Listener]
+
+Method signature:
+
+  <method>
+    <arg name="handled" type="b" direction="in"/>
+    <arg name="text" type="s" direction="in"/>
+  </method>
+
+If tag contains multiple Text records, the one with the language that
+matches default system locale is picked. If several records match, the
+first one is picked.
+
+Example:
+
+[Text-Handler]
+Service = my.service
+Method = my.interface.HandleText

@@ -96,6 +96,7 @@ typedef struct dbus_handlers_config {
 } DBusHandlersConfig;
 
 extern const DBusHandlerType dbus_handlers_type_uri;
+extern const DBusHandlerType dbus_handlers_type_text;
 extern const DBusHandlerType dbus_handlers_type_mediatype_wildcard;
 extern const DBusHandlerType dbus_handlers_type_mediatype_exact;
 extern const DBusHandlerType dbus_handlers_type_generic;

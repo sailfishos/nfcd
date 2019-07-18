@@ -401,6 +401,7 @@ dbus_handlers_config_load(
          */
         static const DBusHandlerType* available_types[] = {
             &dbus_handlers_type_uri,
+            &dbus_handlers_type_text,
             &dbus_handlers_type_mediatype_exact
         };
         GSList* types = NULL;
