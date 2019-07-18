@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019 Jolla Ltd.
+ * Copyright (C) 2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,28 +30,28 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef NFC_UTIL_H
-#define NFC_UTIL_H
+#ifndef NFC_SYSTEM_H
+#define NFC_SYSTEM_H
 
-#include "nfc_types_p.h"
+#include "nfc_types.h"
 
-/* Add _ prefix so that these don't get exported */
-#define nfc_system_locale _nfc_system_locale
+/*
+ * Note: locale syntax is language[_territory] and ISO/IANA syntax is
+ * language[-territory].
+ *
+ * Caller should free NfcLanguage returned by nfc_system_language() with
+ * g_free() - the whole thing gets allocated from a single memory block.
+ */
+struct nfc_language {
+    const char* language;
+    const char* territory;
+};
 
-void
-nfc_hexdump(
-    const void* data,
-    int len);
+NfcLanguage*
+nfc_system_language(
+    void); /* Since 1.0.15 */
 
-void
-nfc_hexdump_data(
-    const GUtilData* data);
-
-const char*
-nfc_system_locale(
-    void);
-
-#endif /* NFC_UTIL_H */
+#endif /* NFC_SYSTEM_H */
 
 /*
  * Local Variables:

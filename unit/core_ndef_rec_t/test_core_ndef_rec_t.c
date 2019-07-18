@@ -33,10 +33,8 @@
 
 #include "test_common.h"
 
-#include "nfc_ndef.h"
+#include "nfc_util.h"
 #include "nfc_ndef_p.h"
-
-#include <locale.h>
 
 static TestOpt test_opt;
 static const char* test_system_locale = NULL;

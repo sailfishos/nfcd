@@ -31,6 +31,7 @@
  */
 
 #include "nfc_util.h"
+#include "nfc_system.h"
 #include "nfc_log.h"
 
 #include <gutil_misc.h>

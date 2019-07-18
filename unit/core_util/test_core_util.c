@@ -33,6 +33,7 @@
 #include "test_common.h"
 
 #include "nfc_util.h"
+#include "nfc_system.h"
 #include "nfc_log.h"
 
 static TestOpt test_opt;
