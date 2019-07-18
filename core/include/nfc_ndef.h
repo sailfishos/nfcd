@@ -144,6 +144,13 @@ typedef enum nfc_ndef_rec_t_enc {
     NFC_NDEF_REC_T_ENC_UTF16LE
 } NFC_NDEF_REC_T_ENC;
 
+typedef enum nfc_lang_match {
+    NFC_LANG_MATCH_NONE = 0x00,
+    NFC_LANG_MATCH_TERRITORY = 0x01,
+    NFC_LANG_MATCH_LANGUAGE = 0x02,
+    NFC_LANG_MATCH_FULL = NFC_LANG_MATCH_LANGUAGE | NFC_LANG_MATCH_TERRITORY
+} NFC_LANG_MATCH; /* Since 1.0.15 */
+
 NfcNdefRecT*
 nfc_ndef_rec_t_new_enc(
     const char* text,
@@ -152,6 +159,11 @@ nfc_ndef_rec_t_new_enc(
 
 #define nfc_ndef_rec_t_new(text,lang) \
     nfc_ndef_rec_t_new_enc(text, lang, NFC_NDEF_REC_T_ENC_UTF8)
+
+NFC_LANG_MATCH
+nfc_ndef_rec_t_lang_match(
+    NfcNdefRecT* rec,
+    const NfcLanguage* lang); /* Since 1.0.15 */
 
 /* These are not yet implemented: */
 
