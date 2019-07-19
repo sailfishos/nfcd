@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -38,7 +38,7 @@
 #define GLOG_MODULE_NAME dbus_handlers_log
 #include <gutil_log.h>
 
-#include <nfc_types.h>
+#include <nfc_ndef.h>
 
 #include <gio/gio.h>
 
@@ -69,8 +69,17 @@ struct dbus_listener_config {
     DBusConfig dbus;
 };
 
+typedef enum dbus_handler_priority {
+    DBUS_HANDLER_PRIORITY_LOW = -1,
+    DBUS_HANDLER_PRIORITY_DEFAULT,
+} DBUS_HANDLER_PRIORITY;
+
 struct dbus_handler_type {
     const char* name;
+    DBUS_HANDLER_PRIORITY priority;
+    const DBusHandlerType* buddy;
+    /* Recognizing NDEF records */
+    gboolean (*supported_record)(NfcNdefRec* ndef);
     /* Config parsing */
     DBusHandlerConfig* (*new_handler_config)(GKeyFile* f, NfcNdefRec* ndef);
     DBusListenerConfig* (*new_listener_config)(GKeyFile* f, NfcNdefRec* ndef);
@@ -87,13 +96,18 @@ typedef struct dbus_handlers_config {
 } DBusHandlersConfig;
 
 extern const DBusHandlerType dbus_handlers_type_uri;
-extern const DBusHandlerType dbus_handlers_type_generic;
+extern const DBusHandlerType dbus_handlers_type_text;
 extern const DBusHandlerType dbus_handlers_type_mediatype_wildcard;
 extern const DBusHandlerType dbus_handlers_type_mediatype_exact;
+extern const DBusHandlerType dbus_handlers_type_generic;
 
-gboolean
-dbus_handlers_type_mediatype_record(
-    NfcNdefRec* ndef);
+NfcNdefRec*
+dbus_handlers_config_find_record(
+    NfcNdefRec* ndef,
+    gboolean (*check)(NfcNdefRec* ndef));
+
+#define dbus_handlers_config_find_supported_record(ndef, type) \
+    dbus_handlers_config_find_record(ndef, (type)->supported_record)
 
 /* DBusHandlersConfig */
 

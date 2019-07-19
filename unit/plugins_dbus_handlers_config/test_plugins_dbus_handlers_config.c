@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -34,11 +34,56 @@
 
 #include "test_common.h"
 
-#include <nfc_ndef.h>
-
 #include <glib/gstdio.h>
 
 static TestOpt test_opt;
+
+static
+NfcNdefRec*
+test_ndef_record_media_new(
+    const char* mediatype,
+    const GUtilData* payload)
+{
+    GUtilData data;
+    NfcNdefRec* rec;
+    const gsize type_length = strlen(mediatype);
+    const gsize payload_length = (payload ? payload->size : 0);
+    guint8* bytes;
+
+    g_assert(type_length < 0x100);
+    g_assert(payload_length < 0x100);
+    data.size = 3 + type_length + (payload ? payload->size : 0);
+    data.bytes = bytes = g_malloc(data.size);
+    bytes[0] = 0xd2;                   /* (MB,ME,SR,TNF=0x02) */
+    bytes[1] = (guint8)type_length;    /* Length of the record type */
+    bytes[2] = (guint8)payload_length; /* Length of the record payload */
+    memcpy(bytes + 3, mediatype, type_length);
+    if (payload_length) {
+        memcpy(bytes + 3 + type_length, payload->bytes, payload_length);
+    }
+
+    rec = nfc_ndef_rec_new(&data);
+    g_assert(rec);
+    g_free(bytes);
+    return rec;
+}
+
+static
+NfcNdefRec*
+test_ndef_record_new_media_text(
+    const char* mediatype,
+    const char* text)
+{
+    GUtilData payload;
+
+    if (text) {
+        payload.bytes = (void*)text;
+        payload.size = strlen(text);
+    } else {
+        memset(&payload, 0, sizeof(payload));
+    }
+    return test_ndef_record_media_new(mediatype, &payload);
+}
 
 static
 NfcNdefRec*
@@ -306,6 +351,86 @@ test_load_listeners(
 }
 
 /*==========================================================================*
+ * multiple_ndefs
+ *==========================================================================*/
+
+static
+void
+test_multiple_ndefs(
+    void)
+{
+    static const char* contents[] = {
+        /* test0.conf */
+        "[URI-Handler]\n"
+        "Path = /h1\n"
+        "Service = h1.s\n"
+        "Method = h1.m\n"
+        "\n"
+        "[MediaType-Handler]\n"
+        "MediaType = text/*\n"
+        "Path = /h2\n"
+        "Service = h2.s\n"
+        "Method = h2.m\n",
+
+        /* test1.conf */
+        "[MediaType-Handler]\n"
+        "MediaType = text/plain\n"
+        "Path = /h3\n"
+        "Service = h3.s\n"
+        "Method = h4.m\n"
+        "\n"
+        "[Handler]\n"
+        "Path = /h4\n"
+        "Service = h4.s\n"
+        "Method = h4.m\n"
+    };
+    guint i;
+    NfcNdefRec* rec;
+    DBusHandlersConfig* handlers;
+    char* fname[G_N_ELEMENTS(contents)];
+    char* dir = g_dir_make_tmp("test_XXXXXX", NULL);
+
+    GDEBUG("created %s", dir);
+    for (i = 0; i < G_N_ELEMENTS(contents); i++) {
+        char name[16];
+
+        sprintf(name, "test%u.conf", i);
+        fname[i] = g_build_filename(dir, name, NULL);
+        g_assert(g_file_set_contents(fname[i], contents[i], -1, NULL));
+    }
+
+    (((rec = test_ndef_record_new())->next =
+    test_ndef_record_new_media_text("text/plain", "test1"))->next =
+    NFC_NDEF_REC(nfc_ndef_rec_u_new("http://jolla.com")))->next =
+    test_ndef_record_new_media_text("text/plain", "test2");
+
+    handlers = dbus_handlers_config_load(dir, rec);
+    g_assert(handlers);
+    g_assert(!handlers->listeners);
+    g_assert(handlers->handlers);
+    g_assert(handlers->handlers->next);
+    g_assert(handlers->handlers->next->next);
+    g_assert(handlers->handlers->next->next->next);
+    g_assert(!handlers->handlers->next->next->next->next);
+
+    /* Mediatype record goes before URI record */
+    g_assert(!g_strcmp0(handlers->handlers->dbus.service, "h3.s"));
+    g_assert(!g_strcmp0(handlers->handlers->dbus.path, "/h3"));
+    g_assert(!g_strcmp0(handlers->handlers->next->dbus.service, "h2.s"));
+    g_assert(!g_strcmp0(handlers->handlers->next->dbus.path, "/h2"));
+    g_assert(!g_strcmp0(handlers->handlers->next->next->dbus.service, "h1.s"));
+    g_assert(!g_strcmp0(handlers->handlers->next->next->dbus.path, "/h1"));
+
+    dbus_handlers_config_free(handlers);
+    nfc_ndef_rec_unref(rec);
+    for (i = 0; i < G_N_ELEMENTS(fname); i++) {
+        g_unlink(fname[i]);
+        g_free(fname[i]);
+    }
+    g_free(dir);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -320,6 +445,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("load_empty"), test_load_empty);
     g_test_add_func(TEST_("load_handlers"), test_load_handlers);
     g_test_add_func(TEST_("load_listeners"), test_load_listeners);
+    g_test_add_func(TEST_("multiple_ndefs"), test_multiple_ndefs);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

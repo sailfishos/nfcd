@@ -40,6 +40,7 @@ G_BEGIN_DECLS
 /* Types */
 
 typedef struct nfc_adapter NfcAdapter;
+typedef struct nfc_language NfcLanguage; /* Since 1.0.15 */
 typedef struct nfc_ndef_rec NfcNdefRec;
 typedef struct nfc_manager NfcManager;
 typedef struct nfc_plugin NfcPlugin;

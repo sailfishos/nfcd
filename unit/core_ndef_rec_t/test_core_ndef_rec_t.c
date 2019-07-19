@@ -33,10 +33,9 @@
 
 #include "test_common.h"
 
-#include "nfc_ndef.h"
+#include "nfc_util.h"
 #include "nfc_ndef_p.h"
-
-#include <locale.h>
+#include "nfc_system.h"
 
 static TestOpt test_opt;
 static const char* test_system_locale = NULL;
@@ -133,6 +132,70 @@ test_locale(
     g_assert(!g_strcmp0(trec->lang, "ru"));
     g_assert(!g_strcmp0(trec->text, ""));
     nfc_ndef_rec_unref(&trec->rec);
+}
+
+/*==========================================================================*
+ * lang_match
+ *==========================================================================*/
+
+static
+void
+test_lang_match(
+    void)
+{
+    NfcNdefRecT* t;
+    NfcLanguage l;
+
+    test_system_locale = "en_US.UTF-8";
+    t = nfc_ndef_rec_t_new(NULL, NULL);
+    g_assert(t);
+
+    /* Test NULL tolerance */
+    memset(&l, 0, sizeof(l));
+    g_assert(!nfc_ndef_rec_t_lang_match(NULL, NULL));
+    g_assert(!nfc_ndef_rec_t_lang_match(t, NULL));
+    g_assert(!nfc_ndef_rec_t_lang_match(t, &l));
+
+    /* Test matching */
+    l.language = "foo";
+    g_assert(!nfc_ndef_rec_t_lang_match(t, &l));
+
+    l.language = "ru";
+    g_assert(!nfc_ndef_rec_t_lang_match(t, &l));
+
+    l.language = "EN";
+    g_assert(nfc_ndef_rec_t_lang_match(t, &l) == NFC_LANG_MATCH_LANGUAGE);
+
+    l.territory = "";
+    g_assert(nfc_ndef_rec_t_lang_match(t, &l) == NFC_LANG_MATCH_LANGUAGE);
+
+    l.territory = "BR";
+    g_assert(nfc_ndef_rec_t_lang_match(t, &l) == NFC_LANG_MATCH_LANGUAGE);
+
+    l.territory = "US";
+    g_assert(nfc_ndef_rec_t_lang_match(t, &l) == NFC_LANG_MATCH_FULL);
+
+    nfc_ndef_rec_unref(&t->rec);
+
+    /* And again, this time without territory */
+    test_system_locale = "en";
+    t = nfc_ndef_rec_t_new(NULL, NULL);
+    g_assert(t);
+
+    memset(&l, 0, sizeof(l));
+    l.language = "foo";
+    g_assert(!nfc_ndef_rec_t_lang_match(t, &l));
+
+    l.language = "ru";
+    g_assert(!nfc_ndef_rec_t_lang_match(t, &l));
+
+    l.language = "en";
+    g_assert(nfc_ndef_rec_t_lang_match(t, &l) == NFC_LANG_MATCH_LANGUAGE);
+
+    l.territory = "us";
+    g_assert(nfc_ndef_rec_t_lang_match(t, &l) == NFC_LANG_MATCH_LANGUAGE);
+
+    nfc_ndef_rec_unref(&t->rec);
 }
 
 /*==========================================================================*
@@ -482,6 +545,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("invalid_text"), test_invalid_text);
     g_test_add_func(TEST_("default_lang"), test_default_lang);
     g_test_add_func(TEST_("locale"), test_locale);
+    g_test_add_func(TEST_("lang_match"), test_lang_match);
 
     for (i = 0; i < G_N_ELEMENTS(tests_invalid); i++) {
         const TestInvalid* test = tests_invalid + i;

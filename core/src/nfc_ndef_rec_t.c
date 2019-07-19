@@ -32,6 +32,7 @@
 
 #include "nfc_ndef_p.h"
 #include "nfc_util.h"
+#include "nfc_system.h"
 #include "nfc_log.h"
 
 #include <gutil_misc.h>
@@ -245,6 +246,36 @@ nfc_ndef_rec_t_new_enc(
     }
     g_free(lang_tmp);
     return NULL;
+}
+
+NFC_LANG_MATCH
+nfc_ndef_rec_t_lang_match(
+    NfcNdefRecT* rec,
+    const NfcLanguage* lang) /* Since 1.0.15 */
+{
+    NFC_LANG_MATCH match = NFC_LANG_MATCH_NONE;
+
+    if (G_LIKELY(rec) && G_LIKELY(lang) && G_LIKELY(lang->language)) {
+        const char* sep = strchr(rec->lang, '-');
+
+        if (sep) {
+            const gsize lang_len = sep - rec->lang;
+
+            if (strlen(lang->language) == lang_len &&
+                !g_ascii_strncasecmp(rec->lang, lang->language, lang_len)) {
+                match |= NFC_LANG_MATCH_LANGUAGE;
+            }
+            if (lang->territory && lang->territory[0] &&
+                !g_ascii_strcasecmp(sep + 1, lang->territory)) {
+                match |= NFC_LANG_MATCH_TERRITORY;
+            }
+        } else {
+            if (!g_ascii_strcasecmp(rec->lang, lang->language)) {
+                match |= NFC_LANG_MATCH_LANGUAGE;
+            }
+        }
+    }
+    return match;
 }
 
 /*==========================================================================*

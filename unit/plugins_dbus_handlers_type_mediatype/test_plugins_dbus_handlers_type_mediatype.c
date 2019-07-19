@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -33,8 +33,6 @@
 #include "dbus_handlers/dbus_handlers.h"
 
 #include "test_common.h"
-
-#include <nfc_ndef.h>
 
 #include <glib/gstdio.h>
 
@@ -91,6 +89,9 @@ test_ndef_record_new_text(
  * recognize
  *==========================================================================*/
 
+#define supported(rec) dbus_handlers_config_find_supported_record(rec, \
+    &dbus_handlers_type_mediatype_wildcard)
+
 static
 void
 test_recognize(
@@ -105,63 +106,63 @@ test_recognize(
         'x'         /* Record type: 'x' */
     };
 
-    g_assert(!dbus_handlers_type_mediatype_record(NULL));
+    g_assert(!supported(NULL));
 
     /* Not a media-type record */
     TEST_BYTES_SET(bytes, ndef_data);
     rec = nfc_ndef_rec_new(&bytes);
     g_assert(rec);
-    g_assert(!dbus_handlers_type_mediatype_record(rec));
+    g_assert(!supported(rec));
     nfc_ndef_rec_unref(rec);
 
     /* Invalid media types */
     rec = test_ndef_record_new("", NULL);
-    g_assert(!dbus_handlers_type_mediatype_record(rec));
+    g_assert(!supported(rec));
     nfc_ndef_rec_unref(rec);
 
     rec = test_ndef_record_new(" ", NULL);
-    g_assert(!dbus_handlers_type_mediatype_record(rec));
+    g_assert(!supported(rec));
     nfc_ndef_rec_unref(rec);
 
     rec = test_ndef_record_new("foo", NULL);
-    g_assert(!dbus_handlers_type_mediatype_record(rec));
+    g_assert(!supported(rec));
     nfc_ndef_rec_unref(rec);
 
     rec = test_ndef_record_new("*", NULL);
-    g_assert(!dbus_handlers_type_mediatype_record(rec));
+    g_assert(!supported(rec));
     nfc_ndef_rec_unref(rec);
 
     rec = test_ndef_record_new("*/*", NULL);
-    g_assert(!dbus_handlers_type_mediatype_record(rec));
+    g_assert(!supported(rec));
     nfc_ndef_rec_unref(rec);
 
     rec = test_ndef_record_new("foo/", NULL);
-    g_assert(!dbus_handlers_type_mediatype_record(rec));
+    g_assert(!supported(rec));
     nfc_ndef_rec_unref(rec);
 
     rec = test_ndef_record_new("foo ", NULL);
-    g_assert(!dbus_handlers_type_mediatype_record(rec));
+    g_assert(!supported(rec));
     nfc_ndef_rec_unref(rec);
 
     rec = test_ndef_record_new("foo  ", NULL);
-    g_assert(!dbus_handlers_type_mediatype_record(rec));
+    g_assert(!supported(rec));
     nfc_ndef_rec_unref(rec);
 
     rec = test_ndef_record_new("foo/\x80", NULL);
-    g_assert(!dbus_handlers_type_mediatype_record(rec));
+    g_assert(!supported(rec));
     nfc_ndef_rec_unref(rec);
 
     rec = test_ndef_record_new("foo/*", NULL);
-    g_assert(!dbus_handlers_type_mediatype_record(rec));
+    g_assert(!supported(rec));
     nfc_ndef_rec_unref(rec);
 
     rec = test_ndef_record_new("foo/bar\t", NULL);
-    g_assert(!dbus_handlers_type_mediatype_record(rec));
+    g_assert(!supported(rec));
     nfc_ndef_rec_unref(rec);
 
     /* And finally a valid one */
     rec = test_ndef_record_new("foo/bar", NULL);
-    g_assert(dbus_handlers_type_mediatype_record(rec));
+    g_assert(supported(rec));
     nfc_ndef_rec_unref(rec);
 }
 
@@ -174,66 +175,73 @@ void
 test_basic(
     void)
 {
-    GVariant* args;
-    char* dir = g_dir_make_tmp("test_XXXXXX", NULL);
-    char* fname1 = g_build_filename(dir, "test1.conf", NULL);
-    char* fname2 = g_build_filename(dir, "test2.conf", NULL);
-    char* fname3 = g_build_filename(dir, "test3.conf", NULL);
-    char* fname4 = g_build_filename(dir, "test4.conf", NULL);
-    char* fname5 = g_build_filename(dir, "test5.conf", NULL);
-    NfcNdefRec* rec = test_ndef_record_new_text("text/plain", "test");
-    DBusHandlersConfig* handlers;
-    const char* contents1 =
+    static const char* contents[] = {
+        /* test0.conf */
         "[MediaType-Handler]\n"
         "MediaType = */*\n"
         "Path = /h1\n"
         "Service = h1.s\n"
-        "Method = h1.m\n";
-    const char* contents2 =
+        "Method = h1.m\n",
+
+        /* test1.conf */
         "[MediaType-Handler]\n"
         "MediaType = text/plain\n"
         "Path = /h2\n"
         "Service = h2.s\n"
-        "Method = h2.m\n";
-    const char* contents3 =
+        "Method = h2.m\n",
+
+        /* test2.conf */
         "[MediaType-Listener]\n"
         "MediaType = text/*\n"
         "Path = /l1\n"
         "Service = l1.s\n"
-        "Method = l1.m\n";
-    const char* contents4 =
+        "Method = l1.m\n",
+
+        /* test3.conf */
         "[MediaType-Listener]\n"
         "MediaType = text/plain\n"
         "Path = /l2\n"
         "Service = l2.s\n"
-        "Method = l2.m\n";
-    const char* contents5 =
+        "Method = l2.m\n",
+
+        /* test4.conf */
         "[MediaType-Listener]\n"
         "MediaType = image/jpeg\n"
         "Path = /l3\n"
         "Service = l3.s\n"
-        "Method = l3.m\n";
+        "Method = l3.m\n",
 
-    GDEBUG("created %s", dir);
-    g_assert(g_file_set_contents(fname1, contents1, -1, NULL));
-    g_assert(g_file_set_contents(fname2, contents2, -1, NULL));
-    g_assert(g_file_set_contents(fname3, contents3, -1, NULL));
-    g_assert(g_file_set_contents(fname4, contents4, -1, NULL));
-    g_assert(g_file_set_contents(fname5, contents5, -1, NULL));
+        /* test5.conf */
+        "[MediaType-Handler]\n"
+        "MediaType = text/*\n"
+        "Path = /h3\n"
+        "Service = h3.s\n"
+        "Method = h3.m\n"
+    };
+    guint i;
+    GVariant* args;
+    DBusHandlersConfig* handlers;
+    NfcNdefRec* rec = test_ndef_record_new_text("text/plain", "test");
+    char* fname[G_N_ELEMENTS(contents)];
+    char* dir = g_dir_make_tmp("test_XXXXXX", NULL);
 
     g_assert(rec);
+    GDEBUG("created %s", dir);
+    for (i = 0; i < G_N_ELEMENTS(contents); i++) {
+        char name[16];
+
+        sprintf(name, "test%u.conf", i);
+        fname[i] = g_build_filename(dir, name, NULL);
+        g_assert(g_file_set_contents(fname[i], contents[i], -1, NULL));
+    }
+
     handlers = dbus_handlers_config_load(dir, rec);
-    g_unlink(fname1);
-    g_unlink(fname2);
-    g_unlink(fname3);
-    g_unlink(fname4);
-    g_unlink(fname5);
-    g_rmdir(dir);
 
     g_assert(handlers);
     g_assert(handlers->handlers);
     g_assert(handlers->handlers->next);
-    g_assert(!handlers->handlers->next->next);
+    g_assert(handlers->handlers->next->next);
+    g_assert(!handlers->handlers->next->next->next);
     g_assert(handlers);
     g_assert(handlers->listeners);
     g_assert(handlers->listeners->next);
@@ -274,11 +282,11 @@ test_basic(
 
     dbus_handlers_config_free(handlers);
     nfc_ndef_rec_unref(rec);
-    g_free(fname1);
-    g_free(fname2);
-    g_free(fname3);
-    g_free(fname4);
-    g_free(fname5);
+    for (i = 0; i < G_N_ELEMENTS(fname); i++) {
+        g_unlink(fname[i]);
+        g_free(fname[i]);
+    }
+    g_rmdir(dir);
     g_free(dir);
 }
 
