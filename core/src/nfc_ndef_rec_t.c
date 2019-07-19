@@ -68,7 +68,7 @@ nfc_ndef_rec_t_build(
     NFC_NDEF_REC_T_ENC enc)
 {
     const guint8 lang_len = strlen(lang);
-    const guint8 text_len = strlen(text);
+    const gsize text_len = strlen(text);
     const guint8 status_byte = (lang_len & STATUS_LANG_LEN_MASK) |
         ((enc == NFC_NDEF_REC_T_ENC_UTF8) ? 0 : STATUS_ENC_UTF16);
     const guint8* bom = NULL;
