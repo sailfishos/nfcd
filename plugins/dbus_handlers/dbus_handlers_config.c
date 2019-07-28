@@ -352,7 +352,7 @@ dbus_handlers_config_parse_dbus(
     char* service = dbus_handlers_config_get_string(file, group,
         config_key_service);
 
-    if (service) {
+    if (service && g_dbus_is_name(service)) {
         char* iface_method = dbus_handlers_config_get_string(file, group,
             config_key_method);
 
@@ -360,20 +360,39 @@ dbus_handlers_config_parse_dbus(
             char* dot = strrchr(iface_method, '.');
 
             if (dot) {
-                char* path = dbus_handlers_config_get_string(file, group,
-                    config_key_path);
+                const char* method = dot + 1;
 
-                config->service = service;
-                config->path = path ? path : g_strdup(config_default_path);
-                config->iface = iface_method;
-                dot[0] = 0;
-                config->method = dot + 1;
-                return TRUE;
+                if (!g_dbus_is_member_name(method)) {
+                    GWARN("Not a valid method name: \"%s\"", method);
+                } else {
+                    dot[0] = 0;
+                    if (!g_dbus_is_interface_name(iface_method)) {
+                        GWARN("Not a valid interface name: \"%s\"",
+                            iface_method);
+                    } else {
+                        char* path = dbus_handlers_config_get_string(file,
+                            group, config_key_path);
+
+                        if (path && !g_variant_is_object_path(path)) {
+                            GWARN("Not a valid path name: \"%s\"", path);
+                        } else {
+                            config->service = service;
+                            config->path = path ? path :
+                                g_strdup(config_default_path);
+                            config->iface = iface_method;
+                            config->method = method;
+                            return TRUE;
+                        }
+                        g_free(path);
+                    }
+                }
             }
             g_free(iface_method);
         }
-        g_free(service);
+    } else if (service) {
+        GWARN("Not a valid service name: \"%s\"", service);
     }
+    g_free(service);
     return FALSE;
 }
 

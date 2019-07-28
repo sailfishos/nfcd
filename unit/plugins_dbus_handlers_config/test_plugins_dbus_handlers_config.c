@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -132,26 +132,47 @@ test_parse_handler(
     const char* group = "test";
     DBusHandlerConfig* config;
 
+    /* No config at all */
     g_assert(!dbus_handlers_new_handler_config(k, group));
-    g_key_file_set_string(k, group, "Service", "Foo");
+
+    /* Invalid D-Bus name */
+    g_key_file_set_string(k, group, "Service", "foo,bar");
     g_assert(!dbus_handlers_new_handler_config(k, group));
+
+    /* Missing interface name */
+    g_key_file_set_string(k, group, "Service", "foo.service");
+    g_assert(!dbus_handlers_new_handler_config(k, group));
+
     g_key_file_set_string(k, group, "Method", "Bar");
     g_assert(!dbus_handlers_new_handler_config(k, group));
-    g_key_file_set_string(k, group, "Method", "foo.Bar");
 
+    /* Invalid interface name */
+    g_key_file_set_string(k, group, "Method", "foo.Bar");
+    g_assert(!dbus_handlers_new_handler_config(k, group));
+
+    /* Invalid method name */
+    g_key_file_set_string(k, group, "Method", "foo.interface.1");
+    g_assert(!dbus_handlers_new_handler_config(k, group));
+
+    g_key_file_set_string(k, group, "Method", "foo.interface.Bar");
     config = dbus_handlers_new_handler_config(k, group);
     g_assert(config);
-    g_assert(!g_strcmp0(config->dbus.service, "Foo"));
-    g_assert(!g_strcmp0(config->dbus.iface, "foo"));
+
+    g_assert(!g_strcmp0(config->dbus.service, "foo.service"));
+    g_assert(!g_strcmp0(config->dbus.iface, "foo.interface"));
     g_assert(!g_strcmp0(config->dbus.method, "Bar"));
     g_assert(!g_strcmp0(config->dbus.path, "/"));
     dbus_handlers_free_handler_config(config);
 
+    /* Invalid path */
+    g_key_file_set_string(k, group, "Path", "//");
+    g_assert(!dbus_handlers_new_handler_config(k, group));
+
     g_key_file_set_string(k, group, "Path", "/foo");
     config = dbus_handlers_new_handler_config(k, group);
     g_assert(config);
-    g_assert(!g_strcmp0(config->dbus.service, "Foo"));
-    g_assert(!g_strcmp0(config->dbus.iface, "foo"));
+    g_assert(!g_strcmp0(config->dbus.service, "foo.service"));
+    g_assert(!g_strcmp0(config->dbus.iface, "foo.interface"));
     g_assert(!g_strcmp0(config->dbus.method, "Bar"));
     g_assert(!g_strcmp0(config->dbus.path, "/foo"));
     dbus_handlers_free_handler_config(config);
@@ -172,26 +193,47 @@ test_parse_listener(
     const char* group = "test";
     DBusListenerConfig* config;
 
+    /* No config at all */
     g_assert(!dbus_handlers_new_listener_config(k, group));
-    g_key_file_set_string(k, group, "Service", "Foo");
+
+    /* Invalid D-Bus name */
+    g_key_file_set_string(k, group, "Service", "foo,bar");
     g_assert(!dbus_handlers_new_listener_config(k, group));
+
+    /* Missing interface name */
+    g_key_file_set_string(k, group, "Service", "foo.service");
+    g_assert(!dbus_handlers_new_listener_config(k, group));
+
     g_key_file_set_string(k, group, "Method", "Bar");
     g_assert(!dbus_handlers_new_listener_config(k, group));
-    g_key_file_set_string(k, group, "Method", "foo.Bar");
 
+    /* Invalid interface name */
+    g_key_file_set_string(k, group, "Method", "foo.Bar");
+    g_assert(!dbus_handlers_new_listener_config(k, group));
+
+    /* Invalid method name */
+    g_key_file_set_string(k, group, "Method", "foo.interface.1");
+    g_assert(!dbus_handlers_new_listener_config(k, group));
+
+    g_key_file_set_string(k, group, "Method", "foo.interface.Bar");
     config = dbus_handlers_new_listener_config(k, group);
     g_assert(config);
-    g_assert(!g_strcmp0(config->dbus.service, "Foo"));
-    g_assert(!g_strcmp0(config->dbus.iface, "foo"));
+
+    g_assert(!g_strcmp0(config->dbus.service, "foo.service"));
+    g_assert(!g_strcmp0(config->dbus.iface, "foo.interface"));
     g_assert(!g_strcmp0(config->dbus.method, "Bar"));
     g_assert(!g_strcmp0(config->dbus.path, "/"));
     dbus_handlers_free_listener_config(config);
 
+    /* Invalid path */
+    g_key_file_set_string(k, group, "Path", "//");
+    g_assert(!dbus_handlers_new_listener_config(k, group));
+
     g_key_file_set_string(k, group, "Path", "/foo");
     config = dbus_handlers_new_listener_config(k, group);
     g_assert(config);
-    g_assert(!g_strcmp0(config->dbus.service, "Foo"));
-    g_assert(!g_strcmp0(config->dbus.iface, "foo"));
+    g_assert(!g_strcmp0(config->dbus.service, "foo.service"));
+    g_assert(!g_strcmp0(config->dbus.iface, "foo.interface"));
     g_assert(!g_strcmp0(config->dbus.method, "Bar"));
     g_assert(!g_strcmp0(config->dbus.path, "/foo"));
     dbus_handlers_free_listener_config(config);
@@ -250,12 +292,12 @@ test_load_handlers(
     const char* contents1 =
         "[Handler]\n"
         "Service = foo.bar1\n"
-        "Method = foo.Handle1\n";
+        "Method = foo.bar1.Handle1\n";
     const char* contents2 =
         "[Handler]\n"
         "Path = /foo\n"
         "Service = foo.bar2\n"
-        "Method = foo.Handle2\n";
+        "Method = foo.bar2.Handle2\n";
     const char* contents_unused =
         "[Handler]\n"
         "Service = foooooo.barrrrrr\n"
@@ -309,12 +351,12 @@ test_load_listeners(
     const char* contents1 =
         "[Listener]\n"
         "Service = foo.bar1\n"
-        "Method = foo.Handle1\n";
+        "Method = foo.bar1.Handle1\n";
     const char* contents2 =
         "[Listener]\n"
         "Path = /foo\n"
         "Service = foo.bar2\n"
-        "Method = foo.Handle2\n";
+        "Method = foo.bar2.Handle2\n";
     const char* contents_unused =
         "[Listenerrrrr]\n"
         "Service = foooooo.barrrrrr\n"
@@ -364,25 +406,25 @@ test_multiple_ndefs(
         "[URI-Handler]\n"
         "Path = /h1\n"
         "Service = h1.s\n"
-        "Method = h1.m\n"
+        "Method = h1.i.m\n"
         "\n"
         "[MediaType-Handler]\n"
         "MediaType = text/*\n"
         "Path = /h2\n"
         "Service = h2.s\n"
-        "Method = h2.m\n",
+        "Method = h2.i.m\n",
 
         /* test1.conf */
         "[MediaType-Handler]\n"
         "MediaType = text/plain\n"
         "Path = /h3\n"
         "Service = h3.s\n"
-        "Method = h4.m\n"
+        "Method = h4.i.m\n"
         "\n"
         "[Handler]\n"
         "Path = /h4\n"
         "Service = h4.s\n"
-        "Method = h4.m\n"
+        "Method = h4.i.m\n"
     };
     guint i;
     NfcNdefRec* rec;

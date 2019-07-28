@@ -53,37 +53,37 @@ test_basic(
         "URI = http://*\n"
         "Path = /h1\n"
         "Service = h1.s\n"
-        "Method = h1.m\n"
+        "Method = h1.i.m\n"
         "\n"
         "[URI-Listener]\n"
         "URI = http://*\n"
         "Path = /l1\n"
         "Service = l1.s\n"
-        "Method = l1.m\n",
+        "Method = l1.i.m\n",
 
         /* test1.conf */
         "[URI-Handler]\n"
         "URI = https://*\n"
         "Path = /h2\n"
         "Service = h2.s\n"
-        "Method = h2.m\n"
+        "Method = h2.i.m\n"
         "\n"
         "[URI-Listener]\n"
         "URI = https://*\n"
         "Path = /l2\n"
         "Service = l2.s\n"
-        "Method = l2.m\n",
+        "Method = l2.i.m\n",
 
         /* test2.conf */
         "[URI-Handler]\n"
         "Path = /h3\n"
         "Service = h3.s\n"
-        "Method = h3.m\n"
+        "Method = h3.i.m\n"
         "\n"
         "[URI-Listener]\n"
         "Path = /l3\n"
         "Service = l3.s\n"
-        "Method = l3.m\n"
+        "Method = l3.i.m\n"
     };
     guint i;
     GVariant* args;

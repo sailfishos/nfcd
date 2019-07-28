@@ -59,12 +59,12 @@ test_basic(
         "[Handler]\n"
         "Path = /h1\n"
         "Service = h1.s\n"
-        "Method = h1.m\n"
+        "Method = h1.i.m\n"
         "\n"
         "[Listener]\n"
         "Path = /l1\n"
         "Service = l1.s\n"
-        "Method = l1.m\n";
+        "Method = l1.i.m\n";
 
     GDEBUG("created %s", dir);
     g_assert(g_file_set_contents(fname1, contents1, -1, NULL));

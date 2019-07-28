@@ -181,42 +181,42 @@ test_basic(
         "MediaType = */*\n"
         "Path = /h1\n"
         "Service = h1.s\n"
-        "Method = h1.m\n",
+        "Method = h1.i.m\n",
 
         /* test1.conf */
         "[MediaType-Handler]\n"
         "MediaType = text/plain\n"
         "Path = /h2\n"
         "Service = h2.s\n"
-        "Method = h2.m\n",
+        "Method = h2.i.m\n",
 
         /* test2.conf */
         "[MediaType-Listener]\n"
         "MediaType = text/*\n"
         "Path = /l1\n"
         "Service = l1.s\n"
-        "Method = l1.m\n",
+        "Method = l1.i.m\n",
 
         /* test3.conf */
         "[MediaType-Listener]\n"
         "MediaType = text/plain\n"
         "Path = /l2\n"
         "Service = l2.s\n"
-        "Method = l2.m\n",
+        "Method = l2.i.m\n",
 
         /* test4.conf */
         "[MediaType-Listener]\n"
         "MediaType = image/jpeg\n"
         "Path = /l3\n"
         "Service = l3.s\n"
-        "Method = l3.m\n",
+        "Method = l3.i.m\n",
 
         /* test5.conf */
         "[MediaType-Handler]\n"
         "MediaType = text/*\n"
         "Path = /h3\n"
         "Service = h3.s\n"
-        "Method = h3.m\n"
+        "Method = h3.i.m\n"
     };
     guint i;
     GVariant* args;

@@ -64,12 +64,12 @@ test_basic(
         "[Text-Handler]\n"
         "Path = /h1\n"
         "Service = h1.s\n"
-        "Method = h1.m\n"
+        "Method = h1.i.m\n"
         "\n"
         "[Text-Listener]\n"
         "Path = /l1\n"
         "Service = l1.s\n"
-        "Method = l1.m\n";
+        "Method = l1.i.m\n";
     GVariant* args;
     DBusHandlersConfig* handlers;
     char* dir = g_dir_make_tmp("test_XXXXXX", NULL);
@@ -143,12 +143,12 @@ test_language(
         "[Text-Handler]\n"
         "Path = /h1\n"
         "Service = h1.s\n"
-        "Method = h1.m\n"
+        "Method = h1.i.m\n"
         "\n"
         "[Text-Listener]\n"
         "Path = /l1\n"
         "Service = l1.s\n"
-        "Method = l1.m\n",
+        "Method = l1.i.m\n",
     };
     guint i;
     const TestLanguageData* test = test_data;
