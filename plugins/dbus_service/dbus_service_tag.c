@@ -42,8 +42,13 @@
 #include <gutil_misc.h>
 
 enum {
-    EVENT_INITIALIZED,
-    EVENT_COUNT
+    TARGET_SEQUENCE,
+    TARGET_EVENT_COUNT
+};
+
+enum {
+    TAG_INITIALIZED,
+    TAG_EVENT_COUNT
 };
 
 enum {
@@ -56,6 +61,8 @@ enum {
     CALL_GET_NDEF_RECORDS,
     CALL_GET_INTERFACES,
     CALL_DEACTIVATE,
+    CALL_ACQUIRE,
+    CALL_RELEASE,
     CALL_COUNT
 };
 
@@ -77,15 +84,31 @@ typedef struct dbus_service_tag_call_queue {
     DBusServiceTagCall* last;
 } DBusServiceTagCallQueue;
 
+typedef struct dbus_service_tag_lock {
+    char* name;
+    guint watch_id;
+    guint count;
+    NfcTargetSequence* seq;
+    DBusServiceTag* tag;
+} DBusServiceTagLock;
+
+typedef struct dbus_service_tag_lock_waiter {
+    DBusServiceTagLock* lock;
+    GSList* pending_calls;  /* GDBusMethodInvocation references */
+} DBusServiceTagLockWaiter;
+
 struct dbus_service_tag {
     char* path;
     GDBusConnection* connection;
     OrgSailfishosNfcTag* iface;
     GUtilIdlePool* pool;
+    GSList* lock_waters;
+    DBusServiceTagLock* lock;
     DBusServiceTagCallQueue queue;
     GSList* ndefs;
     NfcTag* tag;
-    gulong event_id[EVENT_COUNT];
+    gulong target_event_id[TARGET_EVENT_COUNT];
+    gulong tag_event_id[TAG_EVENT_COUNT];
     gulong call_id[CALL_COUNT];
     const char** interfaces;
     DBusServiceTagType2* t2;
@@ -97,6 +120,190 @@ struct dbus_service_tag {
 static const char* const dbus_service_tag_default_interfaces[] = {
     NFC_DBUS_TAG_INTERFACE, NULL
 };
+
+static
+DBusServiceTagLockWaiter*
+dbus_service_tag_find_waiter(
+    DBusServiceTag* self,
+    const char* name)
+{
+    GSList* l;
+
+    for (l = self->lock_waters; l; l = l->next) {
+        DBusServiceTagLockWaiter* waiter = l->data;
+
+        if (!g_strcmp0(waiter->lock->name, name)) {
+            return waiter;
+        }
+    }
+    return NULL;
+}
+
+NfcTargetSequence*
+dbus_service_tag_sequence(
+    DBusServiceTag* self,
+    const char* sender)
+{
+    if (G_LIKELY(self) && G_LIKELY(sender)) {
+        if (self->lock && !g_strcmp0(self->lock->name, sender)) {
+            return self->lock->seq;
+        } else {
+            DBusServiceTagLockWaiter* waiter =
+                dbus_service_tag_find_waiter(self, sender);
+
+            if (waiter) {
+                return waiter->lock->seq;
+            }
+        }
+    }
+    return NULL;
+}
+
+static
+void
+dbus_service_tag_lock_cancel_acquire(
+    gpointer data)
+{
+    GDBusMethodInvocation* acquire = data;
+
+    g_dbus_method_invocation_return_error_literal(acquire,
+        DBUS_SERVICE_ERROR, DBUS_SERVICE_ERROR_ABORTED, "Not locked");
+    g_object_unref(acquire);
+}
+
+static
+void
+dbus_service_tag_lock_complete_acquire(
+    gpointer data,
+    gpointer user_data)
+{
+    GDBusMethodInvocation* acquire = data;
+    DBusServiceTag* dbus = user_data;
+
+    org_sailfishos_nfc_tag_complete_acquire(dbus->iface, acquire);
+    g_object_unref(acquire);
+}
+
+static
+void
+dbus_service_tag_lock_free(
+    DBusServiceTagLock* lock)
+{
+    if (G_LIKELY(lock)) {
+        nfc_target_sequence_free(lock->seq);
+        g_bus_unwatch_name(lock->watch_id);
+        g_free(lock->name);
+        g_slice_free1(sizeof(*lock), lock);
+    }
+}
+
+static
+void
+dbus_service_tag_lock_waiter_free(
+    DBusServiceTagLockWaiter* waiter)
+{
+    g_slist_free_full(waiter->pending_calls,
+        dbus_service_tag_lock_cancel_acquire);
+    g_slice_free1(sizeof(*waiter), waiter);
+    /* DBusServiceTagLock is freed separately */
+}
+
+static
+void
+dbus_service_tag_lock_waiter_free1(
+    gpointer data)
+{
+    DBusServiceTagLockWaiter* waiter = data;
+
+    dbus_service_tag_lock_free(waiter->lock);
+    dbus_service_tag_lock_waiter_free(waiter);
+}
+
+static
+void
+dbus_service_tag_target_sequence_changed(
+    NfcTarget* target,
+    void* user_data)
+{
+    DBusServiceTag* self = user_data;
+
+    /*
+     * Once the lock has been acquired, it remains acquired until we
+     * explicitly delete self->lock (and its associated NfcTargetSequence).
+     * Therefore, self->lock can't be NULL here.
+     */
+    GASSERT(!self->lock);
+    GVERBOSE_("%p", target->sequence);
+    if (target->sequence) {
+        GSList* l;
+
+        for (l = self->lock_waters; l; l = l->next) {
+            DBusServiceTagLockWaiter* waiter = l->data;
+            DBusServiceTagLock* lock = waiter->lock;
+
+            if (lock->seq == target->sequence) {
+                self->lock_waters = g_slist_delete_link(self->lock_waters, l);
+                GDEBUG("%s owns %s", lock->name, self->path);
+
+                /*
+                 * Number of waiters (must be positive) becomes the lock's
+                 * reference count.
+                 */
+                self->lock = lock;
+                lock->count = g_slist_length(waiter->pending_calls);
+                GASSERT(lock->count);
+
+                /* Complete all pending Acquire calls */
+                g_slist_foreach(waiter->pending_calls,
+                    dbus_service_tag_lock_complete_acquire, self);
+                g_slist_free(waiter->pending_calls);
+                waiter->pending_calls = NULL;
+                dbus_service_tag_lock_waiter_free(waiter);
+                break;
+            }
+        }
+    }
+}
+
+static
+void
+dbus_service_tag_lock_peer_vanished(
+    GDBusConnection* bus,
+    const char* name,
+    gpointer data)
+{
+    DBusServiceTagLock* lock = data;
+    DBusServiceTag* self = lock->tag;
+
+    if (self->lock == lock) {
+        /* This owner of the current lock is gone */
+        self->lock = NULL;
+        GDEBUG("Name '%s' has disappeared, releasing the lock", name);
+    } else {
+        GSList* l;
+
+        /* Dispose of the dead waiter */
+        for (l = self->lock_waters; l; l = l->next) {
+            DBusServiceTagLockWaiter* waiter = l->data;
+
+            if (waiter->lock == lock) {
+                GDEBUG("Name '%s' has disappeared, dropping the waiter", name);
+                self->lock_waters = g_slist_delete_link(self->lock_waters, l);
+                dbus_service_tag_lock_waiter_free(waiter);
+                break;
+            }
+        }
+    }
+
+    /*
+     * Delete the orphaned lock and its associated NfcTargetSequence.
+     * That may cause another sequence to become the current one,
+     * which results in dbus_service_tag_target_sequence_changed()
+     * being called and tag->lock becoming non-NULL when this
+     * function returns.
+     */
+    dbus_service_tag_lock_free(lock);
+}
 
 static
 void
@@ -132,10 +339,11 @@ dbus_service_tag_export_all(
     /* Export sub-interfaces */
     g_ptr_array_add(interfaces, (gpointer)NFC_DBUS_TAG_INTERFACE);
     if (NFC_IS_TAG_T2(tag)) {
-        self->t2 = dbus_service_tag_t2_new(NFC_TAG_T2(tag), self->path,
-            self->connection);
+        self->t2 = dbus_service_tag_t2_new(NFC_TAG_T2(tag), self);
         if (self->t2) {
-            g_ptr_array_add(interfaces, (gpointer)NFC_DBUS_TAG_T2_INTERFACE);
+            const char* iface = NFC_DBUS_TAG_T2_INTERFACE;
+            GDEBUG("Adding %s", iface);
+            g_ptr_array_add(interfaces, (gpointer)iface);
         }
     }
 
@@ -425,6 +633,123 @@ dbus_service_tag_handle_deactivate(
     return TRUE;
 }
 
+/* Acquire */
+
+static
+gboolean
+dbus_service_tag_handle_acquire(
+    OrgSailfishosNfcTag* iface,
+    GDBusMethodInvocation* call,
+    gboolean wait,
+    DBusServiceTag* self)
+{
+    NfcTarget* target = self->tag->target;
+    DBusServiceTagLock* current_lock = self->lock;
+    const char* name = g_dbus_method_invocation_get_sender(call);
+
+    if (current_lock && !g_strcmp0(current_lock->name, name)) {
+        /* This client already has the lock */
+        current_lock->count++;
+        GDEBUG("Lock request from %s (%u)", name, current_lock->count);
+        org_sailfishos_nfc_tag_complete_acquire(iface, call);
+    } else if (current_lock && !wait) {
+        /* Another client already has the lock but we can't wait */
+        GDEBUG("Lock request from %s (non-waitable, failed)", name);
+        g_dbus_method_invocation_return_error_literal(call, DBUS_SERVICE_ERROR,
+            DBUS_SERVICE_ERROR_FAILED, "Already locked");
+    } else {
+        DBusServiceTagLockWaiter* waiter =
+            dbus_service_tag_find_waiter(self, name);
+
+        GDEBUG("Lock request from %s (waiting)", name);
+        if (waiter) {
+            /* Another waiter for the same lock */
+            waiter->pending_calls = g_slist_append(waiter->pending_calls,
+                g_object_ref(call));
+        } else {
+            DBusServiceTagLock* lock = g_slice_new0(DBusServiceTagLock);
+
+            lock->name = g_strdup(name);
+            lock->seq = nfc_target_sequence_new(target);
+            lock->tag = self;
+            lock->watch_id = g_bus_watch_name_on_connection(self->connection,
+                name, G_BUS_NAME_WATCHER_FLAGS_NONE, NULL,
+                dbus_service_tag_lock_peer_vanished, lock, NULL);
+
+            GVERBOSE_("Created sequence %p for %s", target->sequence, name);
+            if (target->sequence == lock->seq) {
+                /* nfc_target_sequence_new() has acquired the lock */
+                GASSERT(!self->lock);
+                lock->count = 1;
+                self->lock = lock;
+                GDEBUG("%s owns %s", name, self->path);
+                org_sailfishos_nfc_tag_complete_acquire(iface, call);
+            } else {
+                /* We actually have to wait */
+                GASSERT(wait);
+                waiter = g_slice_new0(DBusServiceTagLockWaiter);
+                waiter->lock = lock;
+                waiter->pending_calls = g_slist_append(waiter->pending_calls,
+                    g_object_ref(call));
+                self->lock_waters = g_slist_append(self->lock_waters, waiter);
+            }
+        }
+    }
+    return TRUE;
+}
+
+/* Release */
+
+static
+gboolean
+dbus_service_tag_handle_release(
+    OrgSailfishosNfcTag* iface,
+    GDBusMethodInvocation* call,
+    DBusServiceTag* self)
+{
+    DBusServiceTagLock* current_lock = self->lock;
+    const char* name = g_dbus_method_invocation_get_sender(call);
+
+    if (current_lock && !g_strcmp0(current_lock->name, name)) {
+        /* Client has the lock */
+        GDEBUG("%s released the lock", name);
+        org_sailfishos_nfc_tag_complete_release(iface, call);
+        current_lock->count--;
+        if (!current_lock->count) {
+            self->lock = NULL;
+            dbus_service_tag_lock_free(current_lock);
+        }
+    } else {
+        DBusServiceTagLockWaiter* waiter =
+            dbus_service_tag_find_waiter(self, name);
+
+        GDEBUG("%s drops the lock", name);
+        if (waiter) {
+            /* Cancel one pending Acquire call */
+            GDBusMethodInvocation* acquire = waiter->pending_calls->data;
+
+            dbus_service_tag_lock_cancel_acquire(acquire);
+            waiter->pending_calls = g_slist_remove(waiter->pending_calls,
+                acquire);
+
+            /* Complete this call */
+            org_sailfishos_nfc_tag_complete_release(iface, call);
+
+            /* If no more requests is pending, delete the waiter */
+            if (!waiter->pending_calls) {
+                self->lock_waters = g_slist_remove(self->lock_waters, waiter);
+                dbus_service_tag_lock_free(waiter->lock);
+                dbus_service_tag_lock_waiter_free(waiter);
+            }
+        } else {
+            g_dbus_method_invocation_return_error_literal(call,
+                DBUS_SERVICE_ERROR, DBUS_SERVICE_ERROR_NOT_FOUND,
+                "Not locked");
+        }
+    }
+    return TRUE;
+}
+
 /*==========================================================================*
  * Interface
  *==========================================================================*/
@@ -436,9 +761,14 @@ dbus_service_tag_free_unexported(
 {
     DBusServiceTagCall* call;
 
-    dbus_service_tag_t2_free(self->t2);
+    nfc_target_remove_all_handlers(self->tag->target, self->target_event_id);
+    nfc_tag_remove_all_handlers(self->tag, self->tag_event_id);
+
     g_slist_free_full(self->ndefs, dbus_service_tag_free_ndef_rec);
-    nfc_tag_remove_all_handlers(self->tag, self->event_id);
+    g_slist_free_full(self->lock_waters, dbus_service_tag_lock_waiter_free1);
+    dbus_service_tag_t2_free(self->t2);
+    dbus_service_tag_lock_free(self->lock);
+
     nfc_tag_unref(self->tag);
 
     gutil_disconnect_handlers(self->iface, self->call_id, CALL_COUNT);
@@ -459,6 +789,13 @@ dbus_service_tag_free_unexported(
     g_free(self->interfaces);
     g_free(self->path);
     g_free(self);
+}
+
+GDBusConnection*
+dbus_service_tag_connection(
+    DBusServiceTag* self)
+{
+    return self->connection;
 }
 
 const char*
@@ -482,6 +819,11 @@ dbus_service_tag_new(
     self->tag = nfc_tag_ref(tag);
     self->pool = gutil_idle_pool_new();
     self->iface = org_sailfishos_nfc_tag_skeleton_new();
+
+    /* NfcTarget events */
+    self->target_event_id[TARGET_SEQUENCE] =
+        nfc_target_add_sequence_handler(tag->target,
+            dbus_service_tag_target_sequence_changed, self);
 
     /* D-Bus calls */
     self->call_id[CALL_GET_ALL] =
@@ -511,12 +853,18 @@ dbus_service_tag_new(
     self->call_id[CALL_DEACTIVATE] =
         g_signal_connect(self->iface, "handle-deactivate",
         G_CALLBACK(dbus_service_tag_handle_deactivate), self);
+    self->call_id[CALL_ACQUIRE] =
+        g_signal_connect(self->iface, "handle-acquire",
+        G_CALLBACK(dbus_service_tag_handle_acquire), self);
+    self->call_id[CALL_RELEASE] =
+        g_signal_connect(self->iface, "handle-release",
+        G_CALLBACK(dbus_service_tag_handle_release), self);
 
     if (tag->flags & NFC_TAG_FLAG_INITIALIZED) {
         dbus_service_tag_export_all(self);
     } else {
         /* Otherwise have to wait until the tag is initialized */
-        self->event_id[EVENT_INITIALIZED] =
+        self->tag_event_id[TAG_INITIALIZED] =
             nfc_tag_add_initialized_handler(tag,
                 dbus_service_tag_initialized, self);
     }

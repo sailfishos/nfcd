@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -40,18 +40,9 @@
 /* Add _ prefix so that they don't get exported to plugins */
 #define nfc_target_deactivate _nfc_target_deactivate
 #define nfc_target_generate_id _nfc_target_generate_id
-#define nfc_target_add_sequence_handler _nfc_target_add_sequence_handler
 #define nfc_target_add_gone_handler _nfc_target_add_gone_handler
-#define nfc_target_remove_handler _nfc_target_remove_handler
-#define nfc_target_remove_handlers _nfc_target_remove_handlers
-#define nfc_target_sequence_new _nfc_target_sequence_new
-#define nfc_target_sequence_free _nfc_target_sequence_free
-
-typedef
-void
-(*NfcTargetFunc)(
-    NfcTarget* target,
-    void* user_data);
+#define nfc_target_sequence_ref _nfc_target_sequence_ref
+#define nfc_target_sequence_unref _nfc_target_sequence_unref
 
 void
 nfc_target_deactivate(
@@ -62,42 +53,17 @@ nfc_target_generate_id(
     NfcTarget* target);
 
 gulong
-nfc_target_add_sequence_handler(
-    NfcTarget* target,
-    NfcTargetFunc func,
-    void* user_data);
-
-gulong
 nfc_target_add_gone_handler(
     NfcTarget* target,
     NfcTargetFunc func,
     void* user_data);
 
-void
-nfc_target_remove_handler(
-    NfcTarget* target,
-    gulong id);
-
-void
-nfc_target_remove_handlers(
-    NfcTarget* target,
-    gulong* ids,
-    guint count);
-
-/*
- * Several transmissions may have to be performed one after another,
- * RECORD SELECT for type 2 tags is an example of that. That's done
- * by allocating and holding a reference to NfcTargetTransmitSequence
- * object. As long as NfcTargetTransmitSequence is alive, NfcTarget
- * will only perform transmissions that belong to this sequence.
- */
-
 NfcTargetSequence*
-nfc_target_sequence_new(
-    NfcTarget* target);
+nfc_target_sequence_ref(
+    NfcTargetSequence* seq);
 
 void
-nfc_target_sequence_free(
+nfc_target_sequence_unref(
     NfcTargetSequence* seq);
 
 #endif /* NFC_TARGET_PRIVATE_H */

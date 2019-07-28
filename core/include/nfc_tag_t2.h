@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -100,6 +100,17 @@ nfc_tag_t2_write(
     GDestroyNotify destroy,
     void* user_data);
 
+guint
+nfc_tag_t2_write_seq(
+    NfcTagType2* tag,
+    guint sector,
+    guint block,
+    GBytes* bytes,
+    NfcTargetSequence* seq,
+    NfcTagType2WriteFunc complete,
+    GDestroyNotify destroy,
+    void* user_data); /* Since 1.0.17 */
+
 /*
  * The methods belows read only the data part of the chip's memory,
  * excluding sector headers, trailers or other reserved areas. Blocks
@@ -142,6 +153,16 @@ nfc_tag_t2_read_data(
     GDestroyNotify destroy,
     void* user_data);
 
+guint
+nfc_tag_t2_read_data_seq(
+    NfcTagType2* tag,
+    guint offset,
+    guint maxbytes,
+    NfcTargetSequence* seq,
+    NfcTagType2ReadDataFunc resp,
+    GDestroyNotify destroy,
+    void* user_data); /* Since 1.0.17 */
+
 NFC_TAG_T2_IO_STATUS
 nfc_tag_t2_read_data_sync(
     NfcTagType2* tag,
@@ -157,6 +178,16 @@ nfc_tag_t2_write_data(
     NfcTagType2WriteDataFunc complete,
     GDestroyNotify destroy,
     void* user_data);
+
+guint
+nfc_tag_t2_write_data_seq(
+    NfcTagType2* tag,
+    guint offset,
+    GBytes* bytes,
+    NfcTargetSequence* seq,
+    NfcTagType2WriteDataFunc complete,
+    GDestroyNotify destroy,
+    void* user_data); /* Since 1.0.17 */
 
 #endif /* NFC_TAG_T2_H */
 

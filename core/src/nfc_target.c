@@ -160,7 +160,6 @@ nfc_target_sequence_dealloc(
     g_slice_free(NfcTargetSequence, self);
 }
 
-static
 NfcTargetSequence*
 nfc_target_sequence_ref(
     NfcTargetSequence* self)
@@ -171,7 +170,6 @@ nfc_target_sequence_ref(
     return self;
 }
 
-static
 void
 nfc_target_sequence_unref(
     NfcTargetSequence* self)

@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -381,7 +381,7 @@ nfc_tag_t2_read_data_free(
 {
     NfcTagType2ReadData* read = user_data;
 
-    nfc_target_sequence_free(read->seq);
+    nfc_target_sequence_unref(read->seq);
     nfc_target_cancel_transmit(read->t2->tag.target, read->cmd_id);
     if (read->destroy) {
         read->destroy(read->user_data);
@@ -493,7 +493,7 @@ nfc_tag_t2_write_data_free(
     NfcTarget* target = write->t2->tag.target;
 
     nfc_target_remove_handler(target, write->start_id);
-    nfc_target_sequence_free(write->seq);
+    nfc_target_sequence_unref(write->seq);
     nfc_target_cancel_transmit(target, write->cmd_id);
     if (write->destroy) {
         write->destroy(write->user_data);
@@ -509,6 +509,7 @@ nfc_tag_t2_write_data_new(
     guint sector_number,
     guint offset,
     GBytes* bytes,
+    NfcTargetSequence* seq,
     GCallback complete,
     GDestroyNotify destroy,
     void* user_data)
@@ -520,7 +521,8 @@ nfc_tag_t2_write_data_new(
     write->bytes = g_bytes_ref(bytes);
     write->offset = offset;
     write->sector_number = sector_number;
-    write->seq = nfc_target_sequence_new(self->tag.target);
+    write->seq = seq ? nfc_target_sequence_ref(seq) :
+        nfc_target_sequence_new(self->tag.target);
     write->seq_id = nfc_tag_t2_generate_id(self);
     write->complete.cb = complete;
     write->destroy = destroy;
@@ -820,7 +822,7 @@ nfc_tag_t2_initialized(
     NfcTag* tag = &self->tag;
 
     if (priv->init_seq) {
-        nfc_target_sequence_free(priv->init_seq);
+        nfc_target_sequence_unref(priv->init_seq);
         priv->init_seq = NULL;
     }
     nfc_tag_set_initialized(tag);
@@ -1064,6 +1066,20 @@ nfc_tag_t2_read_data(
     GDestroyNotify destroy,
     void* user_data)
 {
+    return nfc_tag_t2_read_data_seq(self, offset, maxbytes, NULL, complete,
+        destroy, user_data);
+}
+
+guint
+nfc_tag_t2_read_data_seq(
+    NfcTagType2* self,
+    guint offset,
+    guint maxbytes,
+    NfcTargetSequence* seq,
+    NfcTagType2ReadDataFunc complete,
+    GDestroyNotify destroy,
+    void* user_data) /* Since 1.0.17 */
+{
 #pragma message("TODO: Support more than one sector and cross-sector reads")
     if (G_LIKELY(self) && (self->tag.flags & NFC_TAG_FLAG_INITIALIZED)) {
         NfcTagType2Priv* priv = self->priv;
@@ -1126,7 +1142,8 @@ nfc_tag_t2_read_data(
                 read->complete_id = g_idle_add(nfc_tag_t2_read_complete, read);
             } else {
                 /* We actually need to read something */
-                read->seq = nfc_target_sequence_new(self->tag.target);
+                read->seq = seq ? nfc_target_sequence_ref(seq) :
+                    nfc_target_sequence_new(self->tag.target);
                 read->cmd_id = nfc_tag_t2_cmd_read(self, header_blocks +
                     start_block, read->seq, nfc_tag_t2_read_resp, NULL, read);
             }
@@ -1209,6 +1226,21 @@ nfc_tag_t2_write(
     GDestroyNotify destroy,
     void* user_data)
 {
+    return nfc_tag_t2_write_seq(self, sector_number, block, bytes, NULL,
+        complete, destroy, user_data);
+}
+
+guint
+nfc_tag_t2_write_seq(
+    NfcTagType2* self,
+    guint sector_number,
+    guint block,
+    GBytes* bytes,
+    NfcTargetSequence* seq,
+    NfcTagType2WriteFunc complete,
+    GDestroyNotify destroy,
+    void* user_data) /* Since 1.0.17 */
+{
 #pragma message("TODO: Support more than one sector and cross-sector writes")
     if (G_LIKELY(self) && bytes && sector_number == 0 &&
         (self->tag.flags & NFC_TAG_FLAG_INITIALIZED)) {
@@ -1223,8 +1255,8 @@ nfc_tag_t2_write(
         size -= size % block_size;
         if (sector && size > 0 && (offset + size) <= sector->size) {
             NfcTagType2WriteData* write = nfc_tag_t2_write_data_new(self,
-                sector_number, offset, bytes, G_CALLBACK(complete), destroy,
-                user_data);
+                sector_number, offset, bytes, seq, G_CALLBACK(complete),
+                destroy, user_data);
 
             GDEBUG("Writing %u blocks starting at %u", (guint)
                 (size / block_size), block);
@@ -1237,7 +1269,7 @@ nfc_tag_t2_write(
     return 0;
 }
 
-/* This one only touches the data area, allows unaligned access */
+/* These only touch the data area and allow unaligned access */
 guint
 nfc_tag_t2_write_data(
     NfcTagType2* self,
@@ -1246,6 +1278,20 @@ nfc_tag_t2_write_data(
     NfcTagType2WriteDataFunc complete,
     GDestroyNotify destroy,
     void* user_data)
+{
+    return nfc_tag_t2_write_data_seq(self, offset, bytes, NULL, complete,
+        destroy, user_data);
+}
+
+guint
+nfc_tag_t2_write_data_seq(
+    NfcTagType2* self,
+    guint offset,
+    GBytes* bytes,
+    NfcTargetSequence* seq,
+    NfcTagType2WriteDataFunc complete,
+    GDestroyNotify destroy,
+    void* user_data) /* Since 1.0.17 */
 {
     if (G_LIKELY(self) && bytes &&
        (self->tag.flags & NFC_TAG_FLAG_INITIALIZED)) {
@@ -1262,8 +1308,8 @@ nfc_tag_t2_write_data(
         if (sector && size > 0 && (offset + size) <= sector->size) {
             const guint block_offset = offset % block_size;
             NfcTagType2WriteData* write = nfc_tag_t2_write_data_new(self,
-                sector - priv->sectors, offset, bytes, G_CALLBACK(complete),
-                destroy, user_data);
+                sector - priv->sectors, offset, bytes, seq,
+                G_CALLBACK(complete), destroy, user_data);
 
             GDEBUG("Writing %u data byte(s) starting at offset %u",
                 (guint)size, offset);
@@ -1333,7 +1379,7 @@ nfc_tag_t2_finalize(
         g_free(priv->sectors);
     }
     nfc_target_cancel_transmit(self->tag.target, priv->init_id);
-    nfc_target_sequence_free(priv->init_seq);
+    nfc_target_sequence_unref(priv->init_seq);
     g_free(priv->nfcid1);
     G_OBJECT_CLASS(nfc_tag_t2_parent_class)->finalize(object);
 }
