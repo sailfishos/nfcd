@@ -17,6 +17,7 @@ core_tag_t2 \
 core_target \
 core_tlv \
 core_util \
+plugins_dbus_handlers \
 plugins_dbus_handlers_config \
 plugins_dbus_handlers_type_generic \
 plugins_dbus_handlers_type_mediatype \

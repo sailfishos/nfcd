@@ -15,12 +15,6 @@ SRC ?= $(EXE).c
 COMMON_SRC ?= test_main.c
 
 #
-# Required packages
-#
-
-PKGS += libglibutil glib-2.0 gobject-2.0
-
-#
 # Default target
 #
 
@@ -34,9 +28,22 @@ SRC_DIR = .
 CORE_DIR = ../../core
 COMMON_DIR = ../common
 BUILD_DIR = build
+GEN_DIR = $(BUILD_DIR)
 DEBUG_BUILD_DIR = $(BUILD_DIR)/debug
 RELEASE_BUILD_DIR = $(BUILD_DIR)/release
 COVERAGE_BUILD_DIR = $(BUILD_DIR)/coverage
+
+#
+# Required packages
+#
+
+PKGS += libglibutil glib-2.0 gobject-2.0
+
+ifneq ($(GEN_SRC),)
+# Additional requirements for generated stubs
+PKGS += gio-unix-2.0
+INCLUDES += -I. -I$(GEN_DIR)
+endif
 
 #
 # Tools and flags
@@ -81,12 +88,15 @@ COVERAGE_LIBS += $(COVERAGE_CORE_LIB) $(LIBS)
 
 DEBUG_OBJS = \
   $(COMMON_SRC:%.c=$(DEBUG_BUILD_DIR)/common_%.o) \
+  $(GEN_SRC:%.c=$(DEBUG_BUILD_DIR)/gen_%.o) \
   $(SRC:%.c=$(DEBUG_BUILD_DIR)/%.o)
 RELEASE_OBJS = \
   $(COMMON_SRC:%.c=$(RELEASE_BUILD_DIR)/common_%.o) \
+  $(GEN_SRC:%.c=$(RELEASE_BUILD_DIR)/gen_%.o) \
   $(SRC:%.c=$(RELEASE_BUILD_DIR)/%.o)
 COVERAGE_OBJS = \
   $(COMMON_SRC:%.c=$(COVERAGE_BUILD_DIR)/common_%.o) \
+  $(GEN_SRC:%.c=$(COVERAGE_BUILD_DIR)/gen_%.o) \
   $(SRC:%.c=$(COVERAGE_BUILD_DIR)/%.o)
 
 #
@@ -107,6 +117,8 @@ $(COVERAGE_CORE_LIB): | coverage_core_lib
 $(DEBUG_OBJS): | $(DEBUG_BUILD_DIR)
 $(RELEASE_OBJS): | $(RELEASE_BUILD_DIR)
 $(COVERAGE_OBJS): | $(COVERAGE_BUILD_DIR)
+
+$(GEN_SRC:%=$(GEN_DIR)/%): | $(GEN_DIR)
 
 DEBUG_DEPS += $(DEBUG_CORE_LIB)
 RELEASE_DEPS += $(RELEASE_CORE_LIB)
@@ -153,6 +165,9 @@ $(RELEASE_BUILD_DIR):
 $(COVERAGE_BUILD_DIR):
 	mkdir -p $@
 
+$(GEN_DIR)/%.c: %.xml
+	gdbus-codegen --generate-c-code $(@:%.c=%) $<
+
 $(DEBUG_BUILD_DIR)/%.o : $(SRC_DIR)/%.c
 	$(CC) -c $(DEBUG_CFLAGS) -MT"$@" -MF"$(@:%.o=%.d)" $< -o $@
 
@@ -169,6 +184,15 @@ $(RELEASE_BUILD_DIR)/common_%.o : $(COMMON_DIR)/%.c
 	$(CC) -c $(RELEASE_CFLAGS) -MT"$@" -MF"$(@:%.o=%.d)" $< -o $@
 
 $(COVERAGE_BUILD_DIR)/common_%.o : $(COMMON_DIR)/%.c
+	$(CC) -c $(COVERAGE_CFLAGS) -MT"$@" -MF"$(@:%.o=%.d)" $< -o $@
+
+$(DEBUG_BUILD_DIR)/gen_%.o : $(GEN_DIR)/%.c
+	$(CC) -c $(DEBUG_CFLAGS) -MT"$@" -MF"$(@:%.o=%.d)" $< -o $@
+
+$(RELEASE_BUILD_DIR)/gen_%.o : $(GEN_DIR)/%.c
+	$(CC) -c $(RELEASE_CFLAGS) -MT"$@" -MF"$(@:%.o=%.d)" $< -o $@
+
+$(COVERAGE_BUILD_DIR)/gen_%.o : $(GEN_DIR)/%.c
 	$(CC) -c $(COVERAGE_CFLAGS) -MT"$@" -MF"$(@:%.o=%.d)" $< -o $@
 
 $(DEBUG_EXE): $(DEBUG_DEPS) $(DEBUG_OBJS)
