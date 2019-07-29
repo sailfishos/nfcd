@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -31,6 +31,7 @@
  */
 
 #include "test_common.h"
+#include "test_target.h"
 
 #include "nfc_adapter_p.h"
 #include "nfc_target_impl.h"
@@ -39,8 +40,6 @@
 #include <gutil_log.h>
 
 static TestOpt test_opt;
-
-#define TEST_TIMEOUT (10) /* seconds */
 
 static
 void
@@ -59,52 +58,6 @@ test_adapter_tag_inc(
     void* user_data)
 {
     (*(int*)user_data)++;
-}
-
-/*==========================================================================*
- * Test target
- *==========================================================================*/
-
-typedef NfcTargetClass TestTargetClass;
-typedef struct test_target {
-    NfcTarget target;
-    gboolean deactivated;
-} TestTarget;
-
-G_DEFINE_TYPE(TestTarget, test_target, NFC_TYPE_TARGET)
-#define TEST_TYPE_TARGET (test_target_get_type())
-#define TEST_TARGET(obj) (G_TYPE_CHECK_INSTANCE_CAST(obj, \
-        TEST_TYPE_TARGET, TestTarget))
-
-TestTarget*
-test_target_new(
-    void)
-{
-     return g_object_new(TEST_TYPE_TARGET, NULL);
-}
-
-static
-void
-test_target_deactivate(
-    NfcTarget* target)
-{
-    TEST_TARGET(target)->deactivated = TRUE;
-    NFC_TARGET_CLASS(test_target_parent_class)->deactivate(target);
-}
-
-static
-void
-test_target_init(
-    TestTarget* self)
-{
-}
-
-static
-void
-test_target_class_init(
-    NfcTargetClass* klass)
-{
-    klass->deactivate = test_target_deactivate;
 }
 
 /*==========================================================================*
@@ -620,11 +573,9 @@ test_tags(
     void)
 {
     TestAdapter* test = test_adapter_new();
-    TestTarget* test_target0 = test_target_new();
-    TestTarget* test_target1 = test_target_new();
+    NfcTarget* target0 = test_target_new();
+    NfcTarget* target1 = test_target_new();
     NfcAdapter* adapter = &test->adapter;
-    NfcTarget* target0 = &test_target0->target;
-    NfcTarget* target1 = &test_target1->target;
     NfcTag* tag0;
     NfcTag* tag1;
     gulong id[3];

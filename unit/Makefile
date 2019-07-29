@@ -21,6 +21,7 @@ all:
 	@$(MAKE) -C plugins_dbus_handlers_type_mediatype $*
 	@$(MAKE) -C plugins_dbus_handlers_type_text $*
 	@$(MAKE) -C plugins_dbus_handlers_type_uri $*
+	@$(MAKE) -C plugins_dbus_service_adapter $*
 
 clean: unitclean
 	rm -f *~

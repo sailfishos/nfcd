@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -31,6 +31,7 @@
  */
 
 #include "test_common.h"
+#include "test_target.h"
 
 #include "nfc_tag_p.h"
 #include "nfc_target_p.h"
@@ -46,52 +47,6 @@ test_tag_inc(
     void* user_data)
 {
     (*(int*)user_data)++;
-}
-
-/*==========================================================================*
- * Test target
- *==========================================================================*/
-
-typedef NfcTargetClass TestTargetClass;
-typedef struct test_target {
-    NfcTarget target;
-    gboolean deactivated;
-} TestTarget;
-
-G_DEFINE_TYPE(TestTarget, test_target, NFC_TYPE_TARGET)
-#define TEST_TYPE_TARGET (test_target_get_type())
-#define TEST_TARGET(obj) (G_TYPE_CHECK_INSTANCE_CAST(obj, \
-        TEST_TYPE_TARGET, TestTarget))
-
-TestTarget*
-test_target_new(
-    void)
-{
-     return g_object_new(TEST_TYPE_TARGET, NULL);
-}
-
-static
-void
-test_target_deactivate(
-    NfcTarget* target)
-{
-    TEST_TARGET(target)->deactivated = TRUE;
-    NFC_TARGET_CLASS(test_target_parent_class)->deactivate(target);
-}
-
-static
-void
-test_target_init(
-    TestTarget* self)
-{
-}
-
-static
-void
-test_target_class_init(
-    NfcTargetClass* klass)
-{
-    klass->deactivate = test_target_deactivate;
 }
 
 /*==========================================================================*
@@ -123,8 +78,7 @@ test_basic(
     void)
 {
     NfcTag* tag = g_object_new(NFC_TYPE_TAG, NULL);
-    TestTarget* test_target = test_target_new();
-    NfcTarget* target = &test_target->target;
+    NfcTarget* target = test_target_new();
     const char* name = "test";
     int init_count = 0;
     int gone_count = 0;
@@ -155,12 +109,10 @@ test_basic(
 
     /* Deactivate call is just passed to target */
     nfc_tag_deactivate(tag);
-    g_assert(test_target->deactivated);
+    g_assert(!tag->present);
+    g_assert(gone_count == 1);
 
     /* "gone" is also a one-time signal*/
-    nfc_target_gone(target);
-    g_assert(gone_count == 1);
-    g_assert(!tag->present);
     nfc_target_gone(target);
     g_assert(gone_count == 1);
     g_assert(!tag->present);

@@ -43,6 +43,16 @@ ifneq ($(GEN_SRC),)
 # Additional requirements for generated stubs
 PKGS += gio-unix-2.0
 INCLUDES += -I. -I$(GEN_DIR)
+
+# Make sure stubs get generated before compilation starts
+$(GEN_SRC:%=$(GEN_DIR)/%): | $(GEN_DIR)
+$(SRC:%.c=$(DEBUG_BUILD_DIR)/%.o): | $(GEN_SRC:%=$(GEN_DIR)/%)
+$(SRC:%.c=$(RELEASE_BUILD_DIR)/%.o): | $(GEN_SRC:%=$(GEN_DIR)/%)
+$(SRC:%.c=$(COVERAGE_BUILD_DIR)/%.o): | $(GEN_SRC:%=$(GEN_DIR)/%)
+endif
+
+ifeq ($(SPEC_DIR),)
+SPEC_DIR = .
 endif
 
 #
@@ -118,8 +128,6 @@ $(DEBUG_OBJS): | $(DEBUG_BUILD_DIR)
 $(RELEASE_OBJS): | $(RELEASE_BUILD_DIR)
 $(COVERAGE_OBJS): | $(COVERAGE_BUILD_DIR)
 
-$(GEN_SRC:%=$(GEN_DIR)/%): | $(GEN_DIR)
-
 DEBUG_DEPS += $(DEBUG_CORE_LIB)
 RELEASE_DEPS += $(RELEASE_CORE_LIB)
 COVERAGE_DEPS += $(COVERAGE_CORE_LIB)
@@ -156,6 +164,9 @@ test: test_banner debug
 valgrind: test_banner debug
 	@G_DEBUG=gc-friendly G_SLICE=always-malloc valgrind --tool=memcheck --leak-check=full --show-possibly-lost=no $(DEBUG_EXE)
 
+$(GEN_DIR):
+	mkdir -p $@
+
 $(DEBUG_BUILD_DIR):
 	mkdir -p $@
 
@@ -165,7 +176,7 @@ $(RELEASE_BUILD_DIR):
 $(COVERAGE_BUILD_DIR):
 	mkdir -p $@
 
-$(GEN_DIR)/%.c: %.xml
+$(GEN_DIR)/%.c: $(SPEC_DIR)/%.xml
 	gdbus-codegen --generate-c-code $(@:%.c=%) $<
 
 $(DEBUG_BUILD_DIR)/%.o : $(SRC_DIR)/%.c
