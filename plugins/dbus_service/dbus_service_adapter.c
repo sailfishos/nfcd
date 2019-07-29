@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -363,6 +363,7 @@ dbus_service_adapter_new(
     GDBusConnection* connection)
 {
     DBusServiceAdapter* self = g_new0(DBusServiceAdapter, 1);
+    NfcTag** tags;
     GError* error = NULL;
 
     g_object_ref(self->connection = connection);
@@ -418,6 +419,11 @@ dbus_service_adapter_new(
     self->call_id[CALL_GET_TAGS] =
         g_signal_connect(self->iface, "handle-get-tags",
         G_CALLBACK(dbus_service_adapter_handle_get_tags), self);
+
+    /* Initialize D-Bus context for existing tags (usually none) */
+    for (tags = adapter->tags; *tags; tags++) {
+        dbus_service_adapter_create_tag(self, *tags);
+    }
 
     /* Export the interface */
     if (g_dbus_interface_skeleton_export(G_DBUS_INTERFACE_SKELETON
