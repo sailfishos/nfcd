@@ -1,5 +1,5 @@
 Name: nfcd
-Version: 1.0.16
+Version: 1.0.17
 Release: 0
 Summary: NFC daemon
 Group: Development/Libraries
@@ -9,10 +9,14 @@ Source: %{name}-%{version}.tar.bz2
 BuildRequires: pkgconfig(glib-2.0)
 BuildRequires: pkgconfig(libmce-glib)
 BuildRequires: pkgconfig(libdbusaccess)
-BuildRequires: pkgconfig(libglibutil) >= 1.0.34
-BuildRequires: pkgconfig(libdbuslogserver-gio) >= 1.0.14
-Requires: libglibutil >= 1.0.36
-Requires: libdbuslogserver-gio >= 1.0.14
+
+%define libglibutil_version 1.0.36
+%define libdbuslog_version 1.0.14
+
+BuildRequires: pkgconfig(libglibutil) >= %{libglibutil_version}
+BuildRequires: pkgconfig(libdbuslogserver-gio) >= %{libdbuslog_version}
+Requires: libglibutil >= %{libglibutil_version}
+Requires: libdbuslogserver-gio >= %{libdbuslog_version}
 Requires: systemd
 Requires(pre): systemd
 Requires(post): systemd
