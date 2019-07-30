@@ -54,8 +54,6 @@
     </method>
     <method name="Deactivate"/>
     <!-- Signals -->  
-    <signal name="PresentChanged">
-      <arg name="present" type="b"/>
-    </signal>
+    <signal name="Removed"/>
   </interface>
 </node>

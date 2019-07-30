@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -43,7 +43,6 @@
 
 enum {
     EVENT_INITIALIZED,
-    EVENT_GONE,
     EVENT_COUNT
 };
 
@@ -93,7 +92,7 @@ struct dbus_service_tag {
 };
 
 #define NFC_DBUS_TAG_INTERFACE "org.sailfishos.nfc.Tag"
-#define NFC_DBUS_TAG_INTERFACE_VERSION  (1)
+#define NFC_DBUS_TAG_INTERFACE_VERSION  (2)
 
 static const char* const dbus_service_tag_default_interfaces[] = {
     NFC_DBUS_TAG_INTERFACE, NULL
@@ -257,18 +256,6 @@ dbus_service_tag_initialized(
 
     dbus_service_tag_export_all(self);
     dbus_service_tag_complete_pending_calls(self);
-}
-
-static
-void
-dbus_service_tag_gone(
-    NfcTag* tag,
-    void* user_data)
-{
-    DBusServiceTag* self = user_data;
-
-    GASSERT(!tag->present);
-    org_sailfishos_nfc_tag_emit_present_changed(self->iface, tag->present);
 }
 
 /*==========================================================================*
@@ -496,11 +483,6 @@ dbus_service_tag_new(
     self->pool = gutil_idle_pool_new();
     self->iface = org_sailfishos_nfc_tag_skeleton_new();
 
-    /* NfcTag events */
-    self->event_id[EVENT_GONE] =
-        nfc_tag_add_gone_handler(tag,
-            dbus_service_tag_gone, self);
-
     /* D-Bus calls */
     self->call_id[CALL_GET_ALL] =
         g_signal_connect(self->iface, "handle-get-all",
@@ -556,6 +538,7 @@ dbus_service_tag_free(
 {
     if (self) {
         GDEBUG("Removing D-Bus object %s", self->path);
+        org_sailfishos_nfc_tag_emit_removed(self->iface);
         g_dbus_interface_skeleton_unexport(G_DBUS_INTERFACE_SKELETON
             (self->iface));
         dbus_service_tag_free_unexported(self);
