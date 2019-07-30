@@ -31,6 +31,7 @@
  */
 
 #include "test_common.h"
+#include "test_adapter.h"
 #include "test_target.h"
 #include "test_dbus.h"
 
@@ -46,64 +47,6 @@
 #define NFC_ADAPTER_INTERFACE "org.sailfishos.nfc.Adapter"
 
 static TestOpt test_opt;
-
-/*==========================================================================*
- * Test adapter
- *==========================================================================*/
-
-typedef NfcAdapterClass TestAdapterClass;
-typedef NfcAdapter TestAdapter;
-
-G_DEFINE_TYPE(TestAdapter, test_adapter, NFC_TYPE_ADAPTER)
-#define TEST_TYPE_ADAPTER (test_adapter_get_type())
-
-static
-NfcAdapter*
-test_adapter_new(
-    void)
-{
-    return g_object_new(TEST_TYPE_ADAPTER, NULL);
-}
-
-static
-gboolean
-test_adapter_submit_power_request(
-    NfcAdapter* adapter,
-    gboolean on)
-{
-    nfc_adapter_power_notify(adapter, on, TRUE);
-    return TRUE;
-}
-
-static
-gboolean
-test_adapter_submit_mode_request(
-    NfcAdapter* adapter,
-    NFC_MODE mode)
-{
-    nfc_adapter_mode_notify(adapter, mode, TRUE);
-    return TRUE;
-}
-
-static
-void
-test_adapter_init(
-    TestAdapter* self)
-{
-}
-
-static
-void
-test_adapter_class_init(
-    NfcAdapterClass* klass)
-{
-    klass->submit_power_request = test_adapter_submit_power_request;
-    klass->submit_mode_request = test_adapter_submit_mode_request;
-}
-
-/*==========================================================================*
- * TestData
- *==========================================================================*/
 
 typedef struct test_data {
     GMainLoop* loop;
@@ -248,14 +191,8 @@ test_get_all_start(
     GDBusConnection* server,
     void* user_data)
 {
-    TestData* test = user_data;
-
-    test->service = dbus_service_adapter_new(test->adapter, server);
-    g_assert_nonnull(test->service);
-    g_dbus_connection_call(client, NULL,
-        dbus_service_adapter_path(test->service), NFC_ADAPTER_INTERFACE,
-        "GetAll", NULL, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,
-        test_get_all_done, test);
+    test_start_and_get((TestData*)user_data, client, server,
+        "GetAll", test_get_all_done);
 }
 
 static
@@ -613,7 +550,7 @@ test_get_tags_start(
 
     /* Add second tag after creating DBusServiceAdapter */
     target = test_target_new();
-    g_assert(nfc_adapter_add_other_tag(test->adapter, target));
+    g_assert_nonnull(nfc_adapter_add_other_tag(test->adapter, target));
     nfc_target_unref(target);
 
     g_dbus_connection_call(client, NULL,
@@ -635,7 +572,7 @@ test_get_tags(
 
     /* Add one tag before creating DBusServiceAdapter */
     target = test_target_new();
-    g_assert(nfc_adapter_add_other_tag(test.adapter, target));
+    g_assert_nonnull(nfc_adapter_add_other_tag(test.adapter, target));
     nfc_target_unref(target);
 
     dbus = test_dbus_new(test_get_tags_start, &test);
@@ -876,7 +813,7 @@ test_tag_added_start(
 
     /* Add a tag */
     target = test_target_new();
-    g_assert(nfc_adapter_add_other_tag(test->adapter, target));
+    g_assert_nonnull(nfc_adapter_add_other_tag(test->adapter, target));
     nfc_target_unref(target);
 }
 
@@ -959,7 +896,7 @@ test_tag_removed(
     test_data_init(&test);
 
     target = test_target_new();
-    g_assert(nfc_adapter_add_other_tag(test.adapter, target));
+    g_assert_nonnull(nfc_adapter_add_other_tag(test.adapter, target));
     nfc_target_unref(target);
 
     dbus = test_dbus_new(test_tag_removed_start, &test);

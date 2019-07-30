@@ -22,6 +22,7 @@ all:
 	@$(MAKE) -C plugins_dbus_handlers_type_text $*
 	@$(MAKE) -C plugins_dbus_handlers_type_uri $*
 	@$(MAKE) -C plugins_dbus_service_adapter $*
+	@$(MAKE) -C plugins_dbus_service_tag $*
 
 clean: unitclean
 	rm -f *~
