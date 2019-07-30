@@ -50,11 +50,13 @@ struct nfc_target {
     /* This one-way flag is set to FALSE when target disappears. */
     gboolean present;
 
-    /* Several transmissions may have to be performed one after another,
-     * RECORD SELECT for type 2 tags is an example of that. This flag is
-     * TRUE when transmission sequence is active. Implementation must not
-     * insert any internal transmission in the middle of a transmission
-     * sequence. */
+    /*
+     * Several transmissions may have to be performed one after
+     * another, RECORD SELECT for type 2 tags is an example of that.
+     * Implementation must not insert any internal transmission in
+     * the middle of a transmission sequence, not even a presence
+     * check.
+     */
     NfcTargetSequence* sequence;
 };
 
@@ -62,6 +64,48 @@ GType nfc_target_get_type(void);
 #define NFC_TYPE_TARGET (nfc_target_get_type())
 #define NFC_TARGET(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
         NFC_TYPE_TARGET, NfcTarget))
+
+typedef
+void
+(*NfcTargetFunc)(
+    NfcTarget* target,
+    void* user_data);
+
+gulong
+nfc_target_add_sequence_handler(
+    NfcTarget* target,
+    NfcTargetFunc func,
+    void* user_data); /* Since 1.0.17 */
+
+void
+nfc_target_remove_handler(
+    NfcTarget* target,
+    gulong id); /* Since 1.0.17 */
+
+void
+nfc_target_remove_handlers(
+    NfcTarget* target,
+    gulong* ids,
+    guint count); /* Since 1.0.17 */
+
+#define nfc_target_remove_all_handlers(target,ids) \
+    nfc_target_remove_handlers(target, ids, G_N_ELEMENTS(ids))
+
+/*
+ * Sometimes it's necessary to guarantee that several transmissions
+ * are performed one after another (and nothing happens in between).
+ * That's done by allocating and holding a reference to NfcTargetSequence
+ * object. As long as NfcTargetSequence is alive, NfcTarget will only
+ * perform transmissions associated with this sequence.
+ */
+
+NfcTargetSequence*
+nfc_target_sequence_new(
+    NfcTarget* target); /* Since 1.0.17 */
+
+void
+nfc_target_sequence_free(
+    NfcTargetSequence* seq); /* Since 1.0.17 */
 
 G_END_DECLS
 

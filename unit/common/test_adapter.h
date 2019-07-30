@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019 Jolla Ltd.
+ * Copyright (C) 2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,43 +30,16 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef NFC_TARGET_PRIVATE_H
-#define NFC_TARGET_PRIVATE_H
+#ifndef TEST_ADAPTER_H
+#define TEST_ADAPTER_H
 
-#include "nfc_types_p.h"
+#include <nfc_types.h>
 
-#include <nfc_target_impl.h>
+NfcAdapter*
+test_adapter_new(
+    void);
 
-/* Add _ prefix so that they don't get exported to plugins */
-#define nfc_target_deactivate _nfc_target_deactivate
-#define nfc_target_generate_id _nfc_target_generate_id
-#define nfc_target_add_gone_handler _nfc_target_add_gone_handler
-#define nfc_target_sequence_ref _nfc_target_sequence_ref
-#define nfc_target_sequence_unref _nfc_target_sequence_unref
-
-void
-nfc_target_deactivate(
-    NfcTarget* target);
-
-guint
-nfc_target_generate_id(
-    NfcTarget* target);
-
-gulong
-nfc_target_add_gone_handler(
-    NfcTarget* target,
-    NfcTargetFunc func,
-    void* user_data);
-
-NfcTargetSequence*
-nfc_target_sequence_ref(
-    NfcTargetSequence* seq);
-
-void
-nfc_target_sequence_unref(
-    NfcTargetSequence* seq);
-
-#endif /* NFC_TARGET_PRIVATE_H */
+#endif /* TEST_ADAPTER_H */
 
 /*
  * Local Variables:

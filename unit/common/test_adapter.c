@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019 Jolla Ltd.
+ * Copyright (C) 2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,43 +30,61 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef NFC_TARGET_PRIVATE_H
-#define NFC_TARGET_PRIVATE_H
+#include "nfc_adapter_impl.h"
+#include "test_adapter.h"
 
-#include "nfc_types_p.h"
+/*==========================================================================*
+ * Test adapter
+ *==========================================================================*/
 
-#include <nfc_target_impl.h>
+typedef NfcAdapterClass TestAdapterClass;
+typedef NfcAdapter TestAdapter;
 
-/* Add _ prefix so that they don't get exported to plugins */
-#define nfc_target_deactivate _nfc_target_deactivate
-#define nfc_target_generate_id _nfc_target_generate_id
-#define nfc_target_add_gone_handler _nfc_target_add_gone_handler
-#define nfc_target_sequence_ref _nfc_target_sequence_ref
-#define nfc_target_sequence_unref _nfc_target_sequence_unref
+G_DEFINE_TYPE(TestAdapter, test_adapter, NFC_TYPE_ADAPTER)
+#define TEST_TYPE_ADAPTER (test_adapter_get_type())
 
+NfcAdapter*
+test_adapter_new(
+    void)
+{
+    return g_object_new(TEST_TYPE_ADAPTER, NULL);
+}
+
+static
+gboolean
+test_adapter_submit_power_request(
+    NfcAdapter* adapter,
+    gboolean on)
+{
+    nfc_adapter_power_notify(adapter, on, TRUE);
+    return TRUE;
+}
+
+static
+gboolean
+test_adapter_submit_mode_request(
+    NfcAdapter* adapter,
+    NFC_MODE mode)
+{
+    nfc_adapter_mode_notify(adapter, mode, TRUE);
+    return TRUE;
+}
+
+static
 void
-nfc_target_deactivate(
-    NfcTarget* target);
+test_adapter_init(
+    TestAdapter* self)
+{
+}
 
-guint
-nfc_target_generate_id(
-    NfcTarget* target);
-
-gulong
-nfc_target_add_gone_handler(
-    NfcTarget* target,
-    NfcTargetFunc func,
-    void* user_data);
-
-NfcTargetSequence*
-nfc_target_sequence_ref(
-    NfcTargetSequence* seq);
-
+static
 void
-nfc_target_sequence_unref(
-    NfcTargetSequence* seq);
-
-#endif /* NFC_TARGET_PRIVATE_H */
+test_adapter_class_init(
+    NfcAdapterClass* klass)
+{
+    klass->submit_power_request = test_adapter_submit_power_request;
+    klass->submit_mode_request = test_adapter_submit_mode_request;
+}
 
 /*
  * Local Variables:

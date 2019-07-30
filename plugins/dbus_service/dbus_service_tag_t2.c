@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -59,8 +59,7 @@ void
     guint written);
 
 struct dbus_service_tag_t2 {
-    char* path;
-    GDBusConnection* connection;
+    DBusServiceTag* owner;
     OrgSailfishosNfcTagType2* iface;
     NfcTagType2* t2;
     gulong call_id[CALL_COUNT];
@@ -114,6 +113,16 @@ dbus_service_tag_t2_get_serial(
             (t2, &t2->serial));
     }
     return  self->serial;
+}
+
+static
+NfcTargetSequence*
+dbus_service_tag_t2_sequence(
+    DBusServiceTagType2* self,
+    GDBusMethodInvocation* call)
+{
+    return dbus_service_tag_sequence(self->owner,
+        g_dbus_method_invocation_get_sender(call));
 }
 
 /*==========================================================================*
@@ -323,7 +332,8 @@ dbus_service_tag_t2_handle_write(
         DBusServiceTagType2AsyncCall* write =
             dbus_service_tag_t2_async_call_new(iface, call);
 
-        if (!nfc_tag_t2_write(self->t2, sector, block, bytes,
+        if (!nfc_tag_t2_write_seq(self->t2, sector, block, bytes,
+            dbus_service_tag_t2_sequence(self, call),
             dbus_service_tag_t2_handle_write_done,
             dbus_service_tag_t2_async_call_free, write)) {
             dbus_service_tag_t2_async_call_free1(write);
@@ -382,7 +392,8 @@ dbus_service_tag_t2_handle_read_data(
     DBusServiceTagType2AsyncCall* read =
         dbus_service_tag_t2_async_call_new(iface, call);
 
-    if (!nfc_tag_t2_read_data(t2, offset, maxbytes,
+    if (!nfc_tag_t2_read_data_seq(t2, offset, maxbytes,
+        dbus_service_tag_t2_sequence(self, call),
         dbus_service_tag_t2_handle_read_data_done,
         dbus_service_tag_t2_async_call_free, read)) {
         dbus_service_tag_t2_async_call_free1(read);
@@ -427,7 +438,8 @@ dbus_service_tag_t2_handle_read_all_data(
     DBusServiceTagType2AsyncCall* read =
         dbus_service_tag_t2_async_call_new(iface, call);
 
-    if (!nfc_tag_t2_read_data(t2, 0, t2->data_size,
+    if (!nfc_tag_t2_read_data_seq(t2, 0, t2->data_size,
+        dbus_service_tag_t2_sequence(self, call),
         dbus_service_tag_t2_handle_read_all_data_done,
         dbus_service_tag_t2_async_call_free, read)) {
         dbus_service_tag_t2_async_call_free1(read);
@@ -473,7 +485,8 @@ dbus_service_tag_t2_handle_write_data(
     DBusServiceTagType2AsyncCall* write =
         dbus_service_tag_t2_async_call_new(iface, call);
 
-    if (!nfc_tag_t2_write_data(self->t2, offset, bytes,
+    if (!nfc_tag_t2_write_data_seq(self->t2, offset, bytes,
+        dbus_service_tag_t2_sequence(self, call),
         dbus_service_tag_t2_handle_write_data_done,
         dbus_service_tag_t2_async_call_free, write)) {
         dbus_service_tag_t2_async_call_free1(write);
@@ -498,28 +511,26 @@ dbus_service_tag_t2_free_unexported(
 
     gutil_disconnect_handlers(self->iface, self->call_id, CALL_COUNT);
     g_object_unref(self->iface);
-    g_object_unref(self->connection);
 
     if (self->serial) {
         g_variant_unref(self->serial);
     }
-    g_free(self->path);
     g_free(self);
 }
 
 DBusServiceTagType2*
 dbus_service_tag_t2_new(
     NfcTagType2* t2,
-    const char* path,
-    GDBusConnection* connection)
+    DBusServiceTag* owner)
 {
+    GDBusConnection* connection = dbus_service_tag_connection(owner);
+    const char* path = dbus_service_tag_path(owner);
     DBusServiceTagType2* self = g_new0(DBusServiceTagType2, 1);
     GError* error = NULL;
 
-    g_object_ref(self->connection = connection);
-    self->path = g_strdup(path);
     nfc_tag_ref(&(self->t2 = t2)->tag);
     self->iface = org_sailfishos_nfc_tag_type2_skeleton_new();
+    self->owner = owner;
 
     /* D-Bus calls */
     self->call_id[CALL_GET_ALL] =
@@ -554,11 +565,11 @@ dbus_service_tag_t2_new(
         G_CALLBACK(dbus_service_tag_t2_handle_write_data), self);
 
     if (g_dbus_interface_skeleton_export(G_DBUS_INTERFACE_SKELETON
-        (self->iface), connection, self->path, &error)) {
-        GDEBUG("Created D-Bus object %s (Type2)", self->path);
+        (self->iface), connection, path, &error)) {
+        GDEBUG("Created D-Bus object %s (Type2)", path);
         return self;
     } else {
-        GERR("%s: %s", self->path, GERRMSG(error));
+        GERR("%s: %s", path, GERRMSG(error));
         g_error_free(error);
         dbus_service_tag_t2_free_unexported(self);
         return NULL;
@@ -570,7 +581,8 @@ dbus_service_tag_t2_free(
     DBusServiceTagType2* self)
 {
     if (self) {
-        GDEBUG("Removing D-Bus object %s (Type2)", self->path);
+        GDEBUG("Removing D-Bus object %s (Type2)",
+            dbus_service_tag_path(self->owner));
         g_dbus_interface_skeleton_unexport(G_DBUS_INTERFACE_SKELETON
             (self->iface));
         dbus_service_tag_t2_free_unexported(self);

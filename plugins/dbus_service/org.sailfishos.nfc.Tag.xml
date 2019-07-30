@@ -53,7 +53,11 @@
       <arg name="ndef_records" type="ao" direction="out"/>
     </method>
     <method name="Deactivate"/>
-    <!-- Signals -->  
+    <!-- Interface version 2 -->
     <signal name="Removed"/>
+    <method name="Acquire">
+      <arg name="wait" type="b" direction="in"/>
+    </method>
+    <method name="Release"/>
   </interface>
 </node>

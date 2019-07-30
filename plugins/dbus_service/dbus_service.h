@@ -86,9 +86,18 @@ dbus_service_tag_new(
     const char* parent_path,
     GDBusConnection* connection);
 
+GDBusConnection*
+dbus_service_tag_connection(
+    DBusServiceTag* tag);
+
 const char*
 dbus_service_tag_path(
     DBusServiceTag* tag);
+
+NfcTargetSequence*
+dbus_service_tag_sequence(
+    DBusServiceTag* tag,
+    const char* sender);
 
 void
 dbus_service_tag_free(
@@ -115,8 +124,7 @@ dbus_service_ndef_free(
 DBusServiceTagType2*
 dbus_service_tag_t2_new(
     NfcTagType2* tag,
-    const char* path,
-    GDBusConnection* connection);
+    DBusServiceTag* owner);
 
 void
 dbus_service_tag_t2_free(

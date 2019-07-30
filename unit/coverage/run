@@ -23,7 +23,8 @@ plugins_dbus_handlers_type_generic \
 plugins_dbus_handlers_type_mediatype \
 plugins_dbus_handlers_type_text \
 plugins_dbus_handlers_type_uri \
-plugins_dbus_service_adapter"
+plugins_dbus_service_adapter \
+plugins_dbus_service_tag"
 
 function err() {
     echo "*** ERROR!" $1
