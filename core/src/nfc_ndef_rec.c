@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -38,12 +38,11 @@
 #include <gutil_misc.h>
 
 struct nfc_ndef_rec_priv {
-    void* data;
+    guint8* data;
 };
 
 G_DEFINE_TYPE(NfcNdefRec, nfc_ndef_rec, G_TYPE_OBJECT)
 
-static const GUtilData nfc_ndef_rec_type_sp = { (const guint8*) "Sp", 2 };
 static const GUtilData nfc_ndef_rec_type_hs = { (const guint8*) "Hs", 2 };
 static const GUtilData nfc_ndef_rec_type_hr = { (const guint8*) "Hr", 2 };
 static const GUtilData nfc_ndef_rec_type_hc = { (const guint8*) "Hc", 2 };
@@ -57,27 +56,39 @@ nfc_ndef_rec_alloc(
     const NfcNdefData* ndef)
 {
     if (ndef->rec.size) {
-        GUtilData type;
+        const NFC_NDEF_TNF tnf = ndef->rec.bytes[0] & NFC_NDEF_HDR_TNF_MASK;
 
         /* Handle known types */
-        nfc_ndef_type(ndef, &type);
-        if (gutil_data_equal(&type, &nfc_ndef_rec_type_u)) {
-            NfcNdefRecU* uri_rec = nfc_ndef_rec_u_new_from_data(ndef);
+        if (tnf == NFC_NDEF_TNF_WELL_KNOWN) {
+            GUtilData type;
 
-            if (uri_rec) {
-                /* URI Record */
-                GDEBUG("URI Record: %s", uri_rec->uri);
-                return NFC_NDEF_REC(uri_rec);
-            }
-        } else if (gutil_data_equal(&type, &nfc_ndef_rec_type_t)) {
-            NfcNdefRecT* text_rec = nfc_ndef_rec_t_new_from_data(ndef);
+            nfc_ndef_type(ndef, &type);
+            if (gutil_data_equal(&type, &nfc_ndef_rec_type_u)) {
+                NfcNdefRecU* uri_rec = nfc_ndef_rec_u_new_from_data(ndef);
 
-            if (text_rec) {
-                /* TEXT Record */
-                GVERBOSE("Locale: %s", nfc_system_locale());
-                GVERBOSE("Language: %s", text_rec->lang);
-                GDEBUG("Text Record: %s", text_rec->text);
-                return NFC_NDEF_REC(text_rec);
+                if (uri_rec) {
+                    /* URI Record */
+                    GDEBUG("URI Record: %s", uri_rec->uri);
+                    return NFC_NDEF_REC(uri_rec);
+                }
+            } else if (gutil_data_equal(&type, &nfc_ndef_rec_type_t)) {
+                NfcNdefRecT* text_rec = nfc_ndef_rec_t_new_from_data(ndef);
+
+                if (text_rec) {
+                    /* TEXT Record */
+                    GVERBOSE("Locale: %s", nfc_system_locale());
+                    GVERBOSE("Language: %s", text_rec->lang);
+                    GDEBUG("Text Record: %s", text_rec->text);
+                    return NFC_NDEF_REC(text_rec);
+                }
+            } else if (gutil_data_equal(&type, &nfc_ndef_rec_type_sp)) {
+                NfcNdefRecSp* sp_rec = nfc_ndef_rec_sp_new_from_data(ndef);
+
+                if (sp_rec) {
+                    /* SmartPoster Record */
+                    GVERBOSE("SmartPoster URI: %s", sp_rec->uri);
+                    return NFC_NDEF_REC(sp_rec);
+                }
             }
         }
 
@@ -146,6 +157,28 @@ nfc_ndef_rec_parse(
         }
         return FALSE;
     }
+}
+
+/* See RFC 2045, section 5.1 "Syntax of the Content-Type Header Field" */
+
+static
+gboolean
+nfc_ndef_is_token_char(
+    guint8 c)
+{
+    /*  token := 1*<any (US-ASCII) CHAR except SPACE, CTLs, or tspecials> */
+    if (c < 0x80) {
+        static const guint32 token_chars[] = {
+            0x00000000, /* ................................ */
+            0x03ff6cfa, /*  !"#$%&'()*+,-./0123456789:;<=>? */
+            0xc7fffffe, /* @ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_ */
+            0x7fffffff  /* `abcdefghijklmnopqrstuvwxyz{|}~. */
+        };
+        if (token_chars[c/32] & (1 << (c % 32))) {
+            return TRUE;
+        }
+    }
+    return FALSE;
 }
 
 /*==========================================================================*
@@ -246,6 +279,58 @@ nfc_ndef_rec_unref(
     }
 }
 
+gboolean
+nfc_ndef_valid_mediatype(
+    const GUtilData* type,
+    gboolean wildcard) /* Since 1.0.18 */
+{
+    guint i = 0;
+
+    if (type->size > 0) {
+        if (type->bytes[i] == (guint8)'*') {
+            if (wildcard) {
+                i++;
+            } else {
+                return FALSE;
+            }
+        } else {
+            while (i < type->size && nfc_ndef_is_token_char(type->bytes[i])) {
+                i++;
+            }
+        }
+    }
+    if (i > 0 && (i + 1) < type->size && type->bytes[i] == (guint8)'/') {
+        i++;
+        if ((i + 1) == type->size && type->bytes[i] == (guint8)'*') {
+            return wildcard;
+        } else {
+            while (i < type->size && nfc_ndef_is_token_char(type->bytes[i])) {
+                i++;
+            }
+            if (i == type->size) {
+                return !wildcard;
+            }
+        }
+    }
+    return FALSE;
+}
+
+static
+guint8
+nfc_ndef_rec_map_flags(
+    NFC_NDEF_REC_FLAGS flags)
+{
+    guint8 ndef_flags = 0;
+
+    if (flags & NFC_NDEF_REC_FLAG_FIRST) {
+        ndef_flags |= NFC_NDEF_HDR_MB;
+    }
+    if (flags & NFC_NDEF_REC_FLAG_LAST) {
+        ndef_flags |= NFC_NDEF_HDR_ME;
+    }
+    return ndef_flags;
+}
+
 /*==========================================================================*
  * Internal interface
  *==========================================================================*/
@@ -283,25 +368,37 @@ nfc_ndef_payload(
     }
 }
 
+static
 NfcNdefRec*
-nfc_ndef_rec_new_well_known(
+nfc_ndef_rec_new_from_data(
     GType gtype,
+    NFC_NDEF_TNF tnf,
     NFC_NDEF_RTD rtd,
     const GUtilData* type,
     const GUtilData* payload)
 {
     NfcNdefData ndef;
     NfcNdefRec* rec;
-    GByteArray* buf = g_byte_array_new();
-    guint8 hdr = NFC_NDEF_HDR_MB | NFC_NDEF_HDR_ME | NFC_NDEF_TNF_WELL_KNOWN;
+    guint8 hdr = NFC_NDEF_HDR_MB | NFC_NDEF_HDR_ME |
+        (tnf & NFC_NDEF_HDR_TNF_MASK);
     const guint8 type_len = type->size;
+    const gboolean short_rec = (payload->size <= 0xff);
+    const guint total_len = type->size + payload->size + (short_rec ? 3 : 6);
+    GByteArray* buf = g_byte_array_sized_new(total_len);
 
     memset(&ndef, 0, sizeof(ndef));
-    ndef.type_length = type->size;
+    ndef.type_length = type_len;
     ndef.payload_length = payload->size;
 
     /* Header, TYPE LENGTH and PAYLOAD LENGTH */
-    if (payload->size > 0xff) {
+    if (short_rec) {
+        guint8 payload_len = (guint8)payload->size;
+
+        hdr |= NFC_NDEF_HDR_SR;
+        g_byte_array_append(buf, &hdr, 1);
+        g_byte_array_append(buf, &type_len, 1);
+        g_byte_array_append(buf, &payload_len, 1);
+    } else {
         guint8 payload_len[4];
 
         payload_len[0] = (guint8)(payload->size >> 24);
@@ -311,13 +408,6 @@ nfc_ndef_rec_new_well_known(
         g_byte_array_append(buf, &hdr, 1);
         g_byte_array_append(buf, &type_len, 1);
         g_byte_array_append(buf, payload_len, 4);
-    } else {
-        guint8 payload_len = (guint8)payload->size;
-
-        hdr |= NFC_NDEF_HDR_SR;
-        g_byte_array_append(buf, &hdr, 1);
-        g_byte_array_append(buf, &type_len, 1);
-        g_byte_array_append(buf, &payload_len, 1);
     }
 
     /* TYPE */
@@ -334,6 +424,26 @@ nfc_ndef_rec_new_well_known(
 
     g_byte_array_free(buf, TRUE);
     return rec;
+}
+
+NfcNdefRec*
+nfc_ndef_rec_new_well_known(
+    GType gtype,
+    NFC_NDEF_RTD rtd,
+    const GUtilData* type,
+    const GUtilData* payload)
+{
+    return nfc_ndef_rec_new_from_data(gtype, NFC_NDEF_TNF_WELL_KNOWN,
+        rtd, type, payload);
+}
+
+NfcNdefRec*
+nfc_ndef_rec_new_media(
+    const GUtilData* type,
+    const GUtilData* payload)
+{
+    return nfc_ndef_rec_new_from_data(NFC_TYPE_NDEF_REC,
+        NFC_NDEF_TNF_MEDIA_TYPE, NFC_NDEF_RTD_UNKNOWN, type, payload);
 }
 
 NfcNdefRec*
@@ -373,6 +483,15 @@ nfc_ndef_rec_initialize(
         }
     }
     return self;
+}
+
+void
+nfc_ndef_rec_clear_flags(
+    NfcNdefRec* self,
+    NFC_NDEF_REC_FLAGS flags)
+{
+    self->flags &= ~flags;
+    self->priv->data[0] &= ~nfc_ndef_rec_map_flags(flags);
 }
 
 /*==========================================================================*

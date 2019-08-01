@@ -38,67 +38,6 @@ static const char dbus_handlers_type_mediatype_listener_group [] =
     "MediaType-Listener";
 static const char dbus_handlers_type_mediatype_key[] = "MediaType";
 
-/* See RFC 2045, section 5.1 "Syntax of the Content-Type Header Field" */
-
-static
-gboolean
-dbus_handlers_type_mediatype_is_token_char(
-    guint8 c)
-{
-    /*  token := 1*<any (US-ASCII) CHAR except SPACE, CTLs, or tspecials> */
-    if (c < 0x80) {
-        static const guint32 token_chars[] = {
-            0x00000000, /* ................................ */
-            0x03ff6cfa, /*  !"#$%&'()*+,-./0123456789:;<=>? */
-            0xc7fffffe, /* @ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_ */
-            0x7fffffff  /* `abcdefghijklmnopqrstuvwxyz{|}~. */
-        };
-        if (token_chars[c/32] & (1 << (c % 32))) {
-            return TRUE;
-        }
-    }
-    return FALSE;
-}
-
-static
-gboolean
-dbus_handlers_type_mediatype_is_valid_mediatype(
-    const GUtilData* type,
-    gboolean wildcard)
-{
-    guint i = 0;
-
-    if (type->size > 0) {
-        if (type->bytes[i] == (guint8)'*') {
-            if (wildcard) {
-                i++;
-            } else {
-                return FALSE;
-            }
-        } else {
-            while (i < type->size &&
-                dbus_handlers_type_mediatype_is_token_char(type->bytes[i])) {
-                i++;
-            }
-        }
-    }
-    if (i > 0 && (i + 1) < type->size && type->bytes[i] == (guint8)'/') {
-        i++;
-        if ((i + 1) == type->size && type->bytes[i] == (guint8)'*') {
-            return wildcard;
-        } else {
-            while (i < type->size &&
-                dbus_handlers_type_mediatype_is_token_char(type->bytes[i])) {
-                i++;
-            }
-            if (i == type->size) {
-                return !wildcard;
-            }
-        }
-    }
-    return FALSE;
-}
-
 static
 gboolean
 dbus_handlers_type_mediatype_match_wildcard(
@@ -115,7 +54,7 @@ dbus_handlers_type_mediatype_match_wildcard(
 
         type.bytes = (void*)pattern;
         type.size = strlen(pattern);
-        if (dbus_handlers_type_mediatype_is_valid_mediatype(&type, TRUE)) {
+        if (nfc_ndef_valid_mediatype(&type, TRUE)) {
             GPatternSpec* spec = g_pattern_spec_new(pattern);
 
             match = g_pattern_match(spec, ndef->type.size,
@@ -185,7 +124,7 @@ dbus_handlers_type_mediatype_supported_record(
     NfcNdefRec* ndef)
 {
     return ndef->tnf == NFC_NDEF_TNF_MEDIA_TYPE &&
-        dbus_handlers_type_mediatype_is_valid_mediatype(&ndef->type, FALSE);
+        nfc_ndef_valid_mediatype(&ndef->type, FALSE);
 }
 
 static
