@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -38,7 +38,7 @@
 /* NFCForum-TS-RTD_URI_1.0 */
 
 struct nfc_ndef_rec_u_priv {
-    void* uri;
+    char* uri;
 };
 
 typedef NfcNdefRecClass NfcNdefRecUClass;
@@ -185,6 +185,21 @@ nfc_ndef_rec_u_new(
         return self;
     }
     return NULL;
+}
+
+char*
+nfc_ndef_rec_u_steal_uri(
+    NfcNdefRecU* self)
+{
+    char* uri = NULL;
+
+    if (G_LIKELY(self)) {
+        NfcNdefRecUPriv* priv = self->priv;
+
+        uri = priv->uri;
+        self->uri = priv->uri = NULL;
+    }
+    return uri;
 }
 
 /*==========================================================================*

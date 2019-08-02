@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -47,45 +47,6 @@ dbus_handlers_type_text_supported_record(
 }
 
 static
-gint
-dbus_handlers_type_text_sort_records(
-    gconstpointer a,
-    gconstpointer b,
-    gpointer user_data)
-{
-    /*
-     * This function is passed the data from 2 elements of the GSList
-     * and should return 0 if they are equal, a negative value if the
-     * first element comes before the second, or a positive value if
-     * the first element comes after the second.
-     */
-    NfcNdefRecT* t1 = NFC_NDEF_REC_T(a);
-    NfcNdefRecT* t2 = NFC_NDEF_REC_T(b);
-    const NfcLanguage* system = user_data;
-    NFC_LANG_MATCH match1 = nfc_ndef_rec_t_lang_match(t1, system);
-    NFC_LANG_MATCH match2 = nfc_ndef_rec_t_lang_match(t2, system);
-
-    if (match1 != match2) {
-        return (gint)match2 - (gint)match1;
-    } else {
-        NfcNdefRec* r1 = &t1->rec;
-        NfcNdefRec* r2 = &t2->rec;
-
-        /* Otherwise preserve the natural order */
-        while (r1->next) {
-            r1 = r1->next;
-            if (r1 == r2) {
-                /* r2 goes after r1 */
-                return -1;
-            }
-        }
-
-        /* r1 goes after r2 */
-        return 1;
-    }
-}
-
-static
 NfcNdefRecT*
 dbus_handlers_type_text_pick_record(
     NfcNdefRec* ndef)
@@ -94,23 +55,21 @@ dbus_handlers_type_text_pick_record(
 
     /* No need for anything complicated if there's only one record */
     if (next) {
-        NfcLanguage* system = nfc_system_language();
+        NfcLanguage* lang = nfc_system_language();
 
-        if (system) {
+        if (lang) {
             GSList* list = g_slist_append(NULL, ndef);
             NfcNdefRec* best;
 
             do {
-                list = g_slist_append(list, next);
+                list = g_slist_insert_sorted_with_data(list, next,
+                    nfc_ndef_rec_t_lang_compare, lang);
                 next = dbus_handlers_type_text_find_record(next->next);
             } while (next);
 
-            list = g_slist_sort_with_data(list,
-                dbus_handlers_type_text_sort_records, system);
-
             best = list->data;
             g_slist_free(list);
-            g_free(system);
+            g_free(lang);
             return NFC_NDEF_REC_T(best);
         }
     }

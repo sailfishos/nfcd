@@ -6,8 +6,9 @@ all:
 	@$(MAKE) -C core_crc $*
 	@$(MAKE) -C core_manager $*
 	@$(MAKE) -C core_ndef_rec $*
-	@$(MAKE) -C core_ndef_rec_u $*
+	@$(MAKE) -C core_ndef_rec_sp $*
 	@$(MAKE) -C core_ndef_rec_t $*
+	@$(MAKE) -C core_ndef_rec_u $*
 	@$(MAKE) -C core_plugin $*
 	@$(MAKE) -C core_plugins $*
 	@$(MAKE) -C core_tag $*

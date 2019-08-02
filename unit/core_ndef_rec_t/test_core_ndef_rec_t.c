@@ -63,6 +63,34 @@ test_null(
     memset(&ndef, 0, sizeof(ndef));
     g_assert(!nfc_ndef_rec_t_new_from_data(NULL));
     g_assert(!nfc_ndef_rec_t_new_from_data(&ndef));
+    g_assert(!nfc_ndef_rec_t_steal_lang(NULL));
+    g_assert(!nfc_ndef_rec_t_steal_text(NULL));
+}
+
+/*==========================================================================*
+ * steal
+ *==========================================================================*/
+
+static
+void
+test_steal(
+    void)
+{
+    const char* text = "text";
+    const char* lang = "en";
+    NfcNdefRecT* trec = nfc_ndef_rec_t_new(text, lang);
+    char* stolen_text = nfc_ndef_rec_t_steal_text(trec);
+    char* stolen_lang = nfc_ndef_rec_t_steal_lang(trec);
+
+    g_assert(trec);
+    g_assert(!g_strcmp0(stolen_text, text));
+    g_assert(!g_strcmp0(stolen_lang, lang));
+    /* Can't steal the same thing more than once */
+    g_assert(!nfc_ndef_rec_t_steal_text(trec));
+    g_assert(!nfc_ndef_rec_t_steal_lang(trec));
+    g_free(stolen_text);
+    g_free(stolen_lang);
+    nfc_ndef_rec_unref(&trec->rec);
 }
 
 /*==========================================================================*
@@ -541,6 +569,7 @@ int main(int argc, char* argv[])
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("null"), test_null);
     g_test_add_func(TEST_("empty"), test_empty);
+    g_test_add_func(TEST_("steal"), test_steal);
     g_test_add_func(TEST_("invalid_enc"), test_invalid_enc);
     g_test_add_func(TEST_("invalid_text"), test_invalid_text);
     g_test_add_func(TEST_("default_lang"), test_default_lang);

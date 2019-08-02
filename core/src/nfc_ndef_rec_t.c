@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   2. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -276,6 +276,74 @@ nfc_ndef_rec_t_lang_match(
         }
     }
     return match;
+}
+
+gint
+nfc_ndef_rec_t_lang_compare(
+    gconstpointer a,
+    gconstpointer b,
+    gpointer user_data) /* Since 1.0.18 */
+{
+    /*
+     * This function is passed the data from 2 elements of the GSList
+     * and should return 0 if they are equal, a negative value if the
+     * first element comes before the second, or a positive value if
+     * the first element comes after the second.
+     */
+    NfcNdefRecT* t1 = NFC_NDEF_REC_T(a);
+    NfcNdefRecT* t2 = NFC_NDEF_REC_T(b);
+    const NfcLanguage* system = user_data;
+    NFC_LANG_MATCH match1 = nfc_ndef_rec_t_lang_match(t1, system);
+    NFC_LANG_MATCH match2 = nfc_ndef_rec_t_lang_match(t2, system);
+
+    if (match1 != match2) {
+        return (gint)match2 - (gint)match1;
+    } else {
+        NfcNdefRec* r1 = &t1->rec;
+        NfcNdefRec* r2 = &t2->rec;
+
+        /* Otherwise preserve the natural order */
+        while (r1->next) {
+            r1 = r1->next;
+            if (r1 == r2) {
+                /* r2 goes after r1 */
+                return -1;
+            }
+        }
+
+        /* r1 goes after r2 */
+        return 1;
+    }
+}
+
+char*
+nfc_ndef_rec_t_steal_lang(
+    NfcNdefRecT* self)
+{
+    char* lang = NULL;
+
+    if (G_LIKELY(self)) {
+        NfcNdefRecTPriv* priv = self->priv;
+
+        lang = priv->lang;
+        self->lang = priv->lang = NULL;
+    }
+    return lang;
+}
+
+char*
+nfc_ndef_rec_t_steal_text(
+    NfcNdefRecT* self)
+{
+    char* text = NULL;
+
+    if (G_LIKELY(self)) {
+        NfcNdefRecTPriv* priv = self->priv;
+
+        text = priv->text;
+        self->text = priv->text = NULL;
+    }
+    return text;
 }
 
 /*==========================================================================*

@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -51,6 +51,28 @@ test_null(
     g_assert(!nfc_ndef_rec_u_new(NULL));
     g_assert(!nfc_ndef_rec_u_new_from_data(NULL));
     g_assert(!nfc_ndef_rec_u_new_from_data(&ndef));
+    g_assert(!nfc_ndef_rec_u_steal_uri(NULL));
+}
+
+/*==========================================================================*
+ * steal
+ *==========================================================================*/
+
+static
+void
+test_steal(
+    void)
+{
+    const char* uri = "https://jolla.com";
+    NfcNdefRecU* urec = nfc_ndef_rec_u_new(uri);
+    char* stolen = nfc_ndef_rec_u_steal_uri(urec);
+
+    g_assert(urec);
+    g_assert(!g_strcmp0(stolen, uri));
+    /* Can't steal the same thing more than once */
+    g_assert(!nfc_ndef_rec_u_steal_uri(urec));
+    g_free(stolen);
+    nfc_ndef_rec_unref(&urec->rec);
 }
 
 /*==========================================================================*
@@ -214,6 +236,7 @@ int main(int argc, char* argv[])
     guint i;
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("null"), test_null);
+    g_test_add_func(TEST_("steal"), test_steal);
     g_test_add_func(TEST_("invalid_prefix"), test_invalid_prefix);
     g_test_add_func(TEST_("empty"), test_empty);
     for (i = 0; i < G_N_ELEMENTS(ok_tests); i++) {

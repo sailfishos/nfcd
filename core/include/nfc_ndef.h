@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -49,7 +49,8 @@ typedef enum nfc_ndef_rec_flags {
 typedef enum nfc_ndef_rtd {
     NFC_NDEF_RTD_UNKNOWN,
     NFC_NDEF_RTD_URI,                   /* "U" */
-    NFC_NDEF_RTD_TEXT                   /* "T" */
+    NFC_NDEF_RTD_TEXT,                  /* "T" */
+    NFC_NDEF_RTD_SMART_POSTER           /* "Sp" */
 } NFC_NDEF_RTD;
 
 /* TNF = Type name format */
@@ -157,7 +158,7 @@ nfc_ndef_rec_t_new_enc(
     const char* lang,
     NFC_NDEF_REC_T_ENC enc);
 
-#define nfc_ndef_rec_t_new(text,lang) \
+#define nfc_ndef_rec_t_new(text, lang) \
     nfc_ndef_rec_t_new_enc(text, lang, NFC_NDEF_REC_T_ENC_UTF8)
 
 NFC_LANG_MATCH
@@ -165,9 +166,66 @@ nfc_ndef_rec_t_lang_match(
     NfcNdefRecT* rec,
     const NfcLanguage* lang); /* Since 1.0.15 */
 
+gint
+nfc_ndef_rec_t_lang_compare(
+    gconstpointer a,   /* NfcNdefRecT* */
+    gconstpointer b,   /* NfcNdefRecT* */
+    gpointer user_data /* NfcLanguage* */); /* Since 1.0.18 */
+
+/* Smart poster */
+
+typedef enum nfc_ndef_sp_act {
+    NFC_NDEF_SP_ACT_DEFAULT = -1, /* No action record */
+    NFC_NDEF_SP_ACT_OPEN,         /* Perform the action */
+    NFC_NDEF_SP_ACT_SAVE,         /* Save for later */
+    NFC_NDEF_SP_ACT_EDIT          /* Open for editing */
+} NFC_NDEF_SP_ACT;
+
+typedef struct nfc_ndef_rec_sp_priv NfcNdefRecSpPriv;
+
+typedef struct nfc_ndef_media {
+    GUtilData data;
+    const char* type;
+} NfcNdefMedia;
+
+typedef struct nfc_ndef_rec_sp {
+    NfcNdefRec rec;
+    NfcNdefRecSpPriv* priv;
+    const char* uri;
+    const char* title;
+    const char* lang;
+    const char* type;
+    guint size;
+    NFC_NDEF_SP_ACT act;
+    NfcNdefMedia* icon;
+} NfcNdefRecSp;
+
+GType nfc_ndef_rec_sp_get_type(void);
+#define NFC_TYPE_NDEF_REC_SP (nfc_ndef_rec_sp_get_type())
+#define NFC_NDEF_REC_SP(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
+        NFC_TYPE_NDEF_REC_SP, NfcNdefRecSp))
+#define NFC_IS_NDEF_REC_SP(obj) G_TYPE_CHECK_INSTANCE_TYPE(obj, \
+        NFC_TYPE_NDEF_REC_SP)
+
+NfcNdefRecSp*
+nfc_ndef_rec_sp_new(
+    const char* uri,
+    const char* title,
+    const char* lang,
+    const char* type,
+    guint size,
+    NFC_NDEF_SP_ACT act,
+    const NfcNdefMedia* icon); /* Since 1.0.18 */
+
+/* Utilities */
+
+gboolean
+nfc_ndef_valid_mediatype(
+    const GUtilData* type,
+    gboolean wildcard); /* Since 1.0.18 */
+
 /* These are not yet implemented: */
 
-typedef struct nfc_ndef_rec_sp NfcNdefRecSp;  /* Smart poster */
 typedef struct nfc_ndef_rec_hs NfcNdefRecHs;  /* Handover select */
 typedef struct nfc_ndef_rec_hr NfcNdefRecHr;  /* Handover request */
 typedef struct nfc_ndef_rec_Hc NfcNdefRecHc;  /* Handover carrier */

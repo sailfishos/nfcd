@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2018 Bogdan Pankovsky <b.pankovsky@omprussia.ru>
  *
  * You may use this file under the terms of BSD license as follows:
@@ -15,8 +15,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -41,11 +41,18 @@
 /* Add _ prefix so that they don't get exported */
 #define nfc_ndef_payload _nfc_ndef_payload
 #define nfc_ndef_rec_initialize _nfc_ndef_rec_initialize
+#define nfc_ndef_rec_clear_flags _nfc_ndef_rec_clear_flags
 #define nfc_ndef_rec_u_new_from_data _nfc_ndef_rec_u_new_from_data
+#define nfc_ndef_rec_u_steal_uri _nfc_ndef_rec_u_steal_uri
 #define nfc_ndef_rec_t_new_from_data _nfc_ndef_rec_t_new_from_data
+#define nfc_ndef_rec_t_steal_lang _nfc_ndef_rec_t_steal_lang
+#define nfc_ndef_rec_t_steal_text _nfc_ndef_rec_t_steal_text
+#define nfc_ndef_rec_sp_new_from_data _nfc_ndef_rec_sp_new_from_data
 #define nfc_ndef_rec_new_well_known _nfc_ndef_rec_new_well_known
+#define nfc_ndef_rec_new_media _nfc_ndef_rec_new_media
 #define nfc_ndef_rec_type_u _nfc_ndef_rec_type_u
 #define nfc_ndef_rec_type_t _nfc_ndef_rec_type_t
+#define nfc_ndef_rec_type_sp _nfc_ndef_rec_type_sp
 
 typedef struct nfc_ndef_rec_class {
     GObjectClass parent;
@@ -69,6 +76,7 @@ typedef struct nfc_ndef_data {
 
 extern const GUtilData nfc_ndef_rec_type_u; /* "U" */
 extern const GUtilData nfc_ndef_rec_type_t; /* "T" */
+extern const GUtilData nfc_ndef_rec_type_sp; /* "Sp" */
 
 gboolean
 nfc_ndef_type(
@@ -86,6 +94,16 @@ nfc_ndef_rec_initialize(
     NFC_NDEF_RTD rtd,
     const NfcNdefData* ndef);
 
+void
+nfc_ndef_rec_clear_flags(
+    NfcNdefRec* rec,
+    NFC_NDEF_REC_FLAGS flags);
+
+NfcNdefRec*
+nfc_ndef_rec_new_media(
+    const GUtilData* type,
+    const GUtilData* payload);
+
 NfcNdefRec*
 nfc_ndef_rec_new_well_known(
     GType gtype,
@@ -97,9 +115,25 @@ NfcNdefRecU*
 nfc_ndef_rec_u_new_from_data(
     const NfcNdefData* ndef);
 
+char*
+nfc_ndef_rec_u_steal_uri(
+    NfcNdefRecU* ndef);
+
 NfcNdefRecT*
 nfc_ndef_rec_t_new_from_data(
-        const NfcNdefData* ndef);
+    const NfcNdefData* ndef);
+
+char*
+nfc_ndef_rec_t_steal_lang(
+    NfcNdefRecT* self);
+
+char*
+nfc_ndef_rec_t_steal_text(
+    NfcNdefRecT* self);
+
+NfcNdefRecSp*
+nfc_ndef_rec_sp_new_from_data(
+    const NfcNdefData* ndef);
 
 #endif /* NFC_NDEF_PRIVATE_H */
 
