@@ -1,18 +1,18 @@
 Name: nfcd
-Version: 1.0.17
+Version: 1.0.18
 Release: 0
 Summary: NFC daemon
 Group: Development/Libraries
 License: BSD
 URL: https://git.sailfishos.org/mer-core/nfcd
 Source: %{name}-%{version}.tar.bz2
+
+%define libglibutil_version 1.0.38
+%define libdbuslog_version 1.0.14
+
 BuildRequires: pkgconfig(glib-2.0)
 BuildRequires: pkgconfig(libmce-glib)
 BuildRequires: pkgconfig(libdbusaccess)
-
-%define libglibutil_version 1.0.36
-%define libdbuslog_version 1.0.14
-
 BuildRequires: pkgconfig(libglibutil) >= %{libglibutil_version}
 BuildRequires: pkgconfig(libdbuslogserver-gio) >= %{libdbuslog_version}
 Requires: libglibutil >= %{libglibutil_version}
