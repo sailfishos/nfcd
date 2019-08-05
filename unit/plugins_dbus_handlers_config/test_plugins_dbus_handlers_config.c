@@ -469,6 +469,7 @@ test_multiple_ndefs(
         g_unlink(fname[i]);
         g_free(fname[i]);
     }
+    g_rmdir(dir);
     g_free(dir);
 }
 
