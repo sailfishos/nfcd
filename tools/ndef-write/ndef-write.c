@@ -66,6 +66,7 @@ write_ndef_signal(
     AppData* app = user_data;
 
     if (!app->stopped) {
+        app->stopped = TRUE;
         GDEBUG("Signal caught, shutting down...");
         g_main_loop_quit(app->loop);
     }
