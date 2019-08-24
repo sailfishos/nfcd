@@ -22,6 +22,7 @@ plugins_dbus_handlers \
 plugins_dbus_handlers_config \
 plugins_dbus_handlers_type_generic \
 plugins_dbus_handlers_type_mediatype \
+plugins_dbus_handlers_type_sp \
 plugins_dbus_handlers_type_text \
 plugins_dbus_handlers_type_uri \
 plugins_dbus_service_adapter \
