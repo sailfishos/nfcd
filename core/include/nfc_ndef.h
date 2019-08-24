@@ -197,7 +197,7 @@ typedef struct nfc_ndef_rec_sp {
     const char* type;
     guint size;
     NFC_NDEF_SP_ACT act;
-    NfcNdefMedia* icon;
+    const NfcNdefMedia* icon;
 } NfcNdefRecSp;
 
 GType nfc_ndef_rec_sp_get_type(void);
