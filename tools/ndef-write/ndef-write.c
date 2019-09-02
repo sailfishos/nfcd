@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2018-2019 Jolla Ltd.
  * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -42,6 +43,8 @@
 #include <gutil_log.h>
 
 #include <glib-unix.h>
+
+#include <magic.h>
 
 #define NFC_BUS G_BUS_TYPE_SYSTEM
 #define NFC_SERVICE "org.sailfishos.nfc.daemon"
@@ -368,35 +371,206 @@ write_ndef(
     return ret;
 }
 
+static
+NfcNdefRec*
+ndef_uri_proc(
+    const char* uri)
+{
+    NfcNdefRecU* u = nfc_ndef_rec_u_new(uri);
+
+    return u ? &u->rec : NULL;
+}
+
+static
+NfcNdefRec*
+ndef_text_proc(
+    const char* text)
+{
+    NfcNdefRecT* t = nfc_ndef_rec_t_new(text, NULL);
+
+    return t ? &t->rec : NULL;
+}
+
+static
+NfcNdefRec*
+ndef_sp_proc(
+    const char* spec)
+{
+    NfcNdefRec* rec = NULL;
+    const char* ptr = spec;
+    gboolean backslash = FALSE;
+    GStrV* params = NULL;
+    GString* buf = g_string_new("");
+    guint n;
+
+    while (*ptr) {
+        if (backslash) {
+            backslash = FALSE;
+            switch (*ptr) {
+            case 'a': g_string_append_c(buf, '\a'); break;
+            case 'b': g_string_append_c(buf, '\b'); break;
+            case 'e': g_string_append_c(buf, '\e'); break;
+            case 'f': g_string_append_c(buf, '\f'); break;
+            case 'n': g_string_append_c(buf, '\n'); break;
+            case 'r': g_string_append_c(buf, '\r'); break;
+            case 't': g_string_append_c(buf, '\t'); break;
+            case 'v': g_string_append_c(buf, '\v'); break;
+            case '\\': g_string_append_c(buf, '\\'); break;
+            case '\'': g_string_append_c(buf, '\''); break;
+            case '"': g_string_append_c(buf, '\"'); break;
+            case '?': g_string_append_c(buf, '\?'); break;
+            case ',': g_string_append_c(buf, ','); break;
+            default:
+                /* Could support more but is it worth the trouble? */
+                g_string_append_c(buf, '\\');
+                g_string_append_c(buf, *ptr);
+                break;
+            }
+        } else if (*ptr == '\\') {
+            backslash = TRUE;
+        } else if (*ptr == ',') {
+            params = gutil_strv_add(params, buf->str);
+            g_string_set_size(buf, 0);
+        } else {
+            g_string_append_c(buf, *ptr);
+        }
+        ptr++;
+    }
+    if (backslash) {
+        g_string_append_c(buf, '\\');
+    }
+    params = gutil_strv_add(params, buf->str);
+    n = gutil_strv_length(params);
+
+    /* URL, title, action, type, size, path */
+    if (n >= 1 && n <= 6) {
+        gboolean ok = TRUE;
+        int act = NFC_NDEF_SP_ACT_DEFAULT;
+        int size = 0;
+        NfcNdefMedia media;
+        GMappedFile* icon_map = NULL;
+        const NfcNdefMedia* icon = NULL;
+        magic_t magic = (magic_t)0;
+
+        memset(&media, 0, sizeof(media));
+        if (n > 2) {
+            const char* val = params[2];
+
+            if (val[0] && !gutil_parse_int(val, 0, &act)) {
+                fprintf(stderr, "Can't parse action '%s'\n", val);
+                ok = FALSE;
+            }
+        }
+        if (ok && n > 4) {
+            const char* val = params[4];
+
+            /* Well, it's actually unsigned int but it doesn't really matter */
+            if (val[0] && (!gutil_parse_int(val, 0, &size) || size < 0)) {
+                fprintf(stderr, "Can't parse size '%s'\n", val);
+                ok = FALSE;
+            }
+        }
+        if (ok && n == 6) {
+            const char* fname = params[5];
+            GError* error = NULL;
+            
+            icon_map = g_mapped_file_new(fname, FALSE, &error);
+            if (icon_map) {
+                magic = magic_open(MAGIC_MIME_TYPE);
+                if (magic) {
+                    if (magic_load(magic, NULL) == 0) {
+                        media.type = magic_file(magic, fname);
+                        GDEBUG("Detected type %s", media.type);
+                    }
+                }
+                media.data.bytes = (void*)g_mapped_file_get_contents(icon_map);
+                media.data.size = g_mapped_file_get_length(icon_map);
+                icon = &media;
+            } else {
+                fprintf(stderr, "%s\n", GERRMSG(error));
+                g_error_free(error);
+                ok = FALSE;
+            }
+        }
+        if (ok) {
+            const char* title = (n > 1) ? params[1] : NULL;
+            const char* type = (n > 3) ? params[3] : NULL;
+            NfcNdefRecSp* sp = nfc_ndef_rec_sp_new(params[0], title, NULL,
+                type, size, act, icon);
+
+            if (sp) {
+                rec = &sp->rec;
+            }
+        }
+        if (magic) {
+            magic_close(magic);
+        }
+        if (icon_map) {
+            g_mapped_file_unref(icon_map);
+        }
+    }
+
+    g_string_free(buf, TRUE);
+    g_strfreev(params);
+    return rec;
+}
+
 int main(int argc, char* argv[])
 {
     int ret = RET_ERR;
     char* uri = NULL;
     char* text = NULL;
+    char* sp = NULL;
+    gboolean empty = FALSE;
     gboolean verbose = FALSE;
     GOptionEntry entries[] = {
         { "verbose", 'v', 0, G_OPTION_ARG_NONE, &verbose,
           "Enable verbose output", NULL },
+        { "empty", 'e', 0, G_OPTION_ARG_NONE, &empty,
+          "Write empty NDEF record", NULL },
         { "uri", 'u', 0, G_OPTION_ARG_STRING, &uri,
           "Write URI record", "URI" },
         { "text", 't', 0, G_OPTION_ARG_STRING, &text,
           "Write Text record", "TEXT" },
+        { "sp", 's', 0, G_OPTION_ARG_STRING, &sp,
+          "Write SmartPoster record", "SPEC" },
         { NULL }
     };
     GOptionContext* options = g_option_context_new("[FILE]");
     GError* error = NULL;
 
     g_option_context_add_main_entries(options, entries, NULL);
-    g_option_context_set_summary(options, "Writes NDEF record to tag.");
+    g_option_context_set_summary(options, "Writes NDEF record to a tag.\n\n"
+        "SmartPoster SPEC is a comma-separated sequence of URL, title,\n"
+        "action, type, size and path to the icon file. Embedded commas\n"
+        "can be escaped with a backslash.");
     if (g_option_context_parse(options, &argc, &argv, &error)) {
-        if ((!uri && !text && argc != 2) || (uri && text)) {
-            char* help = g_option_context_get_help(options, TRUE, NULL);
-            gsize len = strlen(help);
+        NfcNdefRec* (*ndef_proc)(const char* spec) = NULL;
+        const char* ndef_spec = NULL;
+        const char* type = NULL;
+        int gen_ndef = empty;
 
-            while (len > 0 && help[len - 1] == '\n') help[len--] = 0;
-            printf("%s\n", help);
-            g_free(help);
-        } else {
+        if (uri) {
+            ndef_proc = ndef_uri_proc;
+            ndef_spec = uri;
+            type = "URI";
+            gen_ndef++;
+        }
+        if (text) {
+            ndef_proc = ndef_text_proc;
+            ndef_spec = text;
+            type = "Text";
+            gen_ndef++;
+        }
+        if (sp) {
+            ndef_proc = ndef_sp_proc;
+            ndef_spec = sp;
+            type = "SmartPoster";
+            gen_ndef++;
+        }
+
+        /* No spec - need the file. No file - need exactly one spec */
+        if ((!gen_ndef && argc == 2) || (gen_ndef == 1 && argc == 1)) {
             AppData app;
 
             gutil_log_timestamp = FALSE;
@@ -405,31 +579,20 @@ int main(int argc, char* argv[])
                 GLOG_LEVEL_INFO;
 
             memset(&app, 0, sizeof(app));
-            if (uri || text) {
-                NfcNdefRec* rec = NULL;
-
-                if (uri) {
-                    NfcNdefRecU* u = nfc_ndef_rec_u_new(uri);
-
-                    if (u) {
-                        rec = &u->rec;
-                    }
-                } else {
-                    NfcNdefRecT* t = nfc_ndef_rec_t_new(text, NULL);
-
-                    if (t) {
-                        rec = &t->rec;
-                    }
-                }
+            if (ndef_proc) {
+                NfcNdefRec* rec = ndef_proc(ndef_spec);
 
                 if (rec) {
                     app.ndef = rec->raw;
+                    ret = write_ndef(&app);
+                    nfc_ndef_rec_unref(rec);
+                } else {
+                    fprintf(stderr, "Failed to generate %s record\n", type);
                 }
-
+            } else if (empty) {
                 ret = write_ndef(&app);
-                nfc_ndef_rec_unref(rec);
             } else {
-                const char* file = (argc > 1) ? argv[1] : NULL;
+                const char* file = argv[1];
                 gchar* contents;
                 gsize size;
 
@@ -449,6 +612,13 @@ int main(int argc, char* argv[])
                 }
             }
             g_strfreev(app.tags);
+        } else {
+            char* help = g_option_context_get_help(options, TRUE, NULL);
+            gsize len = strlen(help);
+
+            while (len > 0 && help[len - 1] == '\n') help[len--] = 0;
+            printf("%s\n", help);
+            g_free(help);
         }
     } else {
         fprintf(stderr, "%s\n", GERRMSG(error));
@@ -456,6 +626,7 @@ int main(int argc, char* argv[])
     }
     g_free(uri);
     g_free(text);
+    g_free(sp);
     g_option_context_free(options);
     return ret;
 }

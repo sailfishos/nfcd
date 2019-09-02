@@ -82,7 +82,7 @@ RELEASE_CFLAGS = $(RELEASE_FLAGS) -O2 $(FULL_CFLAGS)
 DEBUG_LDFLAGS = $(DEBUG_FLAGS) $(FULL_LDFLAGS)
 RELEASE_LDFLAGS = $(RELEASE_FLAGS) $(FULL_LDFLAGS)
 
-LIBS = $(shell pkg-config --libs $(LIB_PKGS)) -ldl
+LIBS = $(shell pkg-config --libs $(LIB_PKGS)) -lmagic -ldl
 DEBUG_LIBS = \
   $(NFC_CORE_DEBUG_LIB) \
   $(LIBS)
