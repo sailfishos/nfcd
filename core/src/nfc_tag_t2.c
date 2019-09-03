@@ -40,7 +40,7 @@
 
 #include <gutil_misc.h>
 
-/* Block size got Type 2 Tags is always 4 bytes according to
+/* Block size for Type 2 Tags is always 4 bytes according to
  * NFCForum-TS-Type-2-Tag_1.1 spec */
 #define NFC_TAG_T2_BLOCK_SIZE   (4)
 #define NFC_TAG_T2_MAX_BLOCK_SIZE NFC_TAG_T2_BLOCK_SIZE
@@ -844,10 +844,15 @@ nfc_tag_t2_init_read_resp(
     if (status == NFC_TRANSMIT_STATUS_OK) {
         NfcTagType2Sector* sector = priv->sectors; /* sector 0 */
         const guint block_size = self->block_size;
-        const guint nb = len / block_size;
+        const guint total_blocks = sector->size / block_size;
+        guint nb = len / block_size;
         GUtilData data;
 
+        /* Handle reads beyond the end of data */
         GASSERT(!(len % block_size));
+        if ((block + nb) > total_blocks) {
+            nb = total_blocks - block;
+        }
         nfc_tag_t2_sector_set_data(sector, block_size, bytes, block, nb);
         block += nb;
         data.bytes = sector->data.bytes;
