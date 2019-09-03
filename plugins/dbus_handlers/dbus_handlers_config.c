@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2018-2019 Jolla Ltd.
  * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +15,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -419,6 +420,7 @@ dbus_handlers_config_load(
          * handled first.
          */
         static const DBusHandlerType* available_types[] = {
+            &dbus_handlers_type_sp,
             &dbus_handlers_type_uri,
             &dbus_handlers_type_text,
             &dbus_handlers_type_mediatype_exact

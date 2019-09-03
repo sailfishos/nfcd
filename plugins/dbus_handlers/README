@@ -132,7 +132,7 @@ Method signature:
   </method>
 
 Both [URI-Handler] and [URI-Listener] sections support additional
-key that specifies URI pattern to match:
+optional key that specifies URI pattern to match:
 
   URI = <pattern>
 
@@ -175,3 +175,56 @@ Example:
 [Text-Handler]
 Service = my.service
 Method = my.interface.HandleText
+
+"Sp" (SmartPoster) NDEF record
+------------------------------
+
+[SmartPoster-Handler]
+
+Method signature:
+
+  <method>
+    <arg name="uri" type="s" direction="in"/>
+    <arg name="title" type="s" direction="in"/>
+    <arg name="type" type="s" direction="in"/>
+    <arg name="size" type="u" direction="in"/>
+    <arg name="action" type="i" direction="in"/>
+    <arg name="icon" type="(say)" direction="in"/>
+    <arg name="status" type="i" direction="out"/>
+  </method>
+
+[SmartPoster-Listener]
+
+Method signature:
+
+  <method>
+    <arg name="handled" type="b" direction="in"/>
+    <arg name="uri" type="s" direction="in"/>
+    <arg name="title" type="s" direction="in"/>
+    <arg name="type" type="s" direction="in"/>
+    <arg name="size" type="u" direction="in"/>
+    <arg name="action" type="i" direction="in"/>
+    <arg name="icon" type="(say)" direction="in"/>
+  </method>
+
+Action parameter has one of the following values:
+
+  -1  No action record provided
+  0   Perform the action
+  1   Save for later
+  2   Open for editing
+
+
+Both [SmartPoster-Handler] and [SmartPoster-Listener] sections support
+additional optional key that specifies URI pattern to match:
+
+  URI = <pattern>
+
+The default pattern is '*' which matches everything.
+
+Example:
+
+[SmartPoster-Handler]
+Service = my.service
+Method = my.interface.HandleSmartPoster
+URI = https://*
