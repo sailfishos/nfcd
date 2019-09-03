@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -42,42 +42,7 @@
 
 static TestOpt test_opt;
 
-#define TEST_TIMEOUT (10) /* seconds */
 #define SUPER_LONG_TIMEOUT (24*60*60) /* seconds */
-
-static
-gboolean
-test_timeout(
-    gpointer user_data)
-{
-    g_assert(!"TIMEOUT");
-    return G_SOURCE_REMOVE;
-}
-
-static
-guint
-test_setup_timeout(
-    GMainLoop* loop)
-{
-    if (!(test_opt.flags & TEST_FLAG_DEBUG)) {
-        return g_timeout_add_seconds(TEST_TIMEOUT, test_timeout, loop);
-    } else {
-        return 0;
-    }
-}
-
-static
-void
-test_run_loop(
-    GMainLoop* loop)
-{
-    guint timeout_id = test_setup_timeout(loop);
-
-    g_main_loop_run(loop);
-    if (timeout_id) {
-        g_source_remove(timeout_id);
-    }
-}
 
 static
 void
@@ -510,7 +475,7 @@ test_target_read_done(
             test->read_error = NULL;
             /* To avoid glib assert on cancel */
             test->transmit_id = g_timeout_add_seconds(SUPER_LONG_TIMEOUT,
-                test_timeout, NULL);
+                test_timeout_expired, NULL);
             /* Don't call nfc_target_transmit_done() */
             return G_SOURCE_REMOVE;
         }
@@ -555,7 +520,7 @@ test_target_write_done(
             test->read_error = NULL;
             /* To avoid glib assert on cancel */
             test->transmit_id = g_timeout_add_seconds(SUPER_LONG_TIMEOUT,
-                test_timeout, NULL);
+                test_timeout_expired, NULL);
             /* Don't call nfc_target_transmit_done() */
             return G_SOURCE_REMOVE;
         }
@@ -762,7 +727,7 @@ test_basic(
 
     test_basic_check_sel_res(test, 0x02, NFC_TAG_TYPE_UNKNOWN);
     g_assert(tag->type == NFC_TAG_TYPE_MIFARE_ULTRALIGHT);
-    test_run_loop(loop);
+    test_run(&test_opt, loop);
 
     nfc_tag_remove_handler(tag, id);
     nfc_tag_unref(tag);
@@ -809,7 +774,7 @@ test_unsup(
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
     gulong id = nfc_tag_add_initialized_handler(tag, test_unsup_done, loop);
 
-    test_run_loop(loop);
+    test_run(&test_opt, loop);
 
     nfc_tag_remove_handler(tag, id);
     nfc_tag_unref(tag);
@@ -853,7 +818,7 @@ test_init_err1(
     error.type = TEST_TARGET_ERROR_CRC;
     test->read_error = &error;
 
-    test_run_loop(loop);
+    test_run(&test_opt, loop);
 
     nfc_tag_remove_handler(tag, id);
     nfc_tag_unref(tag);
@@ -906,7 +871,7 @@ test_init_err2(
     error.type = TEST_TARGET_ERROR_TRANSMIT;
     test->read_error = &error;
 
-    test_run_loop(loop);
+    test_run(&test_opt, loop);
 
     nfc_tag_remove_handler(tag, id);
     nfc_tag_unref(tag);
@@ -984,7 +949,7 @@ test_read_data(
         test_read_data_start, loop);
     guint8* buf;
 
-    test_run_loop(loop);
+    test_run(&test_opt, loop);
 
     /* Read beyond the end of data */
     g_assert(nfc_tag_t2_read_data_sync(t2, t2->data_size, 1, NULL) ==
@@ -1006,7 +971,7 @@ test_read_data(
     g_assert(nfc_tag_t2_read_data(t2, 0, t2->data_size, test_read_data_done,
         test_destroy_quit_loop, loop));
 
-    test_run_loop(loop);
+    test_run(&test_opt, loop);
 
     /* And this one will be canceled when we delete the tag */
     g_assert(nfc_tag_t2_read_data(t2, 0, t2->data_size, test_read_data_done,
@@ -1056,7 +1021,7 @@ test_read_data_872(
     gulong init_id = nfc_tag_add_initialized_handler(tag,
         test_read_data_872_start, loop);
 
-    test_run_loop(loop);
+    test_run(&test_opt, loop);
 
     nfc_tag_remove_handler(tag, init_id);
     nfc_tag_unref(tag);
@@ -1110,7 +1075,7 @@ test_read_data_cached(
     gulong init_id = nfc_tag_add_initialized_handler(tag,
         test_read_data_cached_start, loop);
 
-    test_run_loop(loop);
+    test_run(&test_opt, loop);
 
     nfc_tag_remove_handler(tag, init_id);
     nfc_tag_unref(tag);
@@ -1150,7 +1115,7 @@ test_read_data_abort(
     gulong init_id = nfc_tag_add_initialized_handler(tag,
         test_read_data_abort_start, loop);
 
-    test_run_loop(loop);
+    test_run(&test_opt, loop);
 
     nfc_tag_remove_handler(tag, init_id);
     nfc_tag_unref(tag);
@@ -1208,7 +1173,7 @@ test_read_data_err(
     error.type = TEST_TARGET_ERROR_CRC;
     test->read_error = &error;
 
-    test_run_loop(loop);
+    test_run(&test_opt, loop);
 
     nfc_tag_remove_handler(tag, init_id);
     nfc_tag_unref(tag);
@@ -1263,7 +1228,7 @@ test_read_crc_err(
     error.type = TEST_TARGET_ERROR_CRC;
     test->read_error = &error;
 
-    test_run_loop(loop);
+    test_run(&test_opt, loop);
 
     nfc_tag_remove_handler(tag, init_id);
     nfc_tag_unref(tag);
@@ -1321,7 +1286,7 @@ test_read_nack(
     error.type = TEST_TARGET_ERROR_NACK;
     test->read_error = &error;
 
-    test_run_loop(loop);
+    test_run(&test_opt, loop);
 
     nfc_tag_remove_handler(tag, init_id);
     nfc_tag_unref(tag);
@@ -1379,7 +1344,7 @@ test_read_timeout(
     error.type = TEST_TARGET_ERROR_TIMEOUT;
     test->read_error = &error;
 
-    test_run_loop(loop);
+    test_run(&test_opt, loop);
 
     nfc_tag_remove_handler(tag, init_id);
     nfc_tag_unref(tag);
@@ -1453,7 +1418,7 @@ test_write(
     /* And we write have at least one block */
     g_assert(!nfc_tag_t2_write(t2, 0, 4, short_buf, NULL, NULL, NULL));
 
-    test_run_loop(loop);
+    test_run(&test_opt, loop);
 
     /* Check the contents */
     g_assert(!memcmp(test->storage, test_data_jolla, sizeof(test_data_jolla)));
@@ -1466,7 +1431,7 @@ test_write(
     g_assert(nfc_tag_t2_read_data(t2, 0, t2->data_size, test_write_check,
         test_destroy_quit_loop, loop));
 
-    test_run_loop(loop);
+    test_run(&test_opt, loop);
 
     nfc_tag_remove_handler(tag, id);
     nfc_tag_unref(tag);
@@ -1529,7 +1494,7 @@ test_write_data1(
         test_unexpected_write_data_completion,
         test_unexpected_destroy, NULL));
 
-    test_run_loop(loop);
+    test_run(&test_opt, loop);
 
     /* Check the contents */
     g_assert(!memcmp(test->data.bytes + TEST_DATA_OFFSET, jolla_rec,
@@ -1616,7 +1581,7 @@ test_write_data2(
     gulong id = nfc_tag_add_initialized_handler(tag,
         test_write_data2_start, loop);
 
-    test_run_loop(loop);
+    test_run(&test_opt, loop);
 
     /* Check the contents */
     g_assert(!memcmp(test->data.bytes + TEST_DATA_OFFSET, jolla_rec,
@@ -1706,7 +1671,7 @@ test_write_data3(
     gulong id = nfc_tag_add_initialized_handler(tag,
         test_write_data3_start, loop);
 
-    test_run_loop(loop);
+    test_run(&test_opt, loop);
 
     /* Contents should be wiped (test a few more bytes then we have written) */
     for (i = 0; i < NDEF_GOOGLE_COM_SIZE_ALIGNED; i++) {
@@ -1722,7 +1687,7 @@ test_write_data3(
         NULL, NULL));
     g_assert(nfc_tag_t2_write_data(t2, TEST_WRITE_DATA3_CHUNK, chunk2,
         test_write_data3_done_chunk2, test_destroy_quit_loop, loop));
-    test_run_loop(loop);
+    test_run(&test_opt, loop);
 
     /* Check the contents */
     g_assert(!memcmp(test->data.bytes + TEST_DATA_OFFSET, jolla_rec,
@@ -1787,7 +1752,7 @@ test_write_err1(
     error.type = TEST_TARGET_ERROR_TRANSMIT;
     test->write_error = &error;
 
-    test_run_loop(loop);
+    test_run(&test_opt, loop);
 
     /* Make sure nothing has been written */
     g_assert(!memcmp(test->data.bytes, TEST_ARRAY_AND_SIZE(test_data_google)));
@@ -1849,7 +1814,7 @@ test_write_data_err1(
     error.type = TEST_TARGET_ERROR_TRANSMIT;
     test->write_error = &error;
 
-    test_run_loop(loop);
+    test_run(&test_opt, loop);
 
     /* Make sure nothing has been written */
     g_assert(!memcmp(test->data.bytes, TEST_ARRAY_AND_SIZE(test_data_google)));
@@ -1914,7 +1879,7 @@ test_write_data_err2(
     error.type = TEST_TARGET_ERROR_TRANSMIT;
     test->read_error = &error;
 
-    test_run_loop(loop);
+    test_run(&test_opt, loop);
 
     /* Make sure nothing has been written */
     g_assert(!memcmp(test->data.bytes, TEST_ARRAY_AND_SIZE(test_data_google)));

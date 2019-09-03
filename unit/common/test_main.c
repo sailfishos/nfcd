@@ -34,7 +34,6 @@
 
 #include <gutil_log.h>
 
-static
 gboolean
 test_timeout_expired(
     gpointer data)

@@ -48,6 +48,10 @@ test_init(
     char* argv[]);
 
 /* Run loop with a timeout */
+gboolean
+test_timeout_expired(
+    gpointer data);
+
 void
 test_run(
     const TestOpt* opt,
