@@ -35,6 +35,7 @@
 
 #include <nfc_tag.h>
 #include <nfc_tag_t2.h>
+#include <nfc_tag_t4.h>
 #include <nfc_target.h>
 #include <nfc_ndef.h>
 
@@ -112,6 +113,7 @@ struct dbus_service_tag {
     gulong call_id[CALL_COUNT];
     const char** interfaces;
     DBusServiceTagType2* t2;
+    DBusServiceIsoDep* isodep;
 };
 
 #define NFC_DBUS_TAG_INTERFACE "org.sailfishos.nfc.Tag"
@@ -342,6 +344,15 @@ dbus_service_tag_export_all(
         self->t2 = dbus_service_tag_t2_new(NFC_TAG_T2(tag), self);
         if (self->t2) {
             const char* iface = NFC_DBUS_TAG_T2_INTERFACE;
+            GDEBUG("Adding %s", iface);
+            g_ptr_array_add(interfaces, (gpointer)iface);
+        }
+    }
+
+    if (NFC_IS_TAG_T4(tag)) {
+        self->isodep = dbus_service_isodep_new(NFC_TAG_T4(tag), self);
+        if (self->isodep) {
+            const char* iface = NFC_DBUS_ISODEP_INTERFACE;
             GDEBUG("Adding %s", iface);
             g_ptr_array_add(interfaces, (gpointer)iface);
         }
@@ -766,6 +777,7 @@ dbus_service_tag_free_unexported(
 
     g_slist_free_full(self->ndefs, dbus_service_tag_free_ndef_rec);
     g_slist_free_full(self->lock_waters, dbus_service_tag_lock_waiter_free1);
+    dbus_service_isodep_free(self->isodep);
     dbus_service_tag_t2_free(self->t2);
     dbus_service_tag_lock_free(self->lock);
 

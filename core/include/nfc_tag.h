@@ -67,6 +67,11 @@ struct nfc_param_poll_a {
     GUtilData nfcid1;
 };
 
+struct nfc_param_poll_b {
+    guint fsc;      /* FSC (FSCI converted to bytes) */
+    GUtilData nfcid0;
+};
+
 typedef
 void
 (*NfcTagFunc)(

@@ -32,7 +32,7 @@
 
 #include "nfc_adapter_p.h"
 #include "nfc_tag_p.h"
-#include "nfc_tag_t2.h"
+#include "nfc_tag_t4_p.h"
 #include "nfc_log.h"
 
 #include <gutil_misc.h>
@@ -281,7 +281,7 @@ nfc_adapter_add_tag(
     NfcTag* tag)
 {
     /* This function takes ownership of the tag */
-    if (tag->present) {
+    if (tag && tag->present) {
         NfcAdapterPriv* priv = self->priv;
         NfcAdapterTagEntry* entry = g_slice_new(NfcAdapterTagEntry);
         char* name = g_strdup_printf(NFC_TAG_NAME_FORMAT, priv->next_tag_index);
@@ -399,6 +399,40 @@ nfc_adapter_add_tag_t2(
 
         if (t2) {
             return nfc_adapter_add_tag(self, NFC_TAG(t2));
+        }
+    }
+    return NULL;
+}
+
+NfcTag*
+nfc_adapter_add_tag_t4a(
+    NfcAdapter* self,
+    NfcTarget* target,
+    const NfcParamPollA* tech_param,
+    const NfcParamIsoDepPollA* iso_dep_param) /* Since 1.0.20 */
+{
+    if (G_LIKELY(self) && G_LIKELY(target)) {
+        NfcTagType4a* t4a = nfc_tag_t4a_new(target, tech_param, iso_dep_param);
+
+        if (t4a) {
+            return nfc_adapter_add_tag(self, NFC_TAG(t4a));
+        }
+    }
+    return NULL;
+}
+
+NfcTag*
+nfc_adapter_add_tag_t4b(
+    NfcAdapter* self,
+    NfcTarget* target,
+    const NfcParamPollB* tech_param,
+    const NfcParamIsoDepPollB* iso_dep_param) /* Since 1.0.20 */
+{
+    if (G_LIKELY(self) && G_LIKELY(target)) {
+        NfcTagType4b* t4b = nfc_tag_t4b_new(target, tech_param, iso_dep_param);
+
+        if (t4b) {
+            return nfc_adapter_add_tag(self, NFC_TAG(t4b));
         }
     }
     return NULL;

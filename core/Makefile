@@ -41,6 +41,9 @@ SRC = \
   nfc_plugin.c \
   nfc_tag.c \
   nfc_tag_t2.c \
+  nfc_tag_t4.c \
+  nfc_tag_t4a.c \
+  nfc_tag_t4b.c \
   nfc_target.c \
   nfc_tlv.c \
   nfc_util.c

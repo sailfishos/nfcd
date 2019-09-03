@@ -1,0 +1,28 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <!-- ISO-DEP specific extensions to org.sailfishos.nfc.Tag -->
+  <interface name="org.sailfishos.nfc.IsoDep">
+    <method name="GetAll">
+      <arg name="version" type="i" direction="out"/>
+    </method>
+    <method name="GetInterfaceVersion">
+      <arg name="version" type="i" direction="out"/>
+    </method>
+    <method name="Transmit">
+      <arg name="CLA" type="y" direction="in"/>
+      <arg name="INS" type="y" direction="in"/>
+      <arg name="P1" type="y" direction="in"/>
+      <arg name="P2" type="y" direction="in"/>
+      <arg name="data" type="ay" direction="in">
+        <annotation name="org.gtk.GDBus.C.ForceGVariant" value="true"/>
+      </arg>
+      <arg name="Le" type="u" direction="in"/>
+      <arg name="response" type="ay" direction="out">
+        <annotation name="org.gtk.GDBus.C.ForceGVariant" value="true"/>
+      </arg>
+      <arg name="SW1" type="y" direction="out"/>
+      <arg name="SW2" type="y" direction="out"/>
+    </method>
+  </interface>
+</node>
