@@ -223,6 +223,8 @@ test_null(
     g_assert(!nfc_adapter_ref(NULL));
     g_assert(!nfc_adapter_request_mode(NULL, 0));
     g_assert(!nfc_adapter_add_tag_t2(NULL, NULL, NULL));
+    g_assert(!nfc_adapter_add_tag_t4a(NULL, NULL, NULL, NULL));
+    g_assert(!nfc_adapter_add_tag_t4b(NULL, NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_other_tag(NULL, NULL));
     g_assert(!nfc_adapter_add_target_presence_handler(NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_tag_added_handler(NULL, NULL, NULL));
@@ -267,6 +269,8 @@ test_basic(
     g_assert(!nfc_adapter_add_mode_requested_handler(adapter, NULL, NULL));
     g_assert(!nfc_adapter_add_enabled_changed_handler(adapter, NULL, NULL));
     g_assert(!nfc_adapter_add_tag_t2(adapter, NULL, NULL));
+    g_assert(!nfc_adapter_add_tag_t4a(adapter, NULL, NULL, NULL));
+    g_assert(!nfc_adapter_add_tag_t4b(adapter, NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_other_tag(adapter, NULL));
     nfc_adapter_remove_handler(adapter, 0);
 

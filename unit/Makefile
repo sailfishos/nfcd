@@ -13,6 +13,7 @@ all:
 	@$(MAKE) -C core_plugins $*
 	@$(MAKE) -C core_tag $*
 	@$(MAKE) -C core_tag_t2 $*
+	@$(MAKE) -C core_tag_t4 $*
 	@$(MAKE) -C core_target $*
 	@$(MAKE) -C core_tlv $*
 	@$(MAKE) -C core_util $*

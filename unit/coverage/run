@@ -15,6 +15,7 @@ core_plugin \
 core_plugins \
 core_tag \
 core_tag_t2 \
+core_tag_t4 \
 core_target \
 core_tlv \
 core_util \
