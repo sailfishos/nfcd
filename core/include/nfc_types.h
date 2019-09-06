@@ -47,10 +47,16 @@ typedef struct nfc_plugin NfcPlugin;
 typedef struct nfc_plugin_desc NfcPluginDesc;
 typedef struct nfc_tag NfcTag;
 typedef struct nfc_tag_t2 NfcTagType2;
+typedef struct nfc_tag_t4 NfcTagType4;   /* Since 1.0.20 */
+typedef struct nfc_tag_t4a NfcTagType4a; /* Since 1.0.20 */
+typedef struct nfc_tag_t4b NfcTagType4b; /* Since 1.0.20 */
 typedef struct nfc_target NfcTarget;
 typedef struct nfc_target_sequence NfcTargetSequence;
 
 typedef struct nfc_param_poll_a NfcParamPollA;  /* Since 1.0.8 */
+typedef struct nfc_param_poll_b NfcParamPollB;  /* Since 1.0.20 */
+typedef struct nfc_param_iso_dep_poll_a NfcParamIsoDepPollA; /* Since 1.0.20 */
+typedef struct nfc_param_iso_dep_poll_b NfcParamIsoDepPollB; /* Since 1.0.20 */
 typedef NfcParamPollA NfcTagParamT2; /* For backward compatibility */
 
 /* Constants */

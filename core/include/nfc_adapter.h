@@ -105,6 +105,20 @@ nfc_adapter_add_tag_t2(
     const NfcTagParamT2* params);
 
 NfcTag*
+nfc_adapter_add_tag_t4a(
+    NfcAdapter* adapter,
+    NfcTarget* target,
+    const NfcParamPollA* tech_param,
+    const NfcParamIsoDepPollA* iso_dep_param); /* Since 1.0.20 */
+
+NfcTag*
+nfc_adapter_add_tag_t4b(
+    NfcAdapter* adapter,
+    NfcTarget* target,
+    const NfcParamPollB* tech_param,
+    const NfcParamIsoDepPollB* iso_dep_param); /* Since 1.0.20 */
+
+NfcTag*
 nfc_adapter_add_other_tag(
     NfcAdapter* adapter,
     NfcTarget* target);
