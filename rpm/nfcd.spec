@@ -9,13 +9,15 @@ Source: %{name}-%{version}.tar.bz2
 
 %define libglibutil_version 1.0.38
 %define libdbuslog_version 1.0.14
+%define glib_version 2.32
 
-BuildRequires: pkgconfig(glib-2.0)
+BuildRequires: pkgconfig(glib-2.0) >= %{glib_version}
 BuildRequires: pkgconfig(libmce-glib)
 BuildRequires: pkgconfig(libdbusaccess)
 BuildRequires: pkgconfig(libglibutil) >= %{libglibutil_version}
 BuildRequires: pkgconfig(libdbuslogserver-gio) >= %{libdbuslog_version}
 BuildRequires: file-devel
+Requires: glib-2.0 >= %{glib_version}
 Requires: libglibutil >= %{libglibutil_version}
 Requires: libdbuslogserver-gio >= %{libdbuslog_version}
 Requires: systemd

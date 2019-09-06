@@ -80,8 +80,7 @@ dbus_service_tag_t2_dup_data_as_variant(
     guint size)
 {
     return size ?
-        g_variant_new_from_data(G_VARIANT_TYPE("ay"), data, size, TRUE,
-            g_free, g_memdup(data, size)) :
+        g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE, data, size, 1) :
         g_variant_new_from_data(G_VARIANT_TYPE("ay"), NULL, 0, TRUE,
             NULL, NULL);
 }
