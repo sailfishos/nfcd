@@ -1,6 +1,7 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +15,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -71,14 +72,58 @@ dbus_neard_tag_export_record(
 {
     OrgNeardRecord* iface = NULL;
 
-    if (G_TYPE_CHECK_INSTANCE_TYPE(rec, NFC_TYPE_NDEF_REC_U)) {
+    /* Set up D-Bus object */
+    if (NFC_IS_NDEF_REC_U(rec)) {
         NfcNdefRecU* uri_rec = NFC_NDEF_REC_U(rec);
 
-        /* Set up D-Bus object */
         GASSERT(rec->rtd == NFC_NDEF_RTD_URI);
         iface = org_neard_record_skeleton_new();
         org_neard_record_set_type_(iface, "URI");
         org_neard_record_set_uri(iface, uri_rec->uri);
+    } else if (NFC_IS_NDEF_REC_T(rec)) {
+        NfcNdefRecT* text_rec = NFC_NDEF_REC_T(rec);
+
+        GASSERT(rec->rtd == NFC_NDEF_RTD_TEXT);
+        iface = org_neard_record_skeleton_new();
+        org_neard_record_set_type_(iface, "Text");
+        org_neard_record_set_encoding(iface, "UTF-8");
+        org_neard_record_set_representation(iface, text_rec->text);
+        if (text_rec->lang && text_rec->lang[0]) {
+            org_neard_record_set_language(iface, text_rec->lang);
+        }
+    } else if (NFC_IS_NDEF_REC_SP(rec)) {
+        NfcNdefRecSp* sp_rec = NFC_NDEF_REC_SP(rec);
+
+        GASSERT(rec->rtd == NFC_NDEF_RTD_TEXT);
+        iface = org_neard_record_skeleton_new();
+        org_neard_record_set_type_(iface, "SmartPoster");
+        org_neard_record_set_uri(iface, sp_rec->uri);
+        org_neard_record_set_encoding(iface, "UTF-8");
+        if (sp_rec->title && sp_rec->title[0]) {
+            org_neard_record_set_representation(iface, sp_rec->title);
+            if (sp_rec->lang && sp_rec->lang[0]) {
+                org_neard_record_set_language(iface, sp_rec->lang);
+            }
+        }
+        if (sp_rec->type && sp_rec->type[0]) {
+            org_neard_record_set_mimetype(iface, sp_rec->type);
+        }
+        if (sp_rec->size) {
+            org_neard_record_set_size(iface, sp_rec->size);
+        }
+        switch (sp_rec->act) {
+        case NFC_NDEF_SP_ACT_OPEN:
+            org_neard_record_set_action(iface, "Do");
+            break;
+        case NFC_NDEF_SP_ACT_SAVE:
+            org_neard_record_set_action(iface, "Save");
+            break;
+        case NFC_NDEF_SP_ACT_EDIT:
+            org_neard_record_set_action(iface, "Edit");
+            break;
+        case NFC_NDEF_SP_ACT_DEFAULT:
+            break;
+        }
     }
 
     if (iface) {
