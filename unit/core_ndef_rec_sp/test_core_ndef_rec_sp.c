@@ -654,10 +654,10 @@ test_valid_check(
     g_assert(sp->size == test->size);
     g_assert(sp->act == test->act);
     if (test->icon.data.bytes) {
-        g_assert_nonnull(sp->icon);
+        g_assert(sp->icon);
         g_assert(!g_strcmp0(sp->icon->type, test->icon.type));
     } else {
-        g_assert_null(sp->icon);
+        g_assert(!sp->icon);
     }
 }
 
@@ -701,7 +701,7 @@ test_encode(
     test_system_locale = test->locale;
     enc = nfc_ndef_rec_sp_new(test->uri, test->title, test->lang, test->type,
         test->size, test->act, test->icon.data.bytes ? &test->icon : NULL);
-    g_assert_nonnull(enc);
+    g_assert(enc);
     GDEBUG("Encoded record:");
     test_dump_data(&enc->rec.raw);
     test_valid_check(enc, test);
@@ -777,7 +777,7 @@ test_invalid(
     ndef.type_offset = 3;
     ndef.type_length = ndef.rec.bytes[1];
 
-    g_assert_null(nfc_ndef_rec_sp_new_from_data(&ndef));
+    g_assert(!nfc_ndef_rec_sp_new_from_data(&ndef));
 
     /* nfc_ndef_rec_new turns it into a generic record */
     rec = nfc_ndef_rec_new(&test->rec);
@@ -795,6 +795,9 @@ int main(int argc, char* argv[])
 {
     guint i;
 
+    G_GNUC_BEGIN_IGNORE_DEPRECATIONS;
+    g_type_init();
+    G_GNUC_END_IGNORE_DEPRECATIONS;
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("null"), test_null);
     for (i = 0; i < G_N_ELEMENTS(valid_tests); i++) {

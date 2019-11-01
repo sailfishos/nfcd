@@ -73,6 +73,12 @@ typedef struct dbus_service_tag_t2_async_call {
     GDBusMethodInvocation* call;
 } DBusServiceTagType2AsyncCall;
 
+/* g_variant_get_data_as_bytes() function appeared in glib 2.36 */
+#define g_variant_get_data_as_bytes(data) \
+    g_bytes_new_with_free_func(g_variant_get_data(data), \
+      g_variant_get_size(data), (GDestroyNotify) g_variant_unref, \
+      g_variant_ref(data));
+
 static
 GVariant*
 dbus_service_tag_t2_dup_data_as_variant(

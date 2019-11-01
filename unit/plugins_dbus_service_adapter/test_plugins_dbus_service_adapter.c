@@ -64,9 +64,9 @@ test_data_init(
 
     memset(test, 0, sizeof(*test));
     memset(&pi, 0, sizeof(pi));
-    g_assert_nonnull(test->manager = nfc_manager_new(&pi));
-    g_assert_nonnull(test->adapter = test_adapter_new());
-    g_assert_nonnull(nfc_manager_add_adapter(test->manager, test->adapter));
+    g_assert((test->manager = nfc_manager_new(&pi)) != NULL);
+    g_assert((test->adapter = test_adapter_new()) != NULL);
+    g_assert(nfc_manager_add_adapter(test->manager, test->adapter));
     test->loop = g_main_loop_new(NULL, TRUE);
 }
 
@@ -91,7 +91,7 @@ test_start_and_get(
     GAsyncReadyCallback callback)
 {
     test->service = dbus_service_adapter_new(test->adapter, server);
-    g_assert_nonnull(test->service);
+    g_assert(test->service);
     g_dbus_connection_call(client, NULL,
         dbus_service_adapter_path(test->service), NFC_ADAPTER_INTERFACE,
         method, NULL, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL, callback, test);
@@ -124,14 +124,14 @@ test_basic_start(
     const char* path;
 
     test->service = dbus_service_adapter_new(test->adapter, server);
-    g_assert_nonnull(test->service);
+    g_assert(test->service);
     path = dbus_service_adapter_path(test->service);
-    g_assert_nonnull(path);
+    g_assert(path);
     g_assert(path[0] == '/');
     g_assert_cmpstr(path + 1, ==, test->adapter->name);
 
     /* Can't register two D-Bus objects for the same path */
-    g_assert_null(dbus_service_adapter_new(test->adapter, server));
+    g_assert(!dbus_service_adapter_new(test->adapter, server));
     test_quit_later(test->loop);
 }
 
@@ -169,16 +169,16 @@ test_get_all_done(
     GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
         result, NULL);
 
-    g_assert_nonnull(var);
+    g_assert(var);
     g_variant_get(var, "(ibbuub^ao)", &version, &enabled, &powered,
         &modes, &mode, &target_present, &tags);
     GDEBUG("version=%d, enabled=%d, powered=%d, modes=%0x04X, mode=0x%04X, "
         "target_present=%d, %u tags", version, enabled, powered, modes, mode,
          target_present, g_strv_length(tags));
     g_assert(version >= 1);
-    g_assert_true(enabled);
-    g_assert_false(powered);
-    g_assert_false(target_present);
+    g_assert(enabled);
+    g_assert(!powered);
+    g_assert(!target_present);
     g_variant_unref(var);
     g_strfreev(tags);
     test_quit_later(test->loop);
@@ -226,7 +226,7 @@ test_get_interface_version_done(
     GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
         result, NULL);
 
-    g_assert_nonnull(var);
+    g_assert(var);
     g_variant_get(var, "(i)", &version);
     GDEBUG("version=%d", version);
     g_assert(version >= 1);
@@ -276,10 +276,10 @@ test_get_enabled_done(
     GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
         result, NULL);
 
-    g_assert_nonnull(var);
+    g_assert(var);
     g_variant_get(var, "(b)", &enabled);
     GDEBUG("enabled=%d", enabled);
-    g_assert_true(enabled);
+    g_assert(enabled);
     g_variant_unref(var);
     test_quit_later(test->loop);
 }
@@ -326,10 +326,10 @@ test_get_powered_done(
     GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
         result, NULL);
 
-    g_assert_nonnull(var);
+    g_assert(var);
     g_variant_get(var, "(b)", &powered);
     GDEBUG("powered=%d", powered);
-    g_assert_false(powered);
+    g_assert(!powered);
     g_variant_unref(var);
     test_quit_later(test->loop);
 }
@@ -376,7 +376,7 @@ test_get_supported_modes_done(
     GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
         result, NULL);
 
-    g_assert_nonnull(var);
+    g_assert(var);
     g_variant_get(var, "(u)", &modes);
     GDEBUG("modes=0x%04X", modes);
     g_variant_unref(var);
@@ -425,7 +425,7 @@ test_get_mode_done(
     GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
         result, NULL);
 
-    g_assert_nonnull(var);
+    g_assert(var);
     g_variant_get(var, "(u)", &mode);
     GDEBUG("mode=0x%04X", mode);
     g_assert(mode == 0);
@@ -475,10 +475,10 @@ test_get_target_present_done(
     GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
         result, NULL);
 
-    g_assert_nonnull(var);
+    g_assert(var);
     g_variant_get(var, "(b)", &target_present);
     GDEBUG("target_present=%d", target_present);
-    g_assert_false(target_present);
+    g_assert(!target_present);
     g_variant_unref(var);
     test_quit_later(test->loop);
 }
@@ -525,9 +525,9 @@ test_get_tags_done(
     GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
         result, NULL);
 
-    g_assert_nonnull(var);
+    g_assert(var);
     g_variant_get(var, "(^ao)", &tags);
-    g_assert_nonnull(tags);
+    g_assert(tags);
     GDEBUG("%u tag(s)", g_strv_length(tags));
     g_assert(g_strv_length(tags) == 2);
     g_variant_unref(var);
@@ -546,11 +546,11 @@ test_get_tags_start(
     NfcTarget* target;
 
     test->service = dbus_service_adapter_new(test->adapter, server);
-    g_assert_nonnull(test->service);
+    g_assert(test->service);
 
     /* Add second tag after creating DBusServiceAdapter */
     target = test_target_new();
-    g_assert_nonnull(nfc_adapter_add_other_tag(test->adapter, target));
+    g_assert(nfc_adapter_add_other_tag(test->adapter, target));
     nfc_target_unref(target);
 
     g_dbus_connection_call(client, NULL,
@@ -572,7 +572,7 @@ test_get_tags(
 
     /* Add one tag before creating DBusServiceAdapter */
     target = test_target_new();
-    g_assert_nonnull(nfc_adapter_add_other_tag(test.adapter, target));
+    g_assert(nfc_adapter_add_other_tag(test.adapter, target));
     nfc_target_unref(target);
 
     dbus = test_dbus_new(test_get_tags_start, &test);
@@ -615,7 +615,7 @@ test_enabled_changed_start(
     TestData* test = user_data;
 
     test->service = dbus_service_adapter_new(test->adapter, server);
-    g_assert_nonnull(test->service);
+    g_assert(test->service);
 
     g_assert(g_dbus_connection_signal_subscribe(client, NULL,
         NFC_ADAPTER_INTERFACE, "EnabledChanged",
@@ -676,7 +676,7 @@ test_powered_changed_start(
     TestData* test = user_data;
 
     test->service = dbus_service_adapter_new(test->adapter, server);
-    g_assert_nonnull(test->service);
+    g_assert(test->service);
 
     g_assert(g_dbus_connection_signal_subscribe(client, NULL,
         NFC_ADAPTER_INTERFACE, "PoweredChanged",
@@ -738,7 +738,7 @@ test_mode_changed_start(
     TestData* test = user_data;
 
     test->service = dbus_service_adapter_new(test->adapter, server);
-    g_assert_nonnull(test->service);
+    g_assert(test->service);
 
     g_assert(g_dbus_connection_signal_subscribe(client, NULL,
         NFC_ADAPTER_INTERFACE, "ModeChanged",
@@ -785,7 +785,7 @@ test_tag_added_handler(
     gchar** tags = NULL;
 
     g_variant_get(args, "(^ao)", &tags);
-    g_assert_nonnull(tags);
+    g_assert(tags);
     GDEBUG("%u tag(s)", g_strv_length(tags));
     g_assert(g_strv_length(tags) == 1);
     g_strfreev(tags);
@@ -803,7 +803,7 @@ test_tag_added_start(
     NfcTarget* target;
 
     test->service = dbus_service_adapter_new(test->adapter, server);
-    g_assert_nonnull(test->service);
+    g_assert(test->service);
 
     g_assert(g_dbus_connection_signal_subscribe(client, NULL,
         NFC_ADAPTER_INTERFACE, "TagsChanged",
@@ -813,7 +813,7 @@ test_tag_added_start(
 
     /* Add a tag */
     target = test_target_new();
-    g_assert_nonnull(nfc_adapter_add_other_tag(test->adapter, target));
+    g_assert(nfc_adapter_add_other_tag(test->adapter, target));
     nfc_target_unref(target);
 }
 
@@ -851,7 +851,7 @@ test_tag_removed_handler(
     gchar** tags = NULL;
 
     g_variant_get(args, "(^ao)", &tags);
-    g_assert_nonnull(tags);
+    g_assert(tags);
     GDEBUG("%u tag(s)", g_strv_length(tags));
     g_assert(g_strv_length(tags) == 0);
     g_strfreev(tags);
@@ -869,7 +869,7 @@ test_tag_removed_start(
     NfcTarget* target;
 
     test->service = dbus_service_adapter_new(test->adapter, server);
-    g_assert_nonnull(test->service);
+    g_assert(test->service);
 
     g_assert(g_dbus_connection_signal_subscribe(client, NULL,
         NFC_ADAPTER_INTERFACE, "TagsChanged",
@@ -896,7 +896,7 @@ test_tag_removed(
     test_data_init(&test);
 
     target = test_target_new();
-    g_assert_nonnull(nfc_adapter_add_other_tag(test.adapter, target));
+    g_assert(nfc_adapter_add_other_tag(test.adapter, target));
     nfc_target_unref(target);
 
     dbus = test_dbus_new(test_tag_removed_start, &test);
@@ -913,6 +913,9 @@ test_tag_removed(
 
 int main(int argc, char* argv[])
 {
+    G_GNUC_BEGIN_IGNORE_DEPRECATIONS;
+    g_type_init();
+    G_GNUC_END_IGNORE_DEPRECATIONS;
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("null"), test_null);
     g_test_add_func(TEST_("basic"), test_basic);

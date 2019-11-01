@@ -114,7 +114,8 @@ test_start(
     g_assert(g_bus_own_name_on_connection(server, TEST_SERVICE,
         G_BUS_NAME_OWNER_FLAGS_NONE, NULL, NULL, test, NULL));
 
-    g_assert_nonnull(test->handlers = dbus_handlers_new(client, test->dir));
+    test->handlers = dbus_handlers_new(client, test->dir);
+    g_assert(test->handlers);
     dbus_handlers_run(test->handlers, test->rec);
 }
 
@@ -188,7 +189,8 @@ test_cancel_start(
 
     /* dbus_handlers_new will fail without config dir */
     g_assert(!dbus_handlers_new(client, NULL));
-    g_assert_nonnull(handlers = dbus_handlers_new(client, test->dir));
+    handlers = dbus_handlers_new(client, test->dir);
+    g_assert(handlers);
     dbus_handlers_run(handlers, NULL); /* This one has no effect */
     dbus_handlers_run(handlers, test->rec);
     dbus_handlers_free(handlers); /* Immediately cancel the run */
@@ -750,6 +752,9 @@ test_no_return(
 
 int main(int argc, char* argv[])
 {
+    G_GNUC_BEGIN_IGNORE_DEPRECATIONS;
+    g_type_init();
+    G_GNUC_END_IGNORE_DEPRECATIONS;
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("null"), test_null);
     g_test_add_func(TEST_("cancel_handler"), test_cancel_handler);

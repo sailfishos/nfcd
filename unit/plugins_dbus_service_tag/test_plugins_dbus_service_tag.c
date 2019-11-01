@@ -76,14 +76,14 @@ test_data_init(
     g_assert(!test_name_watches);
     memset(test, 0, sizeof(*test));
     memset(&pi, 0, sizeof(pi));
-    g_assert_nonnull(test->manager = nfc_manager_new(&pi));
-    g_assert_nonnull(test->adapter = test_adapter_new());
+    g_assert((test->manager = nfc_manager_new(&pi)) != NULL);
+    g_assert((test->adapter = test_adapter_new()) != NULL);
 
     target = test_target_new();
     g_assert(nfc_adapter_add_other_tag(test->adapter, target));
     nfc_target_unref(target);
 
-    g_assert_nonnull(nfc_manager_add_adapter(test->manager, test->adapter));
+    g_assert(nfc_manager_add_adapter(test->manager, test->adapter));
     test->loop = g_main_loop_new(NULL, TRUE);
     test->pool = gutil_idle_pool_new();
 }
@@ -112,8 +112,8 @@ test_tag_path(
 {
     char* path;
 
-    g_assert_nonnull(test->service);
-    g_assert_nonnull(tag);
+    g_assert(test->service);
+    g_assert(tag);
     path = g_strconcat(dbus_service_adapter_path(test->service), "/",
         tag->name, NULL);
     gutil_idle_pool_add(test->pool, path, g_free);
@@ -129,7 +129,7 @@ test_call_get(
 {
     NfcTag* tag = test->adapter->tags[0];
 
-    g_assert_nonnull(test->connection);
+    g_assert(test->connection);
     g_dbus_connection_call(test->connection, NULL, test_tag_path(test, tag),
         NFC_TAG_INTERFACE, method, NULL, NULL, G_DBUS_CALL_FLAGS_NONE, -1,
         NULL, callback, test);
@@ -142,7 +142,7 @@ test_call_acquire(
     gboolean wait,
     GAsyncReadyCallback callback)
 {
-    g_assert_nonnull(test->connection);
+    g_assert(test->connection);
     g_dbus_connection_call(test->connection, NULL,
         test_tag_path(test, test->adapter->tags[0]), NFC_TAG_INTERFACE,
         "Acquire", g_variant_new("(b)", wait), NULL, G_DBUS_CALL_FLAGS_NONE,
@@ -155,7 +155,7 @@ test_call_release(
     TestData* test,
     GAsyncReadyCallback callback)
 {
-    g_assert_nonnull(test->connection);
+    g_assert(test->connection);
     g_dbus_connection_call(test->connection, NULL,
         test_tag_path(test, test->adapter->tags[0]), NFC_TAG_INTERFACE,
         "Release", NULL, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,
@@ -171,7 +171,7 @@ test_complete_ok(
     GError* error = NULL;
     GVariant* out = g_dbus_connection_call_finish(connection, result, &error);
 
-    g_assert_nonnull(out);
+    g_assert(out);
     g_variant_unref(out);
 }
 
@@ -185,7 +185,7 @@ test_complete_error(
     GError* error = NULL;
 
     /* This call is expected to fail with org.sailfishos.nfc.Error.Aborted */
-    g_assert_null(g_dbus_connection_call_finish(connection, result, &error));
+    g_assert(!g_dbus_connection_call_finish(connection, result, &error));
     g_assert(error->domain == DBUS_SERVICE_ERROR);
     g_assert(error->code == code);
     g_error_free(error);
@@ -202,7 +202,7 @@ test_start_and_get(
 {
     g_object_ref(test->connection = client);
     test->service = dbus_service_adapter_new(test->adapter, server);
-    g_assert_nonnull(test->service);
+    g_assert(test->service);
     test_call_get(test, method, callback);
 }
 
@@ -329,7 +329,7 @@ test_null(
     void)
 {
     dbus_service_tag_free(NULL);
-    g_assert_null(dbus_service_tag_sequence(NULL, NULL));
+    g_assert(!dbus_service_tag_sequence(NULL, NULL));
 }
 
 /*==========================================================================*
@@ -349,13 +349,13 @@ test_basic_start(
 
     nfc_tag_set_initialized(tag);
     test->service = dbus_service_adapter_new(test->adapter, server);
-    g_assert_nonnull(test->service);
+    g_assert(test->service);
 
     /* Can't register two D-Bus objects for the same path */
-    g_assert_null(dbus_service_tag_new(tag,
+    g_assert(!dbus_service_tag_new(tag,
         dbus_service_adapter_path(test->service), server));
 
-    g_assert_nonnull(seq = nfc_target_sequence_new(tag->target));
+    g_assert((seq = nfc_target_sequence_new(tag->target)) != NULL);
     nfc_target_sequence_unref(seq);
 
     test_quit_later(test->loop);
@@ -396,16 +396,16 @@ test_get_all_done(
     GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
         result, NULL);
 
-    g_assert_nonnull(var);
+    g_assert(var);
     g_variant_get(var, "(ibuuu^as^ao)", &version, &present, &tech,
         &protocol, &type, &ifaces, &records);
-    g_assert_nonnull(ifaces);
-    g_assert_nonnull(records);
+    g_assert(ifaces);
+    g_assert(records);
     GDEBUG("version=%d, present=%d, tech=%u, protocol=%u, type=%u, "
         "%u interface(s), %u record(s)", version, present, tech, protocol,
            type, g_strv_length(ifaces), g_strv_length(records));
     g_assert(version >= MIN_INTERFACE_VERSION);
-    g_assert_true(present);
+    g_assert(present);
     g_assert(tech == NFC_TECHNOLOGY_UNKNOWN);
     g_assert(protocol == NFC_PROTOCOL_UNKNOWN);
     g_assert(g_strv_length(records) == 0);
@@ -459,7 +459,7 @@ test_get_interface_version_done(
     GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
         result, NULL);
 
-    g_assert_nonnull(var);
+    g_assert(var);
     g_variant_get(var, "(i)", &version);
     GDEBUG("version=%d", version);
     g_assert(version >= MIN_INTERFACE_VERSION);
@@ -509,10 +509,10 @@ test_get_present_done(
     GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
         result, NULL);
 
-    g_assert_nonnull(var);
+    g_assert(var);
     g_variant_get(var, "(b)", &present);
     GDEBUG("present=%d", present);
-    g_assert_true(present);
+    g_assert(present);
     g_variant_unref(var);
     test_quit_later(test->loop);
 }
@@ -559,7 +559,7 @@ test_get_technology_done(
     GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
         result, NULL);
 
-    g_assert_nonnull(var);
+    g_assert(var);
     g_variant_get(var, "(u)", &tech);
     GDEBUG("tech=%u", tech);
     g_assert(tech == NFC_TECHNOLOGY_UNKNOWN);
@@ -609,7 +609,7 @@ test_get_protocol_done(
     GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
         result, NULL);
 
-    g_assert_nonnull(var);
+    g_assert(var);
     g_variant_get(var, "(u)", &protocol);
     GDEBUG("protocol=%u", protocol);
     g_assert(protocol == NFC_PROTOCOL_UNKNOWN);
@@ -659,7 +659,7 @@ test_get_type_done(
     GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
         result, NULL);
 
-    g_assert_nonnull(var);
+    g_assert(var);
     g_variant_get(var, "(u)", &type);
     GDEBUG("type=%u", type);
     g_assert(type == NFC_TAG_TYPE_UNKNOWN);
@@ -709,9 +709,9 @@ test_get_interfaces_done(
     GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
         result, NULL);
 
-    g_assert_nonnull(var);
+    g_assert(var);
     g_variant_get(var, "(^as)", &ifaces);
-    g_assert_nonnull(ifaces);
+    g_assert(ifaces);
     GDEBUG("%u interface(s)", g_strv_length(ifaces));
     g_strfreev(ifaces);
     g_variant_unref(var);
@@ -763,9 +763,9 @@ test_get_records_done(
     GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
         result, NULL);
 
-    g_assert_nonnull(var);
+    g_assert(var);
     g_variant_get(var, "(^ao)", &records);
-    g_assert_nonnull(records);
+    g_assert(records);
     GDEBUG("%u record(s)", g_strv_length(records));
     g_assert(g_strv_length(records) == 0);
     g_strfreev(records);
@@ -897,7 +897,7 @@ test_early_free2_start(
     test_sender = test_sender_1;
     test->service = dbus_service_adapter_new(test->adapter, server);
     g_object_ref(test->connection = client);
-    g_assert_nonnull(test->service);
+    g_assert(test->service);
     test_call_acquire(test, TRUE, test_early_free2_locked);
 }
 
@@ -931,9 +931,9 @@ test_block_get_interfaces_done(
     GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
         result, NULL);
 
-    g_assert_nonnull(var);
+    g_assert(var);
     g_variant_get(var, "(^as)", &ifaces);
-    g_assert_nonnull(ifaces);
+    g_assert(ifaces);
     GDEBUG("%u interface(s)", g_strv_length(ifaces));
     g_strfreev(ifaces);
     g_variant_unref(var);
@@ -1021,7 +1021,7 @@ test_deactivate_start(
     const char* tag_path;
 
     test->service = dbus_service_adapter_new(test->adapter, server);
-    g_assert_nonnull(test->service);
+    g_assert(test->service);
     tag_path = test_tag_path(test, tag);
 
     g_assert(g_dbus_connection_signal_subscribe(client, NULL,
@@ -1063,7 +1063,7 @@ test_lock_released_3(
     TestData* test = user_data;
     GError* error = NULL;
 
-    g_assert_null(g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
+    g_assert(!g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
         result, &error));
     g_error_free(error);
     GDEBUG("Release failed as expected, done!");
@@ -1138,7 +1138,7 @@ test_lock_start(
     TestData* test = user_data;
 
     test->service = dbus_service_adapter_new(test->adapter, server);
-    g_assert_nonnull(test->service);
+    g_assert(test->service);
     g_object_ref(test->connection = client);
     test_call_acquire(test, TRUE, test_lock_acquired_1);
 }
@@ -1236,7 +1236,7 @@ test_lock_drop_wait_start(
     test_sender = test_sender_1;
     test->service = dbus_service_adapter_new(test->adapter, server);
     g_object_ref(test->connection = client);
-    g_assert_nonnull(test->service);
+    g_assert(test->service);
     test_call_acquire(test, TRUE, test_lock_drop_wait_locked);
 }
 
@@ -1344,7 +1344,7 @@ test_lock_release_wait_start(
     test_sender = test_sender_1;
     test->service = dbus_service_adapter_new(test->adapter, server);
     g_object_ref(test->connection = client);
-    g_assert_nonnull(test->service);
+    g_assert(test->service);
     test_call_acquire(test, TRUE, test_lock_release_wait_locked);
 }
 
@@ -1433,7 +1433,7 @@ test_lock_wait_start(
 
     test_sender = test_sender_1;
     test->service = dbus_service_adapter_new(test->adapter, server);
-    g_assert_nonnull(test->service);
+    g_assert(test->service);
     g_object_ref(test->connection = client);
     test_call_acquire(test, TRUE, test_lock_wait_locked);
 }
@@ -1536,7 +1536,7 @@ test_lock_wait2_start(
 
     test_sender = test_sender_1;
     test->service = dbus_service_adapter_new(test->adapter, server);
-    g_assert_nonnull(test->service);
+    g_assert(test->service);
     g_object_ref(test->connection = client);
     test_call_acquire(test, TRUE, test_lock_wait2_locked);
 }
@@ -1570,7 +1570,7 @@ test_lock_fail_done(
     TestData* test = user_data;
     GError* error = NULL;
 
-    g_assert_null(g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
+    g_assert(!g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
         result, &error));
     g_error_free(error);
     GDEBUG("Second lock failed, good!");
@@ -1602,7 +1602,7 @@ test_lock_fail_start(
 
     test_sender = test_sender_1;
     test->service = dbus_service_adapter_new(test->adapter, server);
-    g_assert_nonnull(test->service);
+    g_assert(test->service);
     g_object_ref(test->connection = client);
     test_call_acquire(test, TRUE, test_lock_fail_locked);
 }
@@ -1630,6 +1630,9 @@ test_lock_fail(
 
 int main(int argc, char* argv[])
 {
+    G_GNUC_BEGIN_IGNORE_DEPRECATIONS;
+    g_type_init();
+    G_GNUC_END_IGNORE_DEPRECATIONS;
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("null"), test_null);
     g_test_add_func(TEST_("basic"), test_basic);
