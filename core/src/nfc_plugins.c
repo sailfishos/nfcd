@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -76,15 +76,6 @@ nfc_plugins_free_plugin_data1(
 }
 
 static
-int
-nfc_plugins_compare_file_names(
-    const void* p1,
-    const void *p2)
-{
-    return strcmp(*(char**)p1, *(char**)p2);
-}
-
-static
 GStrV*
 nfc_plugins_scan_plugin_dir(
     const char* plugin_dir)
@@ -104,10 +95,7 @@ nfc_plugins_scan_plugin_dir(
         g_dir_close(dir);
 
         /* Sort file names to guarantee precedence order in case of conflict */
-        if (files) {
-            qsort(files, gutil_strv_length(files), sizeof(char*),
-                nfc_plugins_compare_file_names);
-        }
+        gutil_strv_sort(files, TRUE);
     }
     return files;
 }
@@ -231,6 +219,35 @@ nfc_plugins_validate_plugin(
     return FALSE;
 }
 
+static
+gboolean
+nfc_plugins_load(
+    NfcPlugins* self,
+    void* handle,
+    const char* path,
+    const NfcPluginsInfo* pi)
+{
+    const char* sym = G_STRINGIFY(NFC_PLUGIN_DESC_SYMBOL);
+    const NfcPluginDesc* desc = dlsym(handle, sym);
+
+    if (desc) {
+        /*
+         * Drop the handle if we are not supposed to unload the
+         * libraries (useful e.g. if running under valgrind)
+         */
+        if (nfc_plugins_validate_plugin(self, desc, path) &&
+            nfc_plugins_create_plugin(self, desc, (GStrV*)pi->enable,
+            (GStrV*)pi->disable, (pi->flags & NFC_PLUGINS_DONT_UNLOAD) ?
+            NULL : handle)) {
+            GDEBUG("Loaded plugin \"%s\" from %s", desc->name, path);
+            return TRUE;
+        }
+    } else {
+        GERR("Symbol \"%s\" not found in %s", sym, path);
+    }
+    return FALSE;
+}
+
 NfcPlugins*
 nfc_plugins_new(
     const NfcPluginsInfo* pi)
@@ -247,41 +264,59 @@ nfc_plugins_new(
 
         if (files) {
             char** ptr = files;
+            int may_try_again = 1;
+            GPtrArray* paths = g_ptr_array_new_with_free_func(g_free);
 
+            /* Build full paths */
             while (*ptr) {
-                const char* file = *ptr++;
-                char* path = g_build_filename(pi->plugin_dir, file, NULL);
-                void* handle = dlopen(path, RTLD_NOW);
+                g_ptr_array_add(paths,
+                    g_build_filename(pi->plugin_dir, *ptr++, NULL));
+            }
 
-                if (handle) {
-                    const char* sym = G_STRINGIFY(NFC_PLUGIN_DESC_SYMBOL);
-                    const NfcPluginDesc* desc = dlsym(handle, sym);
-                    NfcPlugin* plugin = NULL;
+            /*
+             * Keep trying to load plugins until at least one gets loaded
+             * during the loop. Loaded plugins are removed from the list.
+             * More than one loop may be necessary in case when plugins
+             * link to each other.
+             */
+            while (paths->len > 0 && may_try_again) {
+                int i;
 
-                    if (desc) {
-                        if (nfc_plugins_validate_plugin(self, desc, path)) {
-                            /* Drop the handle if we are not supposed to
-                             * unload the libraries (useful e.g. if running
-                             * under valgrind) */
-                            plugin = nfc_plugins_create_plugin(self, desc,
-                                enable, disable, (pi->flags &
-                                    NFC_PLUGINS_DONT_UNLOAD) ? NULL : handle);
-                            if (plugin) {
-                                GDEBUG("Loaded plugin \"%s\" from %s",
-                                    desc->name, path);
-                            }
+                for (i = 0, may_try_again = 0; i < (int) paths->len; i++) {
+                    const char* path = paths->pdata[i];
+                    void* handle = dlopen(path, RTLD_NOW);
+
+                    if (handle) {
+                        if (!nfc_plugins_load(self, handle, path, pi)) {
+                            dlclose(handle);
                         }
+                        g_ptr_array_remove_index(paths, i--);
+                        may_try_again++;
                     } else {
-                        GERR("Symbol \"%s\" not found in %s", sym, path);
+                        /* It's not necessarily fatal yet... */
+                        GDEBUG("Failed to load %s: %s", path, dlerror());
                     }
-                    if (!plugin) {
-                        dlclose(handle);
-                    }
-                } else {
+                }
+            }
+
+            /* One more loop, just to print errors to the log */
+            if (paths->len) {
+                guint i;
+
+                for (i = 0; i < paths->len; i++) {
+                    const char* path = paths->pdata[i];
+                    void* handle = dlopen(path, RTLD_NOW);
+
+                    /*
+                     * They all failed to load at least once, we are
+                     * definitely not expecting them to load now.
+                     */
+                    GASSERT(!handle);
                     GERR("Failed to load %s: %s", path, dlerror());
                 }
-                g_free(path);
             }
+
+            g_ptr_array_free(paths, TRUE);
             g_strfreev(files);
         }
     }
