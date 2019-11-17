@@ -447,7 +447,7 @@ settings_plugin_dbus_handle_set_enabled(
 
 static
 void
-settings_plugin_dbus_name_acquired(
+settings_plugin_dbus_connected(
     GDBusConnection* connection,
     const gchar* name,
     gpointer plugin)
@@ -465,8 +465,18 @@ settings_plugin_dbus_name_acquired(
 
 static
 void
+settings_plugin_dbus_name_acquired(
+    GDBusConnection* connection,
+    const gchar* name,
+    gpointer plugin)
+{
+    GDEBUG("Acquired service name '%s'", name);
+}
+
+static
+void
 settings_plugin_dbus_name_lost(
-    GDBusConnection* bus,
+    GDBusConnection* connection,
     const gchar* name,
     gpointer plugin)
 {
@@ -507,9 +517,9 @@ settings_plugin_start(
         G_CALLBACK(settings_plugin_dbus_handle_set_enabled), self);
 
     self->own_name_id = g_bus_own_name(SETTINGS_G_BUS, SETTINGS_DBUS_SERVICE,
-        G_BUS_NAME_OWNER_FLAGS_REPLACE, NULL,
-        settings_plugin_dbus_name_acquired,
-        settings_plugin_dbus_name_lost, self, NULL);
+        G_BUS_NAME_OWNER_FLAGS_REPLACE, settings_plugin_dbus_connected,
+        settings_plugin_dbus_name_acquired, settings_plugin_dbus_name_lost,
+        self, NULL);
 
     config = settings_plugin_load_config(self);
     self->nfc_always_on = settings_plugin_nfc_always_on(config);

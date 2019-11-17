@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -232,21 +232,7 @@ dbus_service_plugin_handle_get_adapters(
 
 static
 void
-dbus_service_plugin_unexport(
-    DBusServicePlugin* self)
-{
-    g_hash_table_remove_all(self->adapters);
-    if (self->connection) {
-        g_dbus_interface_skeleton_unexport
-            (G_DBUS_INTERFACE_SKELETON(self->iface));
-        g_object_unref(self->connection);
-        self->connection = NULL;
-    }
-}
-
-static
-void
-dbus_service_plugin_name_acquired(
+dbus_service_plugin_bus_connected(
     GDBusConnection* connection,
     const gchar* name,
     gpointer plugin)
@@ -254,9 +240,8 @@ dbus_service_plugin_name_acquired(
     DBusServicePlugin* self = DBUS_SERVICE_PLUGIN(plugin);
     GError* error = NULL;
 
-    GDEBUG("Acquired service name '%s'", name);
-    if (g_dbus_interface_skeleton_export(G_DBUS_INTERFACE_SKELETON
-        (self->iface), connection, NFC_DAEMON_PATH, &error)) {
+    if (g_dbus_interface_skeleton_export(G_DBUS_INTERFACE_SKELETON(self->iface),
+        connection, NFC_DAEMON_PATH, &error)) {
         NfcAdapter** adapters;
 
         g_object_ref(self->connection = connection);
@@ -267,7 +252,19 @@ dbus_service_plugin_name_acquired(
     } else {
         GERR("%s", GERRMSG(error));
         g_error_free(error);
+        /* Tell daemon to exit */
+        nfc_manager_stop(self->manager, NFC_MANAGER_PLUGIN_ERROR);
     }
+}
+
+static
+void
+dbus_service_plugin_name_acquired(
+    GDBusConnection* connection,
+    const gchar* name,
+    gpointer plugin)
+{
+    GDEBUG("Acquired service name '%s'", name);
 }
 
 static
@@ -280,7 +277,6 @@ dbus_service_plugin_name_lost(
     DBusServicePlugin* self = DBUS_SERVICE_PLUGIN(plugin);
 
     GERR("'%s' service already running or access denied", name);
-    dbus_service_plugin_unexport(self);
     /* Tell daemon to exit */
     nfc_manager_stop(self->manager, NFC_MANAGER_PLUGIN_ERROR);
 }
@@ -301,8 +297,9 @@ dbus_service_plugin_start(
     self->manager = nfc_manager_ref(manager);
     self->iface = org_sailfishos_nfc_daemon_skeleton_new();
     self->own_name_id = g_bus_own_name(G_BUS_TYPE_SYSTEM, NFC_SERVICE,
-        G_BUS_NAME_OWNER_FLAGS_REPLACE, NULL, dbus_service_plugin_name_acquired,
-        dbus_service_plugin_name_lost, self, NULL);
+        G_BUS_NAME_OWNER_FLAGS_REPLACE, dbus_service_plugin_bus_connected,
+        dbus_service_plugin_name_acquired, dbus_service_plugin_name_lost,
+        self, NULL);
 
     /* NfcManager events */
     self->event_id[EVENT_ADAPTER_ADDED] =
@@ -334,15 +331,16 @@ dbus_service_plugin_stop(
     DBusServicePlugin* self = DBUS_SERVICE_PLUGIN(plugin);
 
     GVERBOSE("Stopping");
+    gutil_disconnect_handlers(self->iface, self->call_id, CALL_COUNT);
+    g_dbus_interface_skeleton_unexport(G_DBUS_INTERFACE_SKELETON(self->iface));
     g_hash_table_remove_all(self->adapters);
-    if (self->own_name_id) {
-        g_bus_unown_name(self->own_name_id);
-        self->own_name_id = 0;
-    }
-    if (self->manager) {
-        nfc_manager_remove_all_handlers(self->manager, self->event_id);
-        nfc_manager_unref(self->manager);
-        self->manager = NULL;
+    g_object_unref(self->iface);
+    g_bus_unown_name(self->own_name_id);
+    nfc_manager_remove_all_handlers(self->manager, self->event_id);
+    nfc_manager_unref(self->manager);
+    if (self->connection) {
+        g_object_unref(self->connection);
+        self->connection = NULL;
     }
 }
 
@@ -367,11 +365,7 @@ dbus_service_plugin_finalize(
 {
     DBusServicePlugin* self = DBUS_SERVICE_PLUGIN(plugin);
 
-    gutil_idle_pool_drain(self->pool);
-    gutil_idle_pool_unref(self->pool);
-    dbus_service_plugin_unexport(self);
-    gutil_disconnect_handlers(self->iface, self->call_id, CALL_COUNT);
-    g_object_unref(self->iface);
+    gutil_idle_pool_destroy(self->pool);
     g_hash_table_destroy(self->adapters);
     G_OBJECT_CLASS(dbus_service_plugin_parent_class)->finalize(plugin);
 }
