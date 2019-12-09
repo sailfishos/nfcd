@@ -79,8 +79,6 @@ G_DEFINE_TYPE(TestAdapter, test_adapter, NFC_TYPE_ADAPTER)
 #define TEST_TYPE_ADAPTER (test_adapter_get_type())
 #define TEST_ADAPTER(obj) (G_TYPE_CHECK_INSTANCE_CAST(obj, \
         TEST_TYPE_ADAPTER, TestAdapter))
-#define NFC_ADAPTER_CLASS(klass) G_TYPE_CHECK_CLASS_CAST(klass, \
-        NFC_TYPE_ADAPTER, NfcAdapterClass)
 
 TestAdapter*
 test_adapter_new(

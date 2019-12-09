@@ -62,6 +62,9 @@ typedef struct nfc_adapter_class {
     void (*_reserved10)(void);
 } NfcAdapterClass;
 
+#define NFC_ADAPTER_CLASS(klass) G_TYPE_CHECK_CLASS_CAST((klass), \
+        NFC_TYPE_ADAPTER, NfcAdapterClass)
+
 void
 nfc_adapter_mode_notify(
     NfcAdapter* adapter,
