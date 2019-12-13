@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2019 Jolla Ltd.
+ * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -34,6 +34,8 @@
 #define NFC_CRC_H
 
 #include "nfc_types.h"
+
+G_BEGIN_DECLS
 
 typedef
 guint16
@@ -86,6 +88,8 @@ gboolean
 nfc_crc_b_check_tail(
     const guint8* data,
     gsize len);
+
+G_END_DECLS
 
 #endif /* NFC_CRC_H */
 

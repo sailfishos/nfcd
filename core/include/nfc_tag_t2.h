@@ -37,6 +37,8 @@
 
 /* Type 2 tag */
 
+G_BEGIN_DECLS
+
 typedef struct nfc_tag_t2_priv NfcTagType2Priv;
 
 typedef enum nfc_tag_t2_flags {
@@ -188,6 +190,8 @@ nfc_tag_t2_write_data_seq(
     NfcTagType2WriteDataFunc complete,
     GDestroyNotify destroy,
     void* user_data); /* Since 1.0.17 */
+
+G_END_DECLS
 
 #endif /* NFC_TAG_T2_H */
 

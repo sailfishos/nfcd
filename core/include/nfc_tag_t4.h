@@ -39,6 +39,8 @@
 
 /* Since 1.0.20 */
 
+G_BEGIN_DECLS
+
 typedef struct nfc_tag_t4_priv NfcTagType4Priv;
 
 struct nfc_tag_t4 {
@@ -103,6 +105,8 @@ nfc_isodep_transmit(
     NfcTagType4ResponseFunc resp,
     GDestroyNotify destroy,
     void* user_data);
+
+G_END_DECLS
 
 #endif /* NFC_TAG_T4_H */
 
