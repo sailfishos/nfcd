@@ -16,5 +16,14 @@
     <signal name="AdaptersChanged">
       <arg name="adapters" type="ao"/>
     </signal>
+    <!-- Interface version 2 (since 1.0.26) -->
+    <method name="GetAll2">
+      <arg name="version" type="i" direction="out"/>
+      <arg name="adapters" type="ao" direction="out"/>
+      <arg name="daemon_version" type="i" direction="out"/>
+    </method>
+    <method name="GetDaemonVersion">
+      <arg name="daemon_version" type="i" direction="out"/>
+    </method>
   </interface>
 </node>

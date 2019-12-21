@@ -34,6 +34,7 @@
 #include "dbus_service/org.sailfishos.nfc.Daemon.h"
 #include "plugin.h"
 
+#include <nfc_core.h>
 #include <nfc_adapter.h>
 #include <nfc_manager.h>
 #include <nfc_plugin_impl.h>
@@ -56,6 +57,8 @@ enum {
     CALL_GET_ALL,
     CALL_GET_INTERFACE_VERSION,
     CALL_GET_ADAPTERS,
+    CALL_GET_ALL2,
+    CALL_GET_DAEMON_VERSION,
     CALL_COUNT
 };
 
@@ -80,7 +83,7 @@ G_DEFINE_TYPE(DBusServicePlugin, dbus_service_plugin, NFC_TYPE_PLUGIN)
 #define NFC_SERVICE     "org.sailfishos.nfc.daemon"
 #define NFC_DAEMON_PATH "/"
 
-#define NFC_DBUS_PLUGIN_INTERFACE_VERSION  (1)
+#define NFC_DBUS_PLUGIN_INTERFACE_VERSION  (2)
 
 static
 gboolean
@@ -226,6 +229,36 @@ dbus_service_plugin_handle_get_adapters(
     return TRUE;
 }
 
+/* Interface version 2 */
+
+static
+gboolean
+dbus_service_plugin_handle_get_all2(
+    OrgSailfishosNfcDaemon* iface,
+    GDBusMethodInvocation* call,
+    gpointer user_data)
+{
+    DBusServicePlugin* self = DBUS_SERVICE_PLUGIN(user_data);
+
+    org_sailfishos_nfc_daemon_complete_get_all2(iface, call,
+        NFC_DBUS_PLUGIN_INTERFACE_VERSION,
+        dbus_service_plugin_get_adapter_paths(self),
+        nfc_core_version());
+    return TRUE;
+}
+
+static
+gboolean
+dbus_service_plugin_handle_get_daemon_version(
+    OrgSailfishosNfcDaemon* iface,
+    GDBusMethodInvocation* call,
+    gpointer user_data)
+{
+    org_sailfishos_nfc_daemon_complete_get_daemon_version(iface, call,
+        nfc_core_version());
+    return TRUE;
+}
+
 /*==========================================================================*
  * Name watching
  *==========================================================================*/
@@ -319,6 +352,12 @@ dbus_service_plugin_start(
     self->call_id[CALL_GET_ADAPTERS] =
         g_signal_connect(self->iface, "handle-get-adapters",
         G_CALLBACK(dbus_service_plugin_handle_get_adapters), self);
+    self->call_id[CALL_GET_ALL2] =
+        g_signal_connect(self->iface, "handle-get-all2",
+        G_CALLBACK(dbus_service_plugin_handle_get_all2), self);
+    self->call_id[CALL_GET_DAEMON_VERSION] =
+        g_signal_connect(self->iface, "handle-get-daemon-version",
+        G_CALLBACK(dbus_service_plugin_handle_get_daemon_version), self);
 
     return TRUE;
 }
