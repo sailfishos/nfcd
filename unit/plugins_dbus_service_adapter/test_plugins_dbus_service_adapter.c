@@ -43,7 +43,6 @@
 #include "nfc_target_impl.h"
 #include "nfc_tag.h"
 
-#define NFC_SERVICE "org.sailfishos.nfc.daemon"
 #define NFC_ADAPTER_INTERFACE "org.sailfishos.nfc.Adapter"
 
 static TestOpt test_opt;
