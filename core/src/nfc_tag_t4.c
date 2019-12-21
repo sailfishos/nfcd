@@ -45,7 +45,6 @@ typedef struct nfc_isodep_tx {
 struct nfc_tag_t4_priv {
     guint mtu;  /* FSC (Type 4A) or FSD (Type 4B) */
     GByteArray* buf;
-    NfcTargetSequence* init_seq;
     guint init_id;
 };
 
@@ -262,49 +261,6 @@ nfc_isodep_submit(
     return 0;
 }
 
-static
-void
-nfc_tag_t4_initialized(
-    NfcTagType4* self)
-{
-    NfcTagType4Priv* priv = self->priv;
-    NfcTag* tag = &self->tag;
-
-    nfc_target_sequence_unref(priv->init_seq);
-    priv->init_seq = NULL;
-    nfc_tag_set_initialized(tag);
-}
-
-static
-void
-nfc_tag_t4_init_select_ndef_app_resp(
-    NfcTagType4* self,
-    guint sw,
-    const void* data,
-    guint len,
-    void* user_data)
-{
-    /*
-     * NFCForum-TS-Type-4-Tag_2.0
-     * Table 12: NDEF Tag Application Select -
-     *           Detailed R-APDU Field Description
-     *
-     * 90h 00h   Command completed
-     * 6Ah 82h   NDEF Tag Application not found
-     */
-    if (sw == ISO_SW_OK) {
-        GDEBUG("NDEF Tag Application selected");
-#pragma message("TODO: Read NDEF")
-    } else if (sw == 0x6a82) {
-        GDEBUG("NDEF Tag Application not found");
-    } else if (sw != ISO_SW_IO_ERR) {
-        GDEBUG("NDEF Tag Application selection error %04X", sw);
-    } else {
-        GDEBUG("NDEF Tag Application selection I/O error");
-    }
-    nfc_tag_t4_initialized(self);
-}
-
 /*==========================================================================*
  * Internal interface
  *==========================================================================*/
@@ -315,24 +271,22 @@ nfc_tag_t4_init_base(
     NfcTarget* target,
     guint mtu)
 {
-    static const guint8 ndef_app_path[] = {
-        0xD2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01
-    };
-
     NfcTagType4Priv* priv = self->priv;
-    GUtilData data;
 
     nfc_tag_init_base(&self->tag, target);
     priv->mtu = mtu;
-    priv->init_seq = nfc_target_sequence_new(target);
 
-    /* Start init sequence (i.e. read CC file) */
-    data.bytes = ndef_app_path;
-    data.size = sizeof(ndef_app_path);
-    priv->init_id = nfc_isodep_submit(self, ISO_CLA, ISO_INS_SELECT,
-        ISO_P1_SELECT_DF_BY_NAME, ISO_P2_SELECT_FILE_FIRST,
-        &data, 0x100, priv->init_seq, nfc_tag_t4_init_select_ndef_app_resp,
-        NULL, NULL);
+    /*
+     * For more information in NDEF application and fetching NDEF
+     * from a Type 4 tag, see NFCForum-TS-Type-4-Tag_2.0 section
+     * 5.1 NDEF Management.
+     *
+     * Better leave the default application selected and ignore this
+     * NDEF stuff for now until this feature is requested and even more
+     * importantly we have a real card to test against.
+     */
+#pragma message("TODO: Read NDEF")
+    nfc_tag_set_initialized(&self->tag);
 }
 
 /*==========================================================================*
@@ -382,7 +336,6 @@ nfc_tag_t4_finalize(
     NfcTagType4Priv* priv = self->priv;
 
     nfc_target_cancel_transmit(self->tag.target, priv->init_id);
-    nfc_target_sequence_unref(priv->init_seq);
     g_byte_array_free(priv->buf, TRUE);
     G_OBJECT_CLASS(nfc_tag_t4_parent_class)->finalize(object);
 }

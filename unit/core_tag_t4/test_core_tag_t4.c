@@ -240,15 +240,6 @@ test_null(
 
 static
 void
-test_basic_exit(
-    NfcTag* tag,
-    void* user_data)
-{
-    g_main_loop_quit((GMainLoop*)user_data);
-}
-
-static
-void
 test_basic_a(
     void)
 {
@@ -257,7 +248,6 @@ test_basic_a(
     NfcParamIsoDepPollA iso_dep_poll_a;
     NfcTagType4* t4a;
     NfcTag* tag;
-    gulong id;
 
     memset(&iso_dep_poll_a, 0, sizeof(iso_dep_poll_a));
     iso_dep_poll_a.fsc = 256;
@@ -265,10 +255,11 @@ test_basic_a(
     g_assert(NFC_IS_TAG_T4A(t4a));
     tag = &t4a->tag;
 
-    /* Just let transmit fail... */
-    id = nfc_tag_add_initialized_handler(tag, test_basic_exit, loop);
-    test_run(&test_opt, loop);
-    nfc_tag_remove_handler(tag, id);
+    /*
+     * As of now it gets initialized immediately. If we start supporting
+     * NDEF application, this process will become asynchronous.
+     */
+    g_assert(tag->flags & NFC_TAG_FLAG_INITIALIZED);
 
     nfc_tag_unref(tag);
     nfc_target_unref(target);
@@ -290,11 +281,6 @@ test_basic_init(
     NfcParamPollB poll_b;
     NfcTagType4* t4b;
     NfcTag* tag;
-    gulong id;
-
-    test_target_add_cmd(TEST_TARGET(target),
-        TEST_ARRAY_AND_SIZE(test_cmd_select_ndef),
-        resp, resp_len);
 
     memset(&poll_b, 0, sizeof(poll_b));
     poll_b.fsc = 0x0b; /* i.e. 256 */
@@ -302,9 +288,11 @@ test_basic_init(
     g_assert(NFC_IS_TAG_T4B(t4b));
     tag = &t4b->tag;
 
-    id = nfc_tag_add_initialized_handler(tag, test_basic_exit, loop);
-    test_run(&test_opt, loop);
-    nfc_tag_remove_handler(tag, id);
+    /*
+     * As of now it gets initialized immediately. If we start supporting
+     * NDEF application, this process will become asynchronous.
+     */
+    g_assert(tag->flags & NFC_TAG_FLAG_INITIALIZED);
 
     nfc_tag_unref(tag);
     nfc_target_unref(target);
@@ -386,8 +374,16 @@ typedef struct test_apdu_data {
     GUtilData expected;
 } TestApduData;
 
+static const guint8 mf_path[] = {
+    0x3f, 0x00
+};
+
 static const guint8 select_mf_expected[] = {
     0x00, 0xa4, 0x00, 0x00
+};
+
+static const guint8 select_mf_full_expected[] = {
+    0x00, 0xa4, 0x00, 0x00, 0x02, 0x3f, 0x00
 };
 
 static const guint8 read_256_expected[] = {
@@ -405,6 +401,9 @@ static const guint8 read_65536_expected[] = {
 static const TestApduData apdu_tests[] = {
     { "select_mf", 0x00, 0xa4, 0x00, 0x00, { NULL, 0 }, 0,
       { TEST_ARRAY_AND_SIZE(select_mf_expected) } },
+    { "select_mf_full", 0x00, 0xa4, 0x00, 0x00,
+      { TEST_ARRAY_AND_SIZE(mf_path) }, 0,
+      { TEST_ARRAY_AND_SIZE(select_mf_full_expected) } },
     { "read_256", 0x00, 0xb0, 0x00, 0x00, { NULL, 0 }, 256,
       { TEST_ARRAY_AND_SIZE(read_256_expected) } },
     { "read_257", 0x00, 0xb0, 0x00, 0x00, { NULL, 0 }, 257,
@@ -473,15 +472,10 @@ test_apdu_ok(
     NfcParamPollB poll_b;
     NfcTagType4* t4b;
     NfcTag* tag;
-    gulong id;
 
     memset(&test, 0, sizeof(test));
     test.data = test_data;
     test.loop = g_main_loop_new(NULL, TRUE);
-
-    test_target_add_cmd(TEST_TARGET(target),
-        TEST_ARRAY_AND_SIZE(test_cmd_select_ndef),
-        TEST_ARRAY_AND_SIZE(test_resp_ok));
 
     memset(&poll_b, 0, sizeof(poll_b));
     poll_b.fsc = 0x0b; /* i.e. 256 */
@@ -489,10 +483,14 @@ test_apdu_ok(
     g_assert(NFC_IS_TAG_T4B(t4b));
     tag = &t4b->tag;
 
-    id = nfc_tag_add_initialized_handler(tag, test_apdu_ok_initialized, &test);
+    /*
+     * As of now it gets initialized immediately. If we start supporting
+     * NDEF application, this process will become asynchronous.
+     */
+    g_assert(tag->flags & NFC_TAG_FLAG_INITIALIZED);
+    test_apdu_ok_initialized(tag, &test);
     test_run(&test_opt, test.loop);
     g_assert(test.destroyed);
-    nfc_tag_remove_handler(tag, id);
 
     nfc_tag_unref(tag);
     nfc_target_unref(target);
@@ -505,6 +503,19 @@ test_apdu_ok(
 
 static
 void
+test_apdu_fail_done(
+    NfcTagType4* tag,
+    guint sw,  /* 16 bits (SW1 << 8)|SW2 */
+    const void* data,
+    guint len,
+    void* user_data)
+{
+    g_assert(sw == ISO_SW_IO_ERR);
+    g_main_loop_quit(user_data);
+}
+
+static
+void
 test_apdu_fail(
     void)
 {
@@ -513,11 +524,7 @@ test_apdu_fail(
     NfcParamPollB poll_b;
     NfcTagType4* t4b;
     NfcTag* tag;
-    gulong id;
-
-    test_target_add_cmd(TEST_TARGET(target),
-        TEST_ARRAY_AND_SIZE(test_cmd_select_ndef),
-        TEST_ARRAY_AND_SIZE(test_resp_ok));
+    guint8 zero = 0;
 
     memset(&poll_b, 0, sizeof(poll_b));
     poll_b.fsc = 0x0b; /* i.e. 256 */
@@ -525,9 +532,11 @@ test_apdu_fail(
     g_assert(NFC_IS_TAG_T4B(t4b));
     tag = &t4b->tag;
 
-    id = nfc_tag_add_initialized_handler(tag, test_basic_exit, loop);
-    test_run(&test_opt, loop);
-    nfc_tag_remove_handler(tag, id);
+    /*
+     * As of now it gets initialized immediately. If we start supporting
+     * NDEF application, this process will become asynchronous.
+     */
+    g_assert(tag->flags & NFC_TAG_FLAG_INITIALIZED);
 
     /* Invalid Le */
     g_assert(!nfc_isodep_transmit(t4b, 0x00, 0xb0, 0x00, 0x00, NULL, 0x10001,
@@ -537,6 +546,18 @@ test_apdu_fail(
     TEST_TARGET(target)->fail_transmit++;
     g_assert(!nfc_isodep_transmit(t4b, 0x00, 0xb0, 0x00, 0x00, NULL, 0x100,
         NULL, NULL, NULL, NULL));
+
+    /* Transmission failure */
+    g_assert(nfc_isodep_transmit(t4b, 0x00, 0xb0, 0x00, 0x00, NULL, 0x100,
+        NULL, test_apdu_fail_done, NULL, loop));
+    test_run(&test_opt, loop);
+
+    /* Short response */
+    test_target_add_cmd(TEST_TARGET(tag->target),
+        TEST_ARRAY_AND_SIZE(select_mf_expected), &zero, 1);
+    g_assert(nfc_isodep_transmit(t4b, 0x00, 0xa4, 0x00, 0x00, NULL, 0,
+        NULL, test_apdu_fail_done, NULL, loop));
+    test_run(&test_opt, loop);
 
     nfc_tag_unref(tag);
     nfc_target_unref(target);
