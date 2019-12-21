@@ -31,6 +31,7 @@ LIB = $(LIB_NAME).a
 SRC = \
   nfc_adapter.c \
   nfc_crc.c \
+  nfc_core.c \
   nfc_locale.c \
   nfc_manager.c \
   nfc_ndef_rec.c \
