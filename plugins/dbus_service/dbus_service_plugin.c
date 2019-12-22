@@ -63,7 +63,7 @@ enum {
 };
 
 typedef NfcPluginClass DBusServicePluginClass;
-typedef struct dbus_service_plugin {
+struct dbus_service_plugin {
     NfcPlugin parent;
     guint own_name_id;
     GUtilIdlePool* pool;
@@ -73,7 +73,7 @@ typedef struct dbus_service_plugin {
     OrgSailfishosNfcDaemon* iface;
     gulong event_id[EVENT_COUNT];
     gulong call_id[CALL_COUNT];
-} DBusServicePlugin;
+};
 
 G_DEFINE_TYPE(DBusServicePlugin, dbus_service_plugin, NFC_TYPE_PLUGIN)
 #define DBUS_SERVICE_TYPE_PLUGIN (dbus_service_plugin_get_type())
@@ -329,10 +329,9 @@ dbus_service_plugin_start(
     GVERBOSE("Starting");
     self->manager = nfc_manager_ref(manager);
     self->iface = org_sailfishos_nfc_daemon_skeleton_new();
-    self->own_name_id = g_bus_own_name(G_BUS_TYPE_SYSTEM, NFC_SERVICE,
-        G_BUS_NAME_OWNER_FLAGS_REPLACE, dbus_service_plugin_bus_connected,
-        dbus_service_plugin_name_acquired, dbus_service_plugin_name_lost,
-        self, NULL);
+    self->own_name_id = dbus_service_name_own(self, NFC_SERVICE,
+        dbus_service_plugin_bus_connected, dbus_service_plugin_name_acquired,
+        dbus_service_plugin_name_lost);
 
     /* NfcManager events */
     self->event_id[EVENT_ADAPTER_ADDED] =
@@ -374,7 +373,7 @@ dbus_service_plugin_stop(
     g_dbus_interface_skeleton_unexport(G_DBUS_INTERFACE_SKELETON(self->iface));
     g_hash_table_remove_all(self->adapters);
     g_object_unref(self->iface);
-    g_bus_unown_name(self->own_name_id);
+    dbus_service_name_unown(self->own_name_id);
     nfc_manager_remove_all_handlers(self->manager, self->event_id);
     nfc_manager_unref(self->manager);
     if (self->connection) {

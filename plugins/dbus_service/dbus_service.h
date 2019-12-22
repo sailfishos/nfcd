@@ -44,6 +44,7 @@
 
 typedef struct dbus_service_adapter DBusServiceAdapter;
 typedef struct dbus_service_ndef DBusServiceNdef;
+typedef struct dbus_service_plugin DBusServicePlugin;
 typedef struct dbus_service_tag DBusServiceTag;
 typedef struct dbus_service_tag_t2 DBusServiceTagType2;
 typedef struct dbus_service_isodep DBusServiceIsoDep;
@@ -64,6 +65,18 @@ typedef enum dbus_service_error {
 
 #define NFC_DBUS_TAG_T2_INTERFACE "org.sailfishos.nfc.TagType2"
 #define NFC_DBUS_ISODEP_INTERFACE "org.sailfishos.nfc.IsoDep"
+
+guint
+dbus_service_name_own(
+    DBusServicePlugin* plugin,
+    const char* name,
+    GBusAcquiredCallback bus_acquired,
+    GBusNameAcquiredCallback name_acquired,
+    GBusNameLostCallback name_lost);
+
+void
+dbus_service_name_unown(
+    guint id);
 
 /* org.sailfishos.nfc.Adapter */
 
