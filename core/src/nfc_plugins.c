@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -299,22 +299,25 @@ nfc_plugins_new(
                 }
             }
 
+#if GUTIL_LOG_ERR
             /* One more loop, just to print errors to the log */
             if (paths->len) {
                 guint i;
 
                 for (i = 0; i < paths->len; i++) {
                     const char* path = paths->pdata[i];
-                    void* handle = dlopen(path, RTLD_NOW);
 
                     /*
                      * They all failed to load at least once, we are
-                     * definitely not expecting them to load now.
+                     * definitely not expecting them to load now. We
+                     * still need to call dlopen() for each of them
+                     * to obtain the right dlerror().
                      */
-                    GASSERT(!handle);
+                    GVERIFY_EQ(dlopen(path, RTLD_NOW), NULL);
                     GERR("Failed to load %s: %s", path, dlerror());
                 }
             }
+#endif /* GUTIL_LOG_ERR */
 
             g_ptr_array_free(paths, TRUE);
             g_strfreev(files);
