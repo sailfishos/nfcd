@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -37,34 +37,32 @@
 
 #include <nfc_target_impl.h>
 
-/* Add _ prefix so that they don't get exported to plugins */
-#define nfc_target_deactivate _nfc_target_deactivate
-#define nfc_target_generate_id _nfc_target_generate_id
-#define nfc_target_add_gone_handler _nfc_target_add_gone_handler
-#define nfc_target_sequence_ref _nfc_target_sequence_ref
-#define nfc_target_sequence_unref _nfc_target_sequence_unref
-
 void
 nfc_target_deactivate(
-    NfcTarget* target);
+    NfcTarget* target)
+    NFCD_INTERNAL;
 
 guint
 nfc_target_generate_id(
-    NfcTarget* target);
+    NfcTarget* target)
+    NFCD_INTERNAL;
 
 gulong
 nfc_target_add_gone_handler(
     NfcTarget* target,
     NfcTargetFunc func,
-    void* user_data);
+    void* user_data)
+    NFCD_INTERNAL;
 
 NfcTargetSequence*
 nfc_target_sequence_ref(
-    NfcTargetSequence* seq);
+    NfcTargetSequence* seq)
+    NFCD_INTERNAL;
 
 void
 nfc_target_sequence_unref(
-    NfcTargetSequence* seq);
+    NfcTargetSequence* seq)
+    NFCD_INTERNAL;
 
 #endif /* NFC_TARGET_PRIVATE_H */
 

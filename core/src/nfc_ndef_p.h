@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2018 Bogdan Pankovsky <b.pankovsky@omprussia.ru>
  *
  * You may use this file under the terms of BSD license as follows:
@@ -38,22 +38,6 @@
 
 #include <nfc_ndef.h>
 
-/* Add _ prefix so that they don't get exported */
-#define nfc_ndef_payload _nfc_ndef_payload
-#define nfc_ndef_rec_initialize _nfc_ndef_rec_initialize
-#define nfc_ndef_rec_clear_flags _nfc_ndef_rec_clear_flags
-#define nfc_ndef_rec_u_new_from_data _nfc_ndef_rec_u_new_from_data
-#define nfc_ndef_rec_u_steal_uri _nfc_ndef_rec_u_steal_uri
-#define nfc_ndef_rec_t_new_from_data _nfc_ndef_rec_t_new_from_data
-#define nfc_ndef_rec_t_steal_lang _nfc_ndef_rec_t_steal_lang
-#define nfc_ndef_rec_t_steal_text _nfc_ndef_rec_t_steal_text
-#define nfc_ndef_rec_sp_new_from_data _nfc_ndef_rec_sp_new_from_data
-#define nfc_ndef_rec_new_well_known _nfc_ndef_rec_new_well_known
-#define nfc_ndef_rec_new_media _nfc_ndef_rec_new_media
-#define nfc_ndef_rec_type_u _nfc_ndef_rec_type_u
-#define nfc_ndef_rec_type_t _nfc_ndef_rec_type_t
-#define nfc_ndef_rec_type_sp _nfc_ndef_rec_type_sp
-
 typedef struct nfc_ndef_rec_class {
     GObjectClass parent;
 } NfcNdefRecClass;
@@ -74,66 +58,78 @@ typedef struct nfc_ndef_data {
 #define NFC_NDEF_HDR_IL       (0x08)
 #define NFC_NDEF_HDR_TNF_MASK (0x07)
 
-extern const GUtilData nfc_ndef_rec_type_u; /* "U" */
-extern const GUtilData nfc_ndef_rec_type_t; /* "T" */
-extern const GUtilData nfc_ndef_rec_type_sp; /* "Sp" */
+extern const GUtilData nfc_ndef_rec_type_u NFCD_INTERNAL; /* "U" */
+extern const GUtilData nfc_ndef_rec_type_t NFCD_INTERNAL; /* "T" */
+extern const GUtilData nfc_ndef_rec_type_sp NFCD_INTERNAL; /* "Sp" */
 
 gboolean
 nfc_ndef_type(
     const NfcNdefData* data,
-    GUtilData* type);
+    GUtilData* type)
+    NFCD_INTERNAL;
 
 gboolean
 nfc_ndef_payload(
     const NfcNdefData* data,
-    GUtilData* payload);
+    GUtilData* payload)
+    NFCD_INTERNAL;
 
 NfcNdefRec*
 nfc_ndef_rec_initialize(
     NfcNdefRec* rec,
     NFC_NDEF_RTD rtd,
-    const NfcNdefData* ndef);
+    const NfcNdefData* ndef)
+    NFCD_INTERNAL;
 
 void
 nfc_ndef_rec_clear_flags(
     NfcNdefRec* rec,
-    NFC_NDEF_REC_FLAGS flags);
+    NFC_NDEF_REC_FLAGS flags)
+    NFCD_INTERNAL;
 
 NfcNdefRec*
 nfc_ndef_rec_new_media(
     const GUtilData* type,
-    const GUtilData* payload);
+    const GUtilData* payload)
+    NFCD_INTERNAL;
 
 NfcNdefRec*
 nfc_ndef_rec_new_well_known(
     GType gtype,
     NFC_NDEF_RTD rtd,
     const GUtilData* type,
-    const GUtilData* payload);
+    const GUtilData* payload)
+    NFCD_INTERNAL;
 
 NfcNdefRecU*
 nfc_ndef_rec_u_new_from_data(
-    const NfcNdefData* ndef);
+    const NfcNdefData* ndef)
+    NFCD_INTERNAL;
 
 char*
 nfc_ndef_rec_u_steal_uri(
-    NfcNdefRecU* ndef);
+    NfcNdefRecU* ndef)
+    NFCD_INTERNAL;
 
 NfcNdefRecT*
 nfc_ndef_rec_t_new_from_data(
-    const NfcNdefData* ndef);
+    const NfcNdefData* ndef)
+    NFCD_INTERNAL;
 
 char*
 nfc_ndef_rec_t_steal_lang(
-    NfcNdefRecT* self);
+    NfcNdefRecT* self)
+    NFCD_INTERNAL;
 
 char*
 nfc_ndef_rec_t_steal_text(
-    NfcNdefRecT* self);
+    NfcNdefRecT* self)
+    NFCD_INTERNAL;
 
 NfcNdefRecSp*
 nfc_ndef_rec_sp_new_from_data(
-    const NfcNdefData* ndef);
+    const NfcNdefData* ndef)
+    NFCD_INTERNAL;
 
 #endif /* NFC_NDEF_PRIVATE_H */
 

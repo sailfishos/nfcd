@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2019 Jolla Ltd.
- * Copyright (C) 2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019-2020 Jolla Ltd.
+ * Copyright (C) 2019-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -36,12 +36,6 @@
 #include "nfc_tag_t4.h"
 #include "nfc_tag_p.h"
 
-/* Add _ prefix so that they don't get exported */
-#define nfc_tag_new _nfc_tag_new
-#define nfc_tag_t4a_new _nfc_tag_t4a_new
-#define nfc_tag_t4b_new _nfc_tag_t4b_new
-#define nfc_tag_t4_init_base _nfc_tag_t4_init_base
-
 typedef struct nfc_tag_t4_class {
     NfcTagClass parent;
 } NfcTagType4Class;
@@ -50,19 +44,22 @@ NfcTagType4a*
 nfc_tag_t4a_new(
     NfcTarget* target,
     const NfcParamPollA* tech_param,
-    const NfcParamIsoDepPollA* interface_param);
+    const NfcParamIsoDepPollA* interface_param)
+    NFCD_INTERNAL;
 
 NfcTagType4b*
 nfc_tag_t4b_new(
     NfcTarget* target,
     const NfcParamPollB* tech_param,
-    const NfcParamIsoDepPollB* interface_param);
+    const NfcParamIsoDepPollB* interface_param)
+    NFCD_INTERNAL;
 
 void
 nfc_tag_t4_init_base(
     NfcTagType4* tag,
     NfcTarget* target,
-    guint mtu);
+    guint mtu)
+    NFCD_INTERNAL;
 
 #endif /* NFC_TAG_T4_PRIVATE_H */
 

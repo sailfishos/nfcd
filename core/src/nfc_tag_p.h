@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -37,39 +37,37 @@
 
 #include <nfc_tag.h>
 
-/* Add _ prefix so that they don't get exported */
-#define nfc_tag_new _nfc_tag_new
-#define nfc_tag_t2_new _nfc_tag_t2_new
-#define nfc_tag_init_base _nfc_tag_init_base
-#define nfc_tag_set_name _nfc_tag_set_name
-#define nfc_tag_set_initialized _nfc_tag_set_initialized
-
 typedef struct nfc_tag_class {
     GObjectClass parent;
 } NfcTagClass;
 
 NfcTag*
 nfc_tag_new(
-    NfcTarget* target);
+    NfcTarget* target)
+    NFCD_INTERNAL;
 
 NfcTagType2*
 nfc_tag_t2_new(
     NfcTarget* target,
-    const NfcParamPollA* param);
+    const NfcParamPollA* param)
+    NFCD_INTERNAL;
 
 void
 nfc_tag_init_base(
     NfcTag* tag,
-    NfcTarget* target);
+    NfcTarget* target)
+    NFCD_INTERNAL;
 
 void
 nfc_tag_set_name(
     NfcTag* tag,
-    const char* name);
+    const char* name)
+    NFCD_INTERNAL;
 
 void
 nfc_tag_set_initialized(
-    NfcTag* tag);
+    NfcTag* tag)
+    NFCD_INTERNAL;
 
 #endif /* NFC_TAG_PRIVATE_H */
 
