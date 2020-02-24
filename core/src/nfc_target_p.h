@@ -42,6 +42,24 @@ nfc_target_deactivate(
     NfcTarget* target)
     NFCD_INTERNAL;
 
+gboolean
+nfc_target_can_reactivate(
+    NfcTarget* target)
+    NFCD_INTERNAL;
+
+gboolean
+nfc_target_reactivate(
+    NfcTarget* target,
+    NfcTargetFunc func,
+    void* user_data)
+    NFCD_INTERNAL;
+
+void
+nfc_target_set_reactivate_timeout(
+    NfcTarget* target,
+    guint ms)
+    NFCD_INTERNAL;
+
 guint
 nfc_target_generate_id(
     NfcTarget* target)

@@ -39,6 +39,7 @@
 #include <gutil_misc.h>
 
 #define TRANSMIT_TIMEOUT_MS (500)
+#define DEFAULT_REACTIVATION_TIMEOUT_MS (1000)
 
 typedef struct nfc_target_request NfcTargetRequest;
 struct nfc_target_request {
@@ -76,6 +77,11 @@ struct nfc_target_priv {
     NfcTargetRequest* req_active;
     NfcTargetSequenceQueue seq_queue;
     NfcTargetRequestQueue req_queue;
+    /* Reactivation */
+    NfcTargetFunc ra_func;
+    void* ra_data;
+    guint ra_timeout_ms;
+    guint ra_timeout;
 };
 
 G_DEFINE_ABSTRACT_TYPE(NfcTarget, nfc_target, G_TYPE_OBJECT)
@@ -409,6 +415,22 @@ nfc_target_schedule_next_transmit(
     }
 }
 
+static
+gboolean
+nfc_target_reactivate_timeout(
+    gpointer user_data)
+{
+    NfcTarget* self = NFC_TARGET(user_data);
+    NfcTargetPriv* priv = self->priv;
+
+    GDEBUG("Reactivation timed out");
+    priv->ra_timeout = 0;
+    priv->ra_func = NULL;
+    priv->ra_data = NULL;
+    NFC_TARGET_GET_CLASS(self)->deactivate(self);
+    return G_SOURCE_REMOVE;
+}
+
 /*==========================================================================*
  * Interface
  *==========================================================================*/
@@ -578,6 +600,55 @@ nfc_target_deactivate(
     }
 }
 
+gboolean
+nfc_target_can_reactivate(
+    NfcTarget* self)
+{
+    return G_LIKELY(self) && !self->priv->ra_timeout &&
+        NFC_TARGET_GET_CLASS(self)->reactivate;
+}
+
+gboolean
+nfc_target_reactivate(
+    NfcTarget* self,
+    NfcTargetFunc func,
+    void* user_data)
+{
+    if (G_LIKELY(self)) {
+        NfcTargetPriv* priv = self->priv;
+
+        if (!priv->ra_timeout) {
+            NfcTargetClass* klass = NFC_TARGET_GET_CLASS(self);
+
+            if (klass->reactivate) {
+                priv->ra_func = func;
+                priv->ra_data = user_data;
+                priv->ra_timeout = g_timeout_add(priv->ra_timeout_ms,
+                    nfc_target_reactivate_timeout, self);
+                if (klass->reactivate(self)) {
+                    return TRUE;
+                } else {
+                    g_source_remove(priv->ra_timeout);
+                    priv->ra_timeout = 0;
+                    priv->ra_func = NULL;
+                    priv->ra_data = NULL;
+                }
+            }
+        }
+    }
+    return FALSE;
+}
+
+void
+nfc_target_set_reactivate_timeout(
+    NfcTarget* self,
+    guint ms)
+{
+    if (G_LIKELY(self)) {
+        self->priv->ra_timeout_ms = ms;
+    }
+}
+
 gulong
 nfc_target_add_sequence_handler(
     NfcTarget* self,
@@ -620,6 +691,27 @@ nfc_target_remove_handlers(
 /*==========================================================================*
  * Internal interface
  *==========================================================================*/
+
+void
+nfc_target_reactivated(
+    NfcTarget* self)
+{
+    if (G_LIKELY(self)) {
+        NfcTargetPriv* priv = self->priv;
+        NfcTargetFunc cb = priv->ra_func;
+        void* cb_data = priv->ra_data;
+
+        if (priv->ra_timeout) {
+            g_source_remove(priv->ra_timeout);
+            priv->ra_timeout = 0;
+        }
+        priv->ra_func = NULL;
+        priv->ra_data = NULL;
+        if (cb) {
+            cb(self, cb_data);
+        }
+    }
+}
 
 void
 nfc_target_transmit_done(
@@ -698,10 +790,13 @@ void
 nfc_target_init(
     NfcTarget* self)
 {
+    NfcTargetPriv* priv = G_TYPE_INSTANCE_GET_PRIVATE(self, NFC_TYPE_TARGET,
+        NfcTargetPriv);
+
     /* When target is created, it must be present, right? */
     self->present = TRUE;
-    self->priv = G_TYPE_INSTANCE_GET_PRIVATE(self, NFC_TYPE_TARGET,
-        NfcTargetPriv);
+    self->priv = priv;
+    priv->ra_timeout_ms = DEFAULT_REACTIVATION_TIMEOUT_MS;
 }
 
 static
@@ -733,6 +828,12 @@ nfc_target_dispose(
         req->next = NULL;
         nfc_target_fail_request(self, req);
     }
+    if (priv->ra_timeout) {
+        g_source_remove(priv->ra_timeout);
+        priv->ra_timeout = 0;
+    }
+    priv->ra_func = NULL;
+    priv->ra_data = NULL;
     G_OBJECT_CLASS(nfc_target_parent_class)->dispose(object);
 }
 

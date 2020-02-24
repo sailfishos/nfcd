@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -56,6 +56,13 @@ typedef struct nfc_target_class {
     void (*sequence_changed)(NfcTarget* target);
     void (*gone)(NfcTarget* target);
 
+    /* Reactivates the same target (re-selects the interface etc.)
+     * When reactivation completes successfully, derived class calls
+     * nfc_target_reactivated(), otherwise nfc_target_gone(). Timeout is
+     * handled by the base class, derived class doesn't need to bother.
+     * Reactivation isn't cancellable, it either succeeds or fails. */
+    gboolean (*reactivate)(NfcTarget* target);  /* Since 1.0.27 */
+
     /* Padding for future expansion */
     void (*_reserved1)(void);
     void (*_reserved2)(void);
@@ -66,7 +73,6 @@ typedef struct nfc_target_class {
     void (*_reserved7)(void);
     void (*_reserved8)(void);
     void (*_reserved9)(void);
-    void (*_reserved10)(void);
 } NfcTargetClass;
 
 #define NFC_TARGET_CLASS(klass) G_TYPE_CHECK_CLASS_CAST((klass), \
@@ -95,6 +101,10 @@ nfc_target_transmit_done(
     NFC_TRANSMIT_STATUS status,
     const void* data,
     guint len);
+
+void
+nfc_target_reactivated(
+    NfcTarget* target); /* Since 1.0.27 */
 
 void
 nfc_target_gone(
