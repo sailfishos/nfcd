@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -65,7 +65,7 @@ gboolean
 test_timeout(
     gpointer loop)
 {
-    g_assert(!"TIMEOUT");
+    g_assert_not_reached();
     return G_SOURCE_REMOVE;
 }
 
@@ -190,6 +190,7 @@ G_DEFINE_TYPE(TestTarget, test_target, NFC_TYPE_TARGET)
 #define TEST_TARGET(obj) (G_TYPE_CHECK_INSTANCE_CAST(obj, \
         TEST_TYPE_TARGET, TestTarget))
 
+static
 TestTarget*
 test_target_new(
     void)
@@ -255,7 +256,7 @@ test_target_deactivate(
     TestTarget* self = TEST_TARGET(target);
 
     self->deactivated = TRUE;
-    NFC_TARGET_CLASS(test_target_parent_class)->deactivate(target);
+    nfc_target_gone(target);
 }
 
 static
@@ -291,6 +292,97 @@ test_target_class_init(
 }
 
 /*==========================================================================*
+ * Test target with reactivate
+ *==========================================================================*/
+
+typedef enum test_reactivate_mode {
+    TEST_REACTIVATE_MODE_OK,
+    TEST_REACTIVATE_MODE_FAIL,
+    TEST_REACTIVATE_MODE_TIMEOUT
+} TEST_REACTIVATE_MODE;
+
+typedef TestTargetClass TestTarget2Class;
+typedef struct test_target2 {
+    TestTarget parent;
+    TEST_REACTIVATE_MODE mode;
+    guint reactivate_id;
+} TestTarget2;
+
+G_DEFINE_TYPE(TestTarget2, test_target2, TEST_TYPE_TARGET)
+#define TEST_TYPE_TARGET2 (test_target2_get_type())
+#define TEST_TARGET2(obj) (G_TYPE_CHECK_INSTANCE_CAST(obj, \
+        TEST_TYPE_TARGET2, TestTarget2))
+
+static
+TestTarget2*
+test_target2_new(
+    void)
+{
+    return g_object_new(TEST_TYPE_TARGET2, NULL);
+}
+
+static
+gboolean
+test_target2_reactivated(
+    gpointer user_data)
+{
+    TestTarget2* test = TEST_TARGET2(user_data);
+
+    test->reactivate_id = 0;
+    nfc_target_reactivated(NFC_TARGET(test));
+    return G_SOURCE_REMOVE;
+}
+
+static
+gboolean
+test_target2_reactivate(
+    NfcTarget* target)
+{
+    TestTarget2* test = TEST_TARGET2(target);
+
+    g_assert(!test->reactivate_id);
+    switch (test->mode) {
+    case TEST_REACTIVATE_MODE_OK:
+        test->reactivate_id = g_idle_add(test_target2_reactivated, test);
+        return TRUE;
+    case TEST_REACTIVATE_MODE_FAIL:
+        break;
+    case TEST_REACTIVATE_MODE_TIMEOUT:
+        return TRUE;
+    }
+    return FALSE;
+}
+
+static
+void
+test_target2_init(
+    TestTarget2* self)
+{
+}
+
+static
+void
+test_target2_finalize(
+    GObject* object)
+{
+    TestTarget2* test = TEST_TARGET2(object);
+
+    if (test->reactivate_id) {
+        g_source_remove(test->reactivate_id);
+    }
+    G_OBJECT_CLASS(test_target2_parent_class)->finalize(object);
+}
+
+static
+void
+test_target2_class_init(
+    NfcTargetClass* klass)
+{
+    G_OBJECT_CLASS(klass)->finalize = test_target2_finalize;
+    klass->reactivate = test_target2_reactivate;
+}
+
+/*==========================================================================*
  * null
  *==========================================================================*/
 
@@ -305,9 +397,13 @@ test_null(
     g_assert(!nfc_target_add_gone_handler(NULL, NULL, NULL));
     g_assert(!nfc_target_add_sequence_handler(NULL, NULL, NULL));
     nfc_target_deactivate(NULL);
+    g_assert(!nfc_target_can_reactivate(NULL));
+    g_assert(!nfc_target_reactivate(NULL, NULL, NULL));
+    nfc_target_set_reactivate_timeout(NULL, 0);
     nfc_target_remove_handler(NULL, 0);
     g_assert(!nfc_target_cancel_transmit(NULL, 0));
     nfc_target_transmit_done(NULL, NFC_TRANSMIT_STATUS_ERROR, NULL, 0);
+    nfc_target_reactivated(NULL);
     nfc_target_gone(NULL);
     nfc_target_unref(NULL);
     g_assert(!nfc_target_sequence_new(NULL));
@@ -339,6 +435,11 @@ test_basic(
     /* There's nothing to cancel */
     g_assert(!nfc_target_cancel_transmit(target, 0));
     g_assert(!nfc_target_cancel_transmit(target, 1));
+
+    /* Reactivation is not supported by this target */
+    g_assert(!nfc_target_can_reactivate(target));
+    g_assert(!nfc_target_reactivate(target, NULL, NULL));
+    nfc_target_reactivated(target); /* Does nothing */
 
     /* Deactivate only sets the flag */
     nfc_target_deactivate(target);
@@ -809,6 +910,126 @@ test_sequence2(
 }
 
 /*==========================================================================*
+ * reactivate
+ *==========================================================================*/
+
+static
+void
+test_reactivate(
+    void)
+{
+    TestTarget2* test = test_target2_new();
+    NfcTarget* target = NFC_TARGET(test);
+
+    /* Reactivation is supported */
+    g_assert(nfc_target_can_reactivate(target));
+
+    /* Immediate reactivation failure */
+    test->mode = TEST_REACTIVATE_MODE_FAIL;
+    g_assert(nfc_target_can_reactivate(target)); /* At least we can try */
+    g_assert(!nfc_target_reactivate(target, NULL, NULL)); /* But fail */
+
+    /* This one succeeds */
+    test->mode = TEST_REACTIVATE_MODE_OK;
+    g_assert(nfc_target_can_reactivate(target));
+    g_assert(nfc_target_reactivate(target, NULL, NULL));
+
+    /* Second one fails because the request has already been submitted */
+    g_assert(!nfc_target_can_reactivate(target));
+    g_assert(!nfc_target_reactivate(target, NULL, NULL));
+
+    /* And delete it without waiting for reactivation to complete */
+    nfc_target_unref(target);
+}
+
+/*==========================================================================*
+ * reactivate_ok
+ *==========================================================================*/
+
+static
+void
+test_reactivate_ok_done(
+    NfcTarget* target,
+    void* user_data)
+{
+    GDEBUG("Reactivation done");
+    g_main_loop_quit((GMainLoop*)user_data);
+}
+
+static
+void
+test_reactivate_ok(
+    void)
+{
+    TestTarget2* test = test_target2_new();
+    NfcTarget* target = NFC_TARGET(test);
+    GMainLoop* loop = g_main_loop_new(NULL, TRUE);
+    guint timeout_id;
+
+    g_assert(nfc_target_can_reactivate(target));
+    g_assert(nfc_target_reactivate(target, test_reactivate_ok_done, loop));
+
+    timeout_id = test_setup_timeout(loop);
+    g_main_loop_run(loop);
+    if (timeout_id) {
+        g_source_remove(timeout_id);
+    }
+
+    nfc_target_unref(target);
+    g_main_loop_unref(loop);
+}
+
+/*==========================================================================*
+ * reactivate_timeout
+ *==========================================================================*/
+
+static
+void
+test_reactivate_timeout_cb(
+    NfcTarget* target,
+    void* user_data)
+{
+    g_assert_not_reached();
+}
+
+static
+void
+test_reactivate_timeout_expired(
+    NfcTarget* target,
+    void* user_data)
+{
+    GDEBUG("Reactivation timeout expired");
+    g_main_loop_quit((GMainLoop*)user_data);
+}
+
+static
+void
+test_reactivate_timeout(
+    void)
+{
+    TestTarget2* test = test_target2_new();
+    NfcTarget* target = NFC_TARGET(test);
+    GMainLoop* loop = g_main_loop_new(NULL, TRUE);
+    gulong gone_id = nfc_target_add_gone_handler(target,
+        test_reactivate_timeout_expired, loop);
+    guint timeout_id = test_setup_timeout(loop);
+
+    test->mode = TEST_REACTIVATE_MODE_TIMEOUT;
+    nfc_target_set_reactivate_timeout(target, 100); /* Default is quite long */
+    g_assert(nfc_target_can_reactivate(target));
+    g_assert(nfc_target_reactivate(target, test_reactivate_timeout_cb, NULL));
+
+    g_main_loop_run(loop);
+    if (timeout_id) {
+        g_source_remove(timeout_id);
+    }
+
+    nfc_target_remove_handler(target, gone_id);
+    nfc_target_unref(target);
+    g_main_loop_unref(loop);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -829,6 +1050,9 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("sequence_basic"), test_sequence_basic);
     g_test_add_func(TEST_("sequence_ok"), test_sequence_ok);
     g_test_add_func(TEST_("sequence2"), test_sequence2);
+    g_test_add_func(TEST_("reactivate"), test_reactivate);
+    g_test_add_func(TEST_("reactivate_ok"), test_reactivate_ok);
+    g_test_add_func(TEST_("reactivate_timeout"), test_reactivate_timeout);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }
