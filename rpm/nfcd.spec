@@ -1,5 +1,5 @@
 Name: nfcd
-Version: 1.0.29
+Version: 1.0.30
 Release: 0
 Summary: NFC daemon
 Group: Development/Libraries
