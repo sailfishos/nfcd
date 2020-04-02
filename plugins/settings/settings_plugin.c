@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -543,6 +543,8 @@ settings_plugin_stop(
         self->own_name_id = 0;
     }
     if (self->iface) {
+        g_dbus_interface_skeleton_unexport
+            (G_DBUS_INTERFACE_SKELETON(self->iface));
         gutil_disconnect_handlers(self->iface, self->dbus_call_id,
             G_N_ELEMENTS(self->dbus_call_id));
         g_object_unref(self->iface);
