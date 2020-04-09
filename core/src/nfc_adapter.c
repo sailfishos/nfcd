@@ -32,6 +32,7 @@
 
 #define GLIB_DISABLE_DEPRECATION_WARNINGS
 
+#include "nfc_adapter_impl.h"
 #include "nfc_adapter_p.h"
 #include "nfc_tag_p.h"
 #include "nfc_tag_t4_p.h"

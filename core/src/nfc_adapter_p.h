@@ -35,7 +35,7 @@
 
 #include "nfc_types_p.h"
 
-#include <nfc_adapter_impl.h>
+#include <nfc_adapter.h>
 
 void
 nfc_adapter_set_name(

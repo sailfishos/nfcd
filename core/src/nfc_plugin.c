@@ -32,6 +32,7 @@
 
 #define GLIB_DISABLE_DEPRECATION_WARNINGS
 
+#include "nfc_plugin_impl.h"
 #include "nfc_plugin_p.h"
 
 struct nfc_plugin_priv {

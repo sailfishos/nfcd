@@ -71,6 +71,15 @@ void
     NfcTarget* target,
     void* user_data);
 
+typedef
+void
+(*NfcTargetTransmitFunc)(
+    NfcTarget* target,
+    NFC_TRANSMIT_STATUS status,
+    const void* data,
+    guint len,
+    void* user_data);
+
 NfcTarget*
 nfc_target_ref(
     NfcTarget* target);
@@ -114,6 +123,26 @@ nfc_target_sequence_new(
 void
 nfc_target_sequence_free(
     NfcTargetSequence* seq); /* Since 1.0.17 */
+
+/*
+ * These functions can be used for sending internal requests (e.g. presence
+ * check) to take advantage of queueing provided by NfcTarget:
+ */
+
+guint
+nfc_target_transmit(
+    NfcTarget* target,
+    const void* data,
+    guint len,
+    NfcTargetSequence* seq,
+    NfcTargetTransmitFunc complete,
+    GDestroyNotify destroy,
+    void* user_data);
+
+gboolean
+nfc_target_cancel_transmit(
+    NfcTarget* target,
+    guint id);
 
 G_END_DECLS
 
