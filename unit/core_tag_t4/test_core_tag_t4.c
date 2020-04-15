@@ -175,38 +175,6 @@ static const guint8 test_resp_read_ndef_2[] = {
 };
 
 static
-GUtilData*
-test_alloc_data(
-    const void* bytes,
-    guint len)
-{
-    if (bytes) {
-        const gsize total = len + sizeof(GUtilData);
-        GUtilData* data = g_malloc(total);
-
-        if (len) {
-            void* contents = (void*)(data + 1); 
-
-            data->bytes = contents;
-            data->size = len;
-            memcpy(contents, bytes, len);
-        } else {
-            memset(data, 0, sizeof(*data));
-        }
-        return data;
-    }
-    return NULL;
-}
-
-static
-GUtilData*
-test_clone_data(
-    const GUtilData* data)
-{
-    return data ? test_alloc_data(data->bytes, data->size) : NULL;
-}
-
-static
 void
 test_tag_quit_loop_cb(
     NfcTag* tag,
