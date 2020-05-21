@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2019 Jolla Ltd.
- * Copyright (C) 2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019-2020 Jolla Ltd.
+ * Copyright (C) 2019-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -43,8 +43,44 @@ struct test_dbus {
     GDBusServer* server;
     GDBusAuthObserver* observer;
     TestDBusStartFunc start;
+    TestDBusStartFunc start2;
     void* user_data;
+    gboolean started;
+    guint start2_id;
 };
+
+static
+gboolean
+test_dbus_start2(
+    gpointer user_data)
+{
+    TestDBus* self = user_data;
+
+    GDEBUG("Starting test stage 2");
+    self->start2_id = 0;
+    self->start2(self->client_connection, self->server_connection,
+        self->user_data);
+    return G_SOURCE_REMOVE;
+}
+
+static
+void
+test_dbus_start(
+    TestDBus* self)
+{
+    if ((self->start || self->start2) && !self->started) {
+        self->started = TRUE;
+        if (self->start) {
+            GDEBUG("Starting the test");
+            self->start(self->client_connection, self->server_connection,
+                self->user_data);
+        }
+        if (self->start2) {
+            self->start2_id = g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,
+                test_dbus_start2, self, NULL);
+        }
+    }
+}
 
 static
 void
@@ -59,10 +95,8 @@ test_dbus_client_connection(
     g_assert(!self->client_connection);
     self->client_connection = g_dbus_connection_new_finish(res, NULL);
     g_assert(self->client_connection);
-
-    if (self->client_connection && self->server_connection && self->start) {
-        self->start(self->client_connection, self->server_connection,
-            self->user_data);
+    if (self->client_connection && self->server_connection && !self->started) {
+        test_dbus_start(self);
     }
 }
 
@@ -78,10 +112,8 @@ test_dbus_server_connection(
     GDEBUG("Got server connection");
     g_assert(!self->server_connection);
     g_object_ref(self->server_connection = connection);
-
-    if (self->client_connection && self->server_connection && self->start) {
-        self->start(self->client_connection, self->server_connection,
-            self->user_data);
+    if (self->client_connection && self->server_connection && !self->started) {
+        test_dbus_start(self);
     }
     return TRUE;
 }
@@ -103,12 +135,22 @@ test_dbus_new(
     TestDBusStartFunc start,
     void* user_data)
 {
+    return test_dbus_new2(start, NULL, user_data);
+}
+
+TestDBus*
+test_dbus_new2(
+    TestDBusStartFunc start,
+    TestDBusStartFunc start2,
+    void* user_data)
+{
     TestDBus* self = g_new0(TestDBus, 1);
     char* guid = g_dbus_generate_guid();
     char* tmpaddr;
     const char* client_addr;
 
     self->start = start;
+    self->start2 = start2;
     self->user_data = user_data;
     self->tmpdir = g_dir_make_tmp("test_dbus_XXXXXX", NULL);
     tmpaddr = g_strconcat("unix:tmpdir=", self->tmpdir, NULL);
@@ -141,6 +183,9 @@ test_dbus_free(
     TestDBus* self)
 {
     if (self) {
+        if (self->start2_id) {
+            g_source_remove(self->start2_id);
+        }
         if (self->client_connection) {
             g_object_unref(self->client_connection);
         }
