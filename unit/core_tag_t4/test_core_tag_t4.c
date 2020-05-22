@@ -35,7 +35,7 @@
 #include "nfc_ndef.h"
 #include "nfc_tag_p.h"
 #include "nfc_tag_t4_p.h"
-#include "nfc_target_p.h"
+#include "nfc_target_impl.h"
 
 #include <gutil_log.h>
 
@@ -173,38 +173,6 @@ static const guint8 test_resp_read_ndef_2[] = {
     0x73, 0x74, 0x20, 0x74, 0x65, 0x73, 0x74, /* Data */
     0x90, 0x00                                /* SW1|SW2 */
 };
-
-static
-GUtilData*
-test_alloc_data(
-    const void* bytes,
-    guint len)
-{
-    if (bytes) {
-        const gsize total = len + sizeof(GUtilData);
-        GUtilData* data = g_malloc(total);
-
-        if (len) {
-            void* contents = (void*)(data + 1); 
-
-            data->bytes = contents;
-            data->size = len;
-            memcpy(contents, bytes, len);
-        } else {
-            memset(data, 0, sizeof(*data));
-        }
-        return data;
-    }
-    return NULL;
-}
-
-static
-GUtilData*
-test_clone_data(
-    const GUtilData* data)
-{
-    return data ? test_alloc_data(data->bytes, data->size) : NULL;
-}
 
 static
 void

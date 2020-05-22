@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -78,23 +78,6 @@ typedef struct nfc_target_class {
 #define NFC_TARGET_CLASS(klass) G_TYPE_CHECK_CLASS_CAST((klass), \
         NFC_TYPE_TARGET, NfcTargetClass)
 
-typedef
-void
-(*NfcTargetTransmitFunc)(
-    NfcTarget* target,
-    NFC_TRANSMIT_STATUS status,
-    const void* data,
-    guint len,
-    void* user_data);
-
-NfcTarget*
-nfc_target_ref(
-    NfcTarget* target);
-
-void
-nfc_target_unref(
-    NfcTarget* target);
-
 void
 nfc_target_transmit_done(
     NfcTarget* target,
@@ -109,26 +92,6 @@ nfc_target_reactivated(
 void
 nfc_target_gone(
     NfcTarget* target);
-
-/*
- * These functions can be used for sending internal requests (e.g. presence
- * check) to take advantage of queueing provided by NfcTarget:
- */
-
-guint
-nfc_target_transmit(
-    NfcTarget* target,
-    const void* data,
-    guint len,
-    NfcTargetSequence* seq,
-    NfcTargetTransmitFunc complete,
-    GDestroyNotify destroy,
-    void* user_data);
-
-gboolean
-nfc_target_cancel_transmit(
-    NfcTarget* target,
-    guint id);
 
 G_END_DECLS
 

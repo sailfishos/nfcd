@@ -35,7 +35,7 @@
 
 #include "nfc_types_p.h"
 
-#include <nfc_plugin_impl.h>
+#include <nfc_plugin.h>
 
 gboolean
 nfc_plugin_start(

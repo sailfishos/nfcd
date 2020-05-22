@@ -35,7 +35,7 @@
 
 #include "nfc_types_p.h"
 
-#include <nfc_target_impl.h>
+#include <nfc_target.h>
 
 void
 nfc_target_deactivate(

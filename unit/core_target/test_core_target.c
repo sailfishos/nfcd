@@ -34,6 +34,7 @@
 
 #include "nfc_tag_p.h"
 #include "nfc_target_p.h"
+#include "nfc_target_impl.h"
 
 #include <gutil_log.h>
 

@@ -35,9 +35,11 @@
 
 #include <nfc_types.h>
 
-extern GLogModule _nfc_dump_log;
-
+/* Macros */
 #define NFCD_INTERNAL G_GNUC_INTERNAL
+
+/* Internal log module */
+extern GLogModule nfc_dump_log NFCD_INTERNAL;
 
 #endif /* NFC_TYPES_PRIVATE_H */
 

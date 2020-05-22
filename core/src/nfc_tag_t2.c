@@ -875,7 +875,7 @@ nfc_tag_t2_init_read_resp(
             nfc_hexdump_data(&data);
             if ((block * block_size) < sector->size) {
                 /* Inficate that data wasn't fully read */
-                gutil_log(&_nfc_dump_log, GLOG_LEVEL_DEBUG, "  %04X: ...",
+                gutil_log(&nfc_dump_log, GLOG_LEVEL_DEBUG, "  %04X: ...",
                     block * block_size);
             }
 

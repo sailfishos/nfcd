@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -38,7 +38,7 @@
 #include <gutil_macros.h>
 
 /* sub-module, to turn prefix off */
-GLogModule _nfc_dump_log = {
+GLogModule nfc_dump_log = {
     .name = "nfc.dump",
     .parent = &GLOG_MODULE_NAME,
     .max_level = GLOG_LEVEL_MAX,
@@ -52,7 +52,7 @@ nfc_hexdump(
     int len)
 {
     const int level = GLOG_LEVEL_VERBOSE;
-    GLogModule* log = &_nfc_dump_log;
+    GLogModule* log = &nfc_dump_log;
 
     if (gutil_log_enabled(log, level)) {
         const guint8* ptr = data;

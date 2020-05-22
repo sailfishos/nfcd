@@ -32,6 +32,7 @@
 
 #include "nfc_plugin_p.h"
 #include "nfc_plugins.h"
+#include "nfc_version.h"
 #include "nfc_log.h"
 
 #include <gutil_strv.h>

@@ -32,8 +32,8 @@
 
 #define GLIB_DISABLE_DEPRECATION_WARNINGS
 
+#include "nfc_target_impl.h"
 #include "nfc_target_p.h"
-#include "nfc_tag.h"
 #include "nfc_log.h"
 
 #include <gutil_misc.h>

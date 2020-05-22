@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -33,6 +33,36 @@
 #include "test_common.h"
 
 #include <gutil_log.h>
+
+GUtilData*
+test_alloc_data(
+    const void* bytes,
+    guint len)
+{
+    if (bytes) {
+        const gsize total = len + sizeof(GUtilData);
+        GUtilData* data = g_malloc(total);
+
+        if (len) {
+            void* contents = (void*)(data + 1);
+
+            data->bytes = contents;
+            data->size = len;
+            memcpy(contents, bytes, len);
+        } else {
+            memset(data, 0, sizeof(*data));
+        }
+        return data;
+    }
+    return NULL;
+}
+
+GUtilData*
+test_clone_data(
+    const GUtilData* data)
+{
+    return data ? test_alloc_data(data->bytes, data->size) : NULL;
+}
 
 gboolean
 test_timeout_expired(
