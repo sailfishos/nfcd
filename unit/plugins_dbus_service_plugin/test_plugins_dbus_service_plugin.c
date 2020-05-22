@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2019 Jolla Ltd.
- * Copyright (C) 2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019-2020 Jolla Ltd.
+ * Copyright (C) 2019-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -85,15 +85,25 @@ test_data_cleanup(
 
 static
 void
+test_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+
+    test_server = server;
+    g_assert(nfc_manager_start(test->manager));
+}
+
+static
+void
 test_call(
     TestData* test,
     GDBusConnection* client,
-    GDBusConnection* server,
     const char* method,
     GAsyncReadyCallback callback)
 {
-    test_server = server;
-    g_assert(nfc_manager_start(test->manager));
     g_dbus_connection_call(client, NULL, "/", NFC_DAEMON_INTERFACE,
         method, NULL, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL, callback, test);
 }
@@ -148,7 +158,7 @@ dbus_service_name_own(
     data->name = g_strdup(name);
     data->bus_acquired = bus_acquired;
     data->name_acquired = name_acquired;
-    g_idle_add_full(G_PRIORITY_HIGH, test_bus_acquired, data,
+    g_idle_add_full(G_PRIORITY_HIGH_IDLE, test_bus_acquired, data,
         test_bus_acquired_free);
     return TEST_NAME_OWN_ID;
 }
@@ -196,7 +206,7 @@ test_get_all_start(
     GDBusConnection* server,
     void* test)
 {
-    test_call((TestData*)test, client, server, "GetAll", test_get_all_done);
+    test_call((TestData*)test, client, "GetAll", test_get_all_done);
 }
 
 static
@@ -208,7 +218,7 @@ test_get_all(
     TestDBus* dbus;
 
     test_data_init(&test);
-    dbus = test_dbus_new(test_get_all_start, &test);
+    dbus = test_dbus_new2(test_start, test_get_all_start, &test);
     test_run(&test_opt, test.loop);
     test_data_cleanup(&test);
     test_dbus_free(dbus);
@@ -248,7 +258,7 @@ test_get_interface_version_start(
     GDBusConnection* server,
     void* test)
 {
-    test_call((TestData*)test, client, server, "GetInterfaceVersion",
+    test_call((TestData*)test, client, "GetInterfaceVersion",
         test_get_interface_version_done);
 }
 
@@ -261,7 +271,7 @@ test_get_interface_version(
     TestDBus* dbus;
 
     test_data_init(&test);
-    dbus = test_dbus_new(test_get_interface_version_start, &test);
+    dbus = test_dbus_new2(test_start, test_get_interface_version_start, &test);
     test_run(&test_opt, test.loop);
     test_data_cleanup(&test);
     test_dbus_free(dbus);
@@ -301,7 +311,7 @@ test_get_adapters_start(
     GDBusConnection* server,
     void* test)
 {
-    test_call((TestData*)test, client, server, "GetAdapters",
+    test_call((TestData*)test, client, "GetAdapters",
         test_get_adapters_done);
 }
 
@@ -314,7 +324,7 @@ test_get_adapters(
     TestDBus* dbus;
 
     test_data_init(&test);
-    dbus = test_dbus_new(test_get_adapters_start, &test);
+    dbus = test_dbus_new2(test_start, test_get_adapters_start, &test);
     test_run(&test_opt, test.loop);
     test_data_cleanup(&test);
     test_dbus_free(dbus);
@@ -359,7 +369,7 @@ test_get_all2_start(
     GDBusConnection* server,
     void* test)
 {
-    test_call((TestData*)test, client, server, "GetAll2", test_get_all2_done);
+    test_call((TestData*)test, client, "GetAll2", test_get_all2_done);
 }
 
 static
@@ -371,7 +381,7 @@ test_get_all2(
     TestDBus* dbus;
 
     test_data_init(&test);
-    dbus = test_dbus_new(test_get_all2_start, &test);
+    dbus = test_dbus_new2(test_start, test_get_all2_start, &test);
     test_run(&test_opt, test.loop);
     test_data_cleanup(&test);
     test_dbus_free(dbus);
@@ -411,7 +421,7 @@ test_get_daemon_version_start(
     GDBusConnection* server,
     void* test)
 {
-    test_call((TestData*)test, client, server, "GetDaemonVersion",
+    test_call((TestData*)test, client, "GetDaemonVersion",
         test_get_daemon_version_done);
 }
 
@@ -424,7 +434,7 @@ test_get_daemon_version(
     TestDBus* dbus;
 
     test_data_init(&test);
-    dbus = test_dbus_new(test_get_daemon_version_start, &test);
+    dbus = test_dbus_new2(test_start, test_get_daemon_version_start, &test);
     test_run(&test_opt, test.loop);
     test_data_cleanup(&test);
     test_dbus_free(dbus);

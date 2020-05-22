@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2019 Jolla Ltd.
- * Copyright (C) 2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019-2020 Jolla Ltd.
+ * Copyright (C) 2019-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -47,6 +47,12 @@ void
 TestDBus*
 test_dbus_new(
     TestDBusStartFunc start,
+    void* user_data);
+
+TestDBus*
+test_dbus_new2(
+    TestDBusStartFunc start,
+    TestDBusStartFunc start2,
     void* user_data);
 
 void
