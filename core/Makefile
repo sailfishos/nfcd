@@ -1,6 +1,6 @@
 # -*- Mode: makefile-gmake -*-
 
-.PHONY: clean all debug release
+.PHONY: clean all debug release pkgconfig
 .PHONY: print_debug_lib print_release_lib
 .PHONY: print_debug_path print_release_path
 
@@ -144,6 +144,8 @@ release_lib: $(RELEASE_LIB)
 
 coverage_lib: $(COVERAGE_LIB)
 
+pkgconfig: $(PKGCONFIG)
+
 clean:
 	rm -f *~ $(SRC_DIR)/*~ $(INCLUDE_DIR)/*~ $(INCLUDE_DIR)/internal/*~
 	rm -fr $(BUILD_DIR)
@@ -193,13 +195,14 @@ ABS_LIBDIR := $(shell echo /$(LIBDIR) | sed -r 's|/+|/|g')
 
 INSTALL = install
 INSTALL_DIRS = $(INSTALL) -d
+INSTALL_FILES = $(INSTALL) -m 644
 
 INSTALL_INCLUDE_DIR = $(DESTDIR)/usr/include/nfcd
 INSTALL_PKGCONFIG_DIR = $(DESTDIR)$(ABS_LIBDIR)/pkgconfig
 
-install: $(INSTALL_INCLUDE_DIR) $(INSTALL_PKGCONFIG_DIR) $(PKGCONFIG)
-	$(INSTALL) -m 644 $(INCLUDE_DIR)/*.h $(INSTALL_INCLUDE_DIR)
-	$(INSTALL) -m 644 $(PKGCONFIG) $(INSTALL_PKGCONFIG_DIR)
+install: $(INSTALL_INCLUDE_DIR) $(INSTALL_PKGCONFIG_DIR)
+	$(INSTALL_FILES) $(INCLUDE_DIR)/*.h $(INSTALL_INCLUDE_DIR)
+	$(INSTALL_FILES) $(PKGCONFIG) $(INSTALL_PKGCONFIG_DIR)
 
 $(INSTALL_INCLUDE_DIR):
 	$(INSTALL_DIRS) $@

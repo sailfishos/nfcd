@@ -7,6 +7,9 @@ all:
 test:
 	@$(MAKE) -C unit $@
 
+pkgconfig:
+	@$(MAKE) -C core $@
+
 install:
 	@$(MAKE) -C src $@
 	@$(MAKE) -C core $@
