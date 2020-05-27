@@ -2,7 +2,6 @@ Name: nfcd
 Version: 1.0.31
 Release: 0
 Summary: NFC daemon
-Group: Development/Libraries
 License: BSD
 URL: https://git.sailfishos.org/mer-core/nfcd
 Source: %{name}-%{version}.tar.bz2
@@ -51,11 +50,11 @@ This package contains command line NFC tools.
 make KEEP_SYMBOLS=1 release
 
 %install
-%define target_wants_dir %{_lib}/systemd/system/network.target.wants
+%define target_wants_dir %{_unitdir}/network.target.wants
 %define settings_dir %{_sharedstatedir}/nfcd/
 %define settings_file %{settings_dir}/settings
 rm -rf %{buildroot}
-make install DESTDIR=%{buildroot}
+make install DESTDIR=%{buildroot} LIBDIR=%{_libdir}
 install -d -m 0700 %{buildroot}/%{settings_dir}
 mkdir -p %{buildroot}/%{target_wants_dir}
 ln -s ../nfcd.service %{buildroot}/%{target_wants_dir}/nfcd.service
@@ -82,8 +81,8 @@ systemctl daemon-reload ||:
 %dir %attr(700,nfc,nfc) %{settings_dir}
 %{_sbindir}/*
 %{_sysconfdir}/dbus-1/system.d/*.conf
-/%{target_wants_dir}/nfcd.service
-/%{_lib}/systemd/system/nfcd.service
+%{target_wants_dir}/nfcd.service
+%{_unitdir}/nfcd.service
 
 %files tools
 %{_bindir}/*
