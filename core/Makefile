@@ -89,10 +89,7 @@ DEBUG_FLAGS = -g
 RELEASE_FLAGS =
 COVERAGE_FLAGS = -g
 
-ifndef KEEP_SYMBOLS
-KEEP_SYMBOLS = 0
-endif
-
+KEEP_SYMBOLS ?= 0
 ifneq ($(KEEP_SYMBOLS),0)
 RELEASE_FLAGS += -g
 endif
@@ -185,7 +182,7 @@ $(COVERAGE_LIB): $(COVERAGE_OBJS)
 	ranlib $@
 
 $(PKGCONFIG): $(PKGCONFIG_TEMPLATE) $(VERSION_FILE)
-	sed -e "s/\[version\]/$(PCVERSION)/g" $(PKGCONFIG_TEMPLATE) > $@
+	sed -e 's|@version@|$(PCVERSION)|g' $(PKGCONFIG_TEMPLATE) > $@
 
 #
 # Install

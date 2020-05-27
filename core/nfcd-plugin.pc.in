@@ -3,6 +3,6 @@ includedir=/usr/include
 
 Name: ${name}
 Description: Header files for building ${name} plugins
-Version: [version]
+Version: @version@
 Requires: glib-2.0
 Cflags: -I${includedir} -I${includedir}/${name}
