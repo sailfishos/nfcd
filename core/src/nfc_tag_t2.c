@@ -115,7 +115,6 @@ struct nfc_tag_t2_priv {
     GHashTable* writes;
     GByteArray* cached_blocks;
     guint8 serial[4];
-    void* nfcid1;
     guint sector_count;
     NfcTagType2Sector* sectors;
     guint init_id;
@@ -957,18 +956,25 @@ void
 nfc_tag_t2_init2(
     NfcTagType2* self,
     NfcTarget* target,
-    const NfcParamPollA* param)
+    const NfcParamPollA* poll_a)
 {
     NfcTagType2Priv* priv = self->priv;
+    NfcTag* tag = &self->tag;
 
-    nfc_tag_init_base(&self->tag, target);
-    priv->init_seq = nfc_target_sequence_new(target);
-    if (param) {
-        priv->nfcid1 = g_memdup(param->nfcid1.bytes, param->nfcid1.size);
-        self->sel_res = param->sel_res;
-        self->nfcid1.size = param->nfcid1.size;
-        self->nfcid1.bytes = priv->nfcid1;
+    if (poll_a) {
+        NfcParamPoll poll;
+
+        GASSERT(target->technology == NFC_TECHNOLOGY_A);
+        memset(&poll, 0, sizeof(poll));
+        poll.a = *poll_a;
+        nfc_tag_init_base(tag, target, &poll);
+        /* nfc_tag_init_base has copied nfcid1 to the internal storage */
+        self->nfcid1 = nfc_tag_param(tag)->a.nfcid1;
+        self->sel_res = poll_a->sel_res;
+    } else {
+        nfc_tag_init_base(tag, target, NULL);
     }
+    priv->init_seq = nfc_target_sequence_new(target);
 }
 
 /*==========================================================================*
@@ -1387,7 +1393,6 @@ nfc_tag_t2_finalize(
     }
     nfc_target_cancel_transmit(self->tag.target, priv->init_id);
     nfc_target_sequence_unref(priv->init_seq);
-    g_free(priv->nfcid1);
     G_OBJECT_CLASS(nfc_tag_t2_parent_class)->finalize(object);
 }
 

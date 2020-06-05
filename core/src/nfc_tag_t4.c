@@ -671,12 +671,13 @@ void
 nfc_tag_t4_init_base(
     NfcTagType4* self,
     NfcTarget* target,
-    guint mtu)
+    guint mtu,
+    const NfcParamPoll* poll)
 {
     NfcTag* tag = &self->tag;
     NfcTagType4Priv* priv = self->priv;
 
-    nfc_tag_init_base(tag, target);
+    nfc_tag_init_base(tag, target, poll);
     priv->mtu = mtu;
 
     /*

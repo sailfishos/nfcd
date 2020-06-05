@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2019 Jolla Ltd.
- * Copyright (C) 2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019-2020 Jolla Ltd.
+ * Copyright (C) 2019-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -44,6 +44,16 @@ test_target_new(
     void)
 {
      return g_object_new(TEST_TYPE_TARGET, NULL);
+}
+
+NfcTarget*
+test_target_new_tech(
+    NFC_TECHNOLOGY tech)
+{
+    NfcTarget* tag = test_target_new();
+
+    tag->technology = tech;
+    return tag;
 }
 
 static

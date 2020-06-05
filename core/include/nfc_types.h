@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -53,11 +53,8 @@ typedef struct nfc_tag_t4b NfcTagType4b; /* Since 1.0.20 */
 typedef struct nfc_target NfcTarget;
 typedef struct nfc_target_sequence NfcTargetSequence;
 
-typedef struct nfc_param_poll_a NfcParamPollA;  /* Since 1.0.8 */
-typedef struct nfc_param_poll_b NfcParamPollB;  /* Since 1.0.20 */
 typedef struct nfc_param_iso_dep_poll_a NfcParamIsoDepPollA; /* Since 1.0.20 */
 typedef struct nfc_param_iso_dep_poll_b NfcParamIsoDepPollB; /* Since 1.0.20 */
-typedef NfcParamPollA NfcTagParamT2; /* For backward compatibility */
 
 /* Constants */
 
@@ -102,6 +99,24 @@ typedef enum nfc_transmit_status {
     NFC_TRANSMIT_STATUS_CORRUPTED, /* CRC mismatch etc. */
     NFC_TRANSMIT_STATUS_TIMEOUT    /* No response from NFCC */
 } NFC_TRANSMIT_STATUS;
+
+/* RF technology specific parameters */
+
+typedef struct nfc_param_poll_a {
+    guint8 sel_res;      /* (SAK)*/
+    GUtilData nfcid1;
+} NfcParamPollA, /* Since 1.0.8 */
+  NfcTagParamT2; /* This one for backward compatibility */
+
+typedef struct nfc_param_poll_b {
+    guint fsc;          /* FSC (FSCI converted to bytes) */
+    GUtilData nfcid0;
+} NfcParamPollB; /* Since 1.0.20 */
+
+typedef union nfc_param_poll {
+    NfcParamPollA a;
+    NfcParamPollB b;
+} NfcParamPoll; /* Since 1.0.33 */
 
 /* Logging */
 #define NFC_CORE_LOG_MODULE nfc_core_log

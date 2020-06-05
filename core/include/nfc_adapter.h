@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -108,20 +108,27 @@ NfcTag*
 nfc_adapter_add_tag_t4a(
     NfcAdapter* adapter,
     NfcTarget* target,
-    const NfcParamPollA* tech_param,
+    const NfcParamPollA* poll_a,
     const NfcParamIsoDepPollA* iso_dep_param); /* Since 1.0.20 */
 
 NfcTag*
 nfc_adapter_add_tag_t4b(
     NfcAdapter* adapter,
     NfcTarget* target,
-    const NfcParamPollB* tech_param,
+    const NfcParamPollB* poll_b,
     const NfcParamIsoDepPollB* iso_dep_param); /* Since 1.0.20 */
 
 NfcTag*
 nfc_adapter_add_other_tag(
     NfcAdapter* adapter,
-    NfcTarget* target);
+    NfcTarget* target)
+    G_GNUC_DEPRECATED_FOR(nfc_adapter_add_other_tag2);
+
+NfcTag*
+nfc_adapter_add_other_tag2(
+    NfcAdapter* adapter,
+    NfcTarget* target,
+    const NfcParamPoll* poll); /* Since 1.0.33 */
 
 void
 nfc_adapter_remove_tag(

@@ -421,6 +421,7 @@ test_target_new(
 {
      TestTarget* self = g_object_new(TEST_TYPE_TARGET, NULL);
 
+     self->target.technology = NFC_TECHNOLOGY_A;
      self->data.bytes = self->storage = g_memdup(bytes, size);
      self->data.size = size;
      return self;

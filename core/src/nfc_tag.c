@@ -38,10 +38,12 @@
 #include "nfc_log.h"
 
 #include <gutil_misc.h>
+#include <gutil_macros.h>
 
 struct nfc_tag_priv {
     char* name;
     gulong gone_id;
+    NfcParamPoll* param;
 };
 
 G_DEFINE_TYPE(NfcTag, nfc_tag, G_TYPE_OBJECT)
@@ -77,12 +79,13 @@ nfc_tag_gone(
 
 NfcTag*
 nfc_tag_new(
-    NfcTarget* target)
+    NfcTarget* target,
+    const NfcParamPoll* poll)
 {
     if (G_LIKELY(target)) {
         NfcTag* self = g_object_new(NFC_TYPE_TAG, NULL);
 
-        nfc_tag_init_base(self, target);
+        nfc_tag_init_base(self, target, poll);
         return self;
     }
     return NULL;
@@ -105,6 +108,13 @@ nfc_tag_unref(
     if (G_LIKELY(self)) {
         g_object_unref(NFC_TAG(self));
     }
+}
+
+const NfcParamPoll*
+nfc_tag_param(
+    NfcTag* self) /* Since 1.0.33 */
+{
+    return G_LIKELY(self) ? self->priv->param : NULL;
 }
 
 void
@@ -162,7 +172,8 @@ nfc_tag_remove_handlers(
 void
 nfc_tag_init_base(
     NfcTag* self,
-    NfcTarget* target)
+    NfcTarget* target,
+    const NfcParamPoll* poll)
 {
     NfcTagPriv* priv = self->priv;
 
@@ -172,6 +183,43 @@ nfc_tag_init_base(
     self->present = target->present;
     self->target = nfc_target_ref(target);
     priv->gone_id = nfc_target_add_gone_handler(target, nfc_tag_gone, self);
+    if (poll) {
+        const gsize aligned_size = G_ALIGN8(sizeof(*poll));
+        const GUtilData* src;
+        gsize size;
+
+        /*
+         * Allocate the whole thing (including additional data) from a
+         * single memory block and adjust the pointers.
+         */
+        switch (target->technology) {
+        case NFC_TECHNOLOGY_A:
+            src = &poll->a.nfcid1;
+            size = src->size ? (aligned_size + src->size) : sizeof(*poll);
+            *(priv->param = g_malloc0(size)) = *poll;
+            if (src->bytes) {
+                guint8* dest = (guint8*)priv->param + aligned_size;
+
+                memcpy(dest, src->bytes, src->size);
+                priv->param->a.nfcid1.bytes = dest;
+            }
+            break;
+        case NFC_TECHNOLOGY_B:
+            src = &poll->b.nfcid0;
+            size = src->size ? (aligned_size + src->size) : sizeof(*poll);
+            *(priv->param = g_malloc0(size)) = *poll;
+            if (src->bytes) {
+                guint8* dest = (guint8*)priv->param + aligned_size;
+
+                memcpy(dest, src->bytes, src->size);
+                priv->param->b.nfcid0.bytes = dest;
+            }
+            break;
+        case NFC_TECHNOLOGY_F:
+        case NFC_TECHNOLOGY_UNKNOWN:
+            break;
+        }
+    }
 }
 
 void
@@ -219,6 +267,7 @@ nfc_tag_finalize(
     nfc_target_unref(self->target);
     nfc_ndef_rec_unref(self->ndef);
     g_free(priv->name);
+    g_free(priv->param);
     G_OBJECT_CLASS(nfc_tag_parent_class)->finalize(object);
 }
 

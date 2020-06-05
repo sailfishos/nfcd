@@ -43,19 +43,21 @@ typedef struct nfc_tag_class {
 
 NfcTag*
 nfc_tag_new(
-    NfcTarget* target)
+    NfcTarget* target,
+    const NfcParamPoll* poll)
     NFCD_INTERNAL;
 
 NfcTagType2*
 nfc_tag_t2_new(
     NfcTarget* target,
-    const NfcParamPollA* param)
+    const NfcParamPollA* poll_a)
     NFCD_INTERNAL;
 
 void
 nfc_tag_init_base(
     NfcTag* tag,
-    NfcTarget* target)
+    NfcTarget* target,
+    const NfcParamPoll* poll)
     NFCD_INTERNAL;
 
 void
