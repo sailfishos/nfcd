@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2019 Jolla Ltd.
- * Copyright (C) 2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019-2020 Jolla Ltd.
+ * Copyright (C) 2019-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -31,6 +31,7 @@
  */
 
 #include "nfc_tag_t4_p.h"
+#include "nfc_target.h"
 #include "nfc_log.h"
 
 typedef struct nfc_tag_t4a_class {
@@ -50,14 +51,23 @@ G_DEFINE_TYPE(NfcTagType4a, nfc_tag_t4a, NFC_TYPE_TAG_T4)
 NfcTagType4a*
 nfc_tag_t4a_new(
     NfcTarget* target,
-    const NfcParamPollA* tech_param,
+    const NfcParamPollA* poll_a,
     const NfcParamIsoDepPollA* iso_dep_param)
 {
     if (G_LIKELY(iso_dep_param)) {
         NfcTagType4a* self = g_object_new(NFC_TYPE_TAG_T4A, NULL);
 
         GDEBUG("Type 4A tag");
-        nfc_tag_t4_init_base(&self->t4, target, iso_dep_param->fsc);
+        if (poll_a) {
+            NfcParamPoll poll;
+
+            GASSERT(target->technology == NFC_TECHNOLOGY_A);
+            memset(&poll, 0, sizeof(poll));
+            poll.a = *poll_a;
+            nfc_tag_t4_init_base(&self->t4, target, iso_dep_param->fsc, &poll);
+        } else {
+            nfc_tag_t4_init_base(&self->t4, target, iso_dep_param->fsc, NULL);
+        }
         return self;
     }
     return NULL;

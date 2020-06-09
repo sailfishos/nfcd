@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2019 Jolla Ltd.
- * Copyright (C) 2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019-2020 Jolla Ltd.
+ * Copyright (C) 2019-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -72,6 +72,7 @@ test_data_init(
 {
     NfcPluginsInfo pi;
     NfcTarget* target;
+    NfcParamPoll poll;
 
     g_assert(!test_name_watches);
     memset(test, 0, sizeof(*test));
@@ -80,7 +81,8 @@ test_data_init(
     g_assert((test->adapter = test_adapter_new()) != NULL);
 
     target = test_target_new();
-    g_assert(nfc_adapter_add_other_tag(test->adapter, target));
+    memset(&poll, 0, sizeof(poll));
+    g_assert(nfc_adapter_add_other_tag2(test->adapter, target, &poll));
     nfc_target_unref(target);
 
     g_assert(nfc_manager_add_adapter(test->manager, test->adapter));

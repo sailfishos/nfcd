@@ -61,6 +61,7 @@ test_null(
 {
     /* Public interfaces are NULL tolerant */
     g_assert(!nfc_tag_ref(NULL));
+    g_assert(!nfc_tag_param(NULL));
     g_assert(!nfc_tag_add_initialized_handler(NULL, NULL, NULL));
     g_assert(!nfc_tag_add_gone_handler(NULL, NULL, NULL));
     nfc_tag_remove_handler(NULL, 0);
@@ -80,15 +81,18 @@ test_basic(
 {
     NfcTag* tag = g_object_new(NFC_TYPE_TAG, NULL);
     NfcTarget* target = test_target_new();
+    NfcParamPoll poll;
     const char* name = "test";
     int init_count = 0;
     int gone_count = 0;
     gulong init_id;
     gulong gone_id;
 
-    nfc_tag_init_base(tag, target);
+    memset(&poll, 0, sizeof(poll));
+    nfc_tag_init_base(tag, target, &poll);
     g_assert(tag->target == target);
     g_assert(tag->present == TRUE);
+    g_assert(!nfc_tag_param(tag)); /* No params for NFC_TECHNOLOGY_UNKNOWN */
 
     g_assert(!tag->name);
     nfc_tag_set_name(tag, name);
@@ -129,6 +133,88 @@ test_basic(
 }
 
 /*==========================================================================*
+ * basic_a
+ *==========================================================================*/
+
+static
+void
+test_basic_a(
+    void)
+{
+    static const guint8 nfcid1[] = {0x04, 0xbd, 0xfa, 0x4a, 0xeb, 0x2b, 0x80};
+    static const GUtilData nfcid1_data = { TEST_ARRAY_AND_SIZE(nfcid1) };
+
+    NfcTag* tag = g_object_new(NFC_TYPE_TAG, NULL);
+    NfcTarget* target = test_target_new_tech(NFC_TECHNOLOGY_A);
+    NfcParamPoll poll;
+    const NfcParamPollA* poll_a;
+
+    memset(&poll, 0, sizeof(poll));
+    poll.a.nfcid1 = nfcid1_data;
+    nfc_tag_init_base(tag, target, &poll);
+    g_assert(tag->target == target);
+    g_assert(tag->present == TRUE);
+    poll_a = &nfc_tag_param(tag)->a;
+    g_assert(poll_a);
+    g_assert(poll_a->nfcid1.size == sizeof(nfcid1));
+    g_assert(!memcmp(poll_a->nfcid1.bytes, nfcid1, sizeof(nfcid1)));
+    nfc_tag_unref(tag);
+
+    /* Make sure NULL nfcid1 is handled */
+    tag = g_object_new(NFC_TYPE_TAG, NULL);
+    memset(&poll, 0, sizeof(poll));
+    nfc_tag_init_base(tag, target, &poll);
+    poll_a = &nfc_tag_param(tag)->a;
+    g_assert(poll_a);
+    g_assert_cmpuint(poll_a->nfcid1.size, == ,0);
+    g_assert(!poll_a->nfcid1.bytes);
+    nfc_tag_unref(tag);
+
+    nfc_target_unref(target);
+}
+
+/*==========================================================================*
+ * basic_b
+ *==========================================================================*/
+
+static
+void
+test_basic_b(
+    void)
+{
+    static const guint8 nfcid0[] = {0x01, 0x01, 0x02, 0x04};
+    static const GUtilData nfcid0_data = { TEST_ARRAY_AND_SIZE(nfcid0) };
+
+    NfcTag* tag = g_object_new(NFC_TYPE_TAG, NULL);
+    NfcTarget* target = test_target_new_tech(NFC_TECHNOLOGY_B);
+    NfcParamPoll poll;
+    const NfcParamPollB* poll_b;
+
+    memset(&poll, 0, sizeof(poll));
+    poll.b.nfcid0 = nfcid0_data;
+    nfc_tag_init_base(tag, target, &poll);
+    g_assert(tag->target == target);
+    g_assert(tag->present == TRUE);
+    poll_b = &nfc_tag_param(tag)->b;
+    g_assert(poll_b);
+    g_assert_cmpuint(poll_b->nfcid0.size, == ,sizeof(nfcid0));
+    g_assert(!memcmp(poll_b->nfcid0.bytes, nfcid0, sizeof(nfcid0)));
+    nfc_tag_unref(tag);
+
+    /* Make sure NULL nfcid0 is handled */
+    tag = g_object_new(NFC_TYPE_TAG, NULL);
+    memset(&poll, 0, sizeof(poll));
+    nfc_tag_init_base(tag, target, &poll);
+    poll_b = &nfc_tag_param(tag)->b;
+    g_assert(poll_b);
+    g_assert_cmpuint(poll_b->nfcid0.size, == ,0);
+    g_assert(!poll_b->nfcid0.bytes);
+    nfc_tag_unref(tag);
+
+    nfc_target_unref(target);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -142,6 +228,8 @@ int main(int argc, char* argv[])
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("null"), test_null);
     g_test_add_func(TEST_("basic"), test_basic);
+    g_test_add_func(TEST_("basic_a"), test_basic_a);
+    g_test_add_func(TEST_("basic_b"), test_basic_b);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

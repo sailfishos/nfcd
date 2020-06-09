@@ -43,22 +43,23 @@ typedef struct nfc_tag_t4_class {
 NfcTagType4a*
 nfc_tag_t4a_new(
     NfcTarget* target,
-    const NfcParamPollA* tech_param,
-    const NfcParamIsoDepPollA* interface_param)
+    const NfcParamPollA* poll_a,
+    const NfcParamIsoDepPollA* iso_dep_param)
     NFCD_INTERNAL;
 
 NfcTagType4b*
 nfc_tag_t4b_new(
     NfcTarget* target,
-    const NfcParamPollB* tech_param,
-    const NfcParamIsoDepPollB* interface_param)
+    const NfcParamPollB* poll_b,
+    const NfcParamIsoDepPollB* iso_dep_param)
     NFCD_INTERNAL;
 
 void
 nfc_tag_t4_init_base(
     NfcTagType4* tag,
     NfcTarget* target,
-    guint mtu)
+    guint mtu,
+    const NfcParamPoll* poll)
     NFCD_INTERNAL;
 
 #endif /* NFC_TAG_T4_PRIVATE_H */

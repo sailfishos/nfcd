@@ -446,8 +446,17 @@ nfc_adapter_add_other_tag(
     NfcAdapter* self,
     NfcTarget* target)
 {
+    return nfc_adapter_add_other_tag2(self, target, NULL);
+}
+
+NfcTag*
+nfc_adapter_add_other_tag2(
+    NfcAdapter* self,
+    NfcTarget* target,
+    const NfcParamPoll* poll) /* Since 1.0.33 */
+{
     if (G_LIKELY(self)) {
-        NfcTag* tag = nfc_tag_new(target);
+        NfcTag* tag = nfc_tag_new(target, poll);
 
         if (tag) {
             return nfc_adapter_add_tag(self, tag);

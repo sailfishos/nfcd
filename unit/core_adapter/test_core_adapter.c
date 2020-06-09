@@ -224,7 +224,9 @@ test_null(
     g_assert(!nfc_adapter_add_tag_t2(NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_tag_t4a(NULL, NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_tag_t4b(NULL, NULL, NULL, NULL));
+    G_GNUC_BEGIN_IGNORE_DEPRECATIONS
     g_assert(!nfc_adapter_add_other_tag(NULL, NULL));
+    G_GNUC_END_IGNORE_DEPRECATIONS
     g_assert(!nfc_adapter_add_target_presence_handler(NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_tag_added_handler(NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_tag_removed_handler(NULL, NULL, NULL));
@@ -270,7 +272,10 @@ test_basic(
     g_assert(!nfc_adapter_add_tag_t2(adapter, NULL, NULL));
     g_assert(!nfc_adapter_add_tag_t4a(adapter, NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_tag_t4b(adapter, NULL, NULL, NULL));
+    G_GNUC_BEGIN_IGNORE_DEPRECATIONS
     g_assert(!nfc_adapter_add_other_tag(adapter, NULL));
+    G_GNUC_END_IGNORE_DEPRECATIONS
+    g_assert(!nfc_adapter_add_other_tag2(adapter, NULL, NULL));
     nfc_adapter_remove_handler(adapter, 0);
 
     nfc_adapter_set_name(adapter, name);
@@ -576,14 +581,14 @@ test_tags(
     void)
 {
     TestAdapter* test = test_adapter_new();
-    NfcTarget* target0 = test_target_new();
+    NfcTarget* target0 = test_target_new_tech(NFC_TECHNOLOGY_A);
     NfcTarget* target1 = test_target_new();
     NfcAdapter* adapter = &test->adapter;
     NfcTag* tag0;
     NfcTag* tag1;
     gulong id[3];
     int tag_added = 0, tag_removed = 0, presence_changed_count = 0;
-    NfcParamPollA poll_a;
+    NfcParamPoll poll;
 
     id[0] = nfc_adapter_add_tag_added_handler(adapter,
         test_adapter_tag_inc, &tag_added);
@@ -607,9 +612,9 @@ test_tags(
     g_assert(adapter->target_present);
     g_assert(presence_changed_count == 1);
 
-    memset(&poll_a, 0, sizeof(poll_a));
-    tag0 = nfc_adapter_add_tag_t2(adapter, target0, &poll_a);
-    tag1 = nfc_adapter_add_other_tag(adapter, target1);
+    memset(&poll, 0, sizeof(poll));
+    tag0 = nfc_adapter_add_tag_t2(adapter, target0, &poll.a);
+    tag1 = nfc_adapter_add_other_tag2(adapter, target1, NULL);
     g_assert(tag0);
     g_assert(tag1);
     g_assert(!g_strcmp0(tag0->name, "tag0"));
@@ -635,8 +640,8 @@ test_tags(
     nfc_adapter_remove_tag(adapter, NULL);
     nfc_adapter_remove_tag(adapter, "foo");
 
-    /* This tag is no longer present: */
-    g_assert(!nfc_adapter_add_other_tag(adapter, target0));
+    /* This target is no longer present: */
+    g_assert(!nfc_adapter_add_other_tag2(adapter, target0, &poll));
     g_assert(tag_removed == 2);
 
     nfc_adapter_remove_all_handlers(adapter, id);

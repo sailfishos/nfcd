@@ -544,13 +544,15 @@ test_get_tags_start(
 {
     TestData* test = user_data;
     NfcTarget* target;
+    NfcParamPoll poll;
 
     test->service = dbus_service_adapter_new(test->adapter, server);
     g_assert(test->service);
 
     /* Add second tag after creating DBusServiceAdapter */
     target = test_target_new();
-    g_assert(nfc_adapter_add_other_tag(test->adapter, target));
+    memset(&poll, 0, sizeof(poll));
+    g_assert(nfc_adapter_add_other_tag2(test->adapter, target, &poll));
     nfc_target_unref(target);
 
     g_dbus_connection_call(client, NULL,
@@ -567,12 +569,14 @@ test_get_tags(
     TestData test;
     TestDBus* dbus;
     NfcTarget* target;
+    NfcParamPoll poll;
 
     test_data_init(&test);
 
     /* Add one tag before creating DBusServiceAdapter */
     target = test_target_new();
-    g_assert(nfc_adapter_add_other_tag(test.adapter, target));
+    memset(&poll, 0, sizeof(poll));
+    g_assert(nfc_adapter_add_other_tag2(test.adapter, target, &poll));
     nfc_target_unref(target);
 
     dbus = test_dbus_new(test_get_tags_start, &test);
@@ -801,6 +805,7 @@ test_tag_added_start(
 {
     TestData* test = user_data;
     NfcTarget* target;
+    NfcParamPoll poll;
 
     test->service = dbus_service_adapter_new(test->adapter, server);
     g_assert(test->service);
@@ -813,7 +818,8 @@ test_tag_added_start(
 
     /* Add a tag */
     target = test_target_new();
-    g_assert(nfc_adapter_add_other_tag(test->adapter, target));
+    memset(&poll, 0, sizeof(poll));
+    g_assert(nfc_adapter_add_other_tag2(test->adapter, target, &poll));
     nfc_target_unref(target);
 }
 
@@ -892,11 +898,13 @@ test_tag_removed(
     TestData test;
     TestDBus* dbus;
     NfcTarget* target;
+    NfcParamPoll poll;
 
     test_data_init(&test);
 
     target = test_target_new();
-    g_assert(nfc_adapter_add_other_tag(test.adapter, target));
+    memset(&poll, 0, sizeof(poll));
+    g_assert(nfc_adapter_add_other_tag2(test.adapter, target, &poll));
     nfc_target_unref(target);
 
     dbus = test_dbus_new(test_tag_removed_start, &test);
