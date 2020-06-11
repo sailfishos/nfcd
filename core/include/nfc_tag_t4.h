@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2019 Jolla Ltd.
  * Copyright (C) 2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -42,15 +43,13 @@
 G_BEGIN_DECLS
 
 typedef struct nfc_tag_t4_priv NfcTagType4Priv;
+typedef union nfc_param_iso_dep NfcParamIsoDep;
 
 struct nfc_tag_t4 {
     NfcTag tag;
     NfcTagType4Priv* priv;
-};
-
-struct nfc_param_iso_dep_poll_a {
-    guint fsc;     /* FSC (FSDI converted to bytes) */
-    GUtilData t1;  /* T1 to Tk (aka historical bytes) */
+    /* Since 1.0.39 */
+    const NfcParamIsoDep* iso_dep;
 };
 
 GType nfc_tag_t4_get_type();
@@ -82,6 +81,41 @@ GType nfc_tag_t4b_get_type();
  * low level (non-protocol) I/O error.
  */
 #define ISO_SW_IO_ERR (0)
+
+/* ISO-DEP activation parameter */
+
+typedef struct nfc_param_iso_dep_poll_a {
+    guint fsc;     /* FSC (FSDI converted to bytes) */
+    GUtilData t1;  /* T1 to Tk (aka historical bytes) */
+    /* Since 1.0.39 */
+    guint8 t0;     /* Format byte T0 */
+
+    /*
+     * NFC-Forum-TS-DigitalProtocol 1.0
+     * Table 65: Coding of Format Byte T0
+     *
+     * Presence of interface bytes within NFC-A/ISO-DEP Poll activation
+     * parameter is determined with bits of Format Byte set to '1'
+     */
+#define NFC_PARAM_ISODEP_T0_A   (0x10) /* TA is transmitted */
+#define NFC_PARAM_ISODEP_T0_B   (0x20) /* TB is transmitted */
+#define NFC_PARAM_ISODEP_T0_C   (0x40) /* TC is transmitted */
+
+    guint8 ta;     /* Interface byte TA (optional) */
+    guint8 tb;     /* Interface byte TB (optional) */
+    guint8 tc;     /* Interface byte TC (optional) */
+} NfcParamIsoDepPollA; /* Since 1.0.20 */
+
+typedef struct nfc_param_iso_dep_poll_b {
+    guint mbli;     /* Maximum buffer length index */
+    guint did;      /* Device ID */
+    GUtilData hlr;  /* Higher Layer Response */
+} NfcParamIsoDepPollB; /* Since 1.0.39 */
+
+union nfc_param_iso_dep {
+    NfcParamIsoDepPollA a;
+    NfcParamIsoDepPollB b;
+}; /* Since 1.0.39 */
 
 typedef
 void

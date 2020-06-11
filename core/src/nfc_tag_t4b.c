@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2019-2020 Jolla Ltd.
  * Copyright (C) 2019-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -52,17 +53,26 @@ NfcTagType4b*
 nfc_tag_t4b_new(
     NfcTarget* target,
     const NfcParamPollB* poll_b,
-    const NfcParamIsoDepPollB* iso_dep_param)
+    const NfcParamIsoDepPollB* iso_dep_b)
 {
     if (G_LIKELY(poll_b)) {
         NfcTagType4b* self = g_object_new(NFC_TYPE_TAG_T4B, NULL);
+        NfcTagType4* t4 = &self->t4;
         NfcParamPoll poll;
 
         GDEBUG("Type 4B tag");
         GASSERT(target->technology == NFC_TECHNOLOGY_B);
         memset(&poll, 0, sizeof(poll));
         poll.b = *poll_b;
-        nfc_tag_t4_init_base(&self->t4, target, poll_b->fsc, &poll);
+        if (iso_dep_b) {
+            NfcParamIsoDep iso_dep;
+
+            memset(&iso_dep, 0, sizeof(iso_dep));
+            iso_dep.b = *iso_dep_b;
+            nfc_tag_t4_init_base(t4, target, poll_b->fsc, &poll, &iso_dep);
+        } else {
+            nfc_tag_t4_init_base(t4, target, poll_b->fsc, &poll, NULL);
+        }
         return self;
     }
     return NULL;

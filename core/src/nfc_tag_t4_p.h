@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2019-2020 Jolla Ltd.
  * Copyright (C) 2019-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -59,7 +60,8 @@ nfc_tag_t4_init_base(
     NfcTagType4* tag,
     NfcTarget* target,
     guint mtu,
-    const NfcParamPoll* poll)
+    const NfcParamPoll* poll,
+    const NfcParamIsoDep* iso_dep)
     NFCD_INTERNAL;
 
 #endif /* NFC_TAG_T4_PRIVATE_H */

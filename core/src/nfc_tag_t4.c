@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2019-2020 Jolla Ltd.
  * Copyright (C) 2019-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -39,6 +40,8 @@
 #include "nfc_util.h"
 #include "nfc_log.h"
 
+#include <gutil_macros.h>
+
 typedef struct nfc_isodep_tx {
     NfcTagType4* t4;
     NfcTagType4ResponseFunc resp;
@@ -60,6 +63,7 @@ struct nfc_tag_t4_priv {
     NfcTargetSequence* init_seq;
     NfcIsoDepNdefRead* init_read;
     guint init_id;
+    NfcParamIsoDep* iso_dep; /* Since 1.0.39 */
 };
 
 G_DEFINE_ABSTRACT_TYPE(NfcTagType4, nfc_tag_t4, NFC_TYPE_TAG)
@@ -672,13 +676,54 @@ nfc_tag_t4_init_base(
     NfcTagType4* self,
     NfcTarget* target,
     guint mtu,
-    const NfcParamPoll* poll)
+    const NfcParamPoll* poll,
+    const NfcParamIsoDep* iso_dep)
 {
     NfcTag* tag = &self->tag;
     NfcTagType4Priv* priv = self->priv;
 
     nfc_tag_init_base(tag, target, poll);
     priv->mtu = mtu;
+
+    if (iso_dep) {
+        const gsize aligned_size = G_ALIGN8(sizeof(*iso_dep));
+        const GUtilData* src;
+        gsize size;
+
+        /*
+         * Allocate the whole thing (including additional data) from a
+         * single memory block and adjust the pointers.
+         */
+        switch (target->technology) {
+        case NFC_TECHNOLOGY_A:
+            src = &iso_dep->a.t1;
+            size = src->size ? (aligned_size + src->size) : sizeof(*iso_dep);
+            *(priv->iso_dep = g_malloc0(size)) = *iso_dep;
+            if (src->bytes) {
+                guint8* dest = (guint8*)priv->iso_dep + aligned_size;
+
+                memcpy(dest, src->bytes, src->size);
+                priv->iso_dep->a.t1.bytes = dest;
+            }
+            self->iso_dep = priv->iso_dep;
+            break;
+        case NFC_TECHNOLOGY_B:
+            src = &iso_dep->b.hlr;
+            size = src->size ? (aligned_size + src->size) : sizeof(*iso_dep);
+            *(priv->iso_dep = g_malloc0(size)) = *iso_dep;
+            if (src->bytes) {
+                guint8* dest = (guint8*)priv->iso_dep + aligned_size;
+
+                memcpy(dest, src->bytes, src->size);
+                priv->iso_dep->b.hlr.bytes = dest;
+            }
+            self->iso_dep = priv->iso_dep;
+            break;
+        case NFC_TECHNOLOGY_F:
+        case NFC_TECHNOLOGY_UNKNOWN:
+            break;
+        }
+    }
 
     /*
      * We only try to read NDEF Tag file if the target can be reactivated.
@@ -763,6 +808,7 @@ nfc_tag_t4_finalize(
     nfc_target_sequence_unref(priv->init_seq);
     nfc_iso_dep_ndef_read_free(priv->init_read);
     g_byte_array_free(priv->buf, TRUE);
+    g_free(priv->iso_dep);
     G_OBJECT_CLASS(nfc_tag_t4_parent_class)->finalize(object);
 }
 
