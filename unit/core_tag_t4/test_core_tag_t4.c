@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2019-2020 Jolla Ltd.
  * Copyright (C) 2019-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -447,6 +448,91 @@ test_basic(
     nfc_target_unref(target);
     g_main_loop_unref(loop);
 }
+
+static
+void
+test_basic_a(
+    void)
+{
+    static const guint8 t1[] = {0x01, 0x02, 0x03, 0x04};
+    static const GUtilData t1_data = { TEST_ARRAY_AND_SIZE(t1) };
+
+    GMainLoop* loop = g_main_loop_new(NULL, TRUE);
+    NfcTarget* target = g_object_new(TEST_TYPE_TARGET, NULL);
+    NfcParamPollA poll_a;
+    NfcParamIsoDepPollA iso_dep_poll_a;
+    NfcTagType4* t4a;
+    NfcTag* tag;
+
+    memset(&poll_a, 0, sizeof(poll_a));
+    memset(&iso_dep_poll_a, 0, sizeof(iso_dep_poll_a));
+    iso_dep_poll_a.fsc = 256;
+    target->technology = NFC_TECHNOLOGY_A;
+
+    t4a = NFC_TAG_T4(nfc_tag_t4a_new(target, NULL, &iso_dep_poll_a));
+    g_assert(NFC_IS_TAG_T4A(t4a));
+    tag = &t4a->tag;
+    nfc_tag_unref(tag);
+
+    /* Handle case with Historical Bytes present */
+    iso_dep_poll_a.t1 = t1_data;
+    t4a = NFC_TAG_T4(nfc_tag_t4a_new(target, NULL, &iso_dep_poll_a));
+    g_assert(NFC_IS_TAG_T4A(t4a));
+    tag = &t4a->tag;
+    nfc_tag_unref(tag);
+
+    /* Handle case with Poll parameter present */
+    t4a = NFC_TAG_T4(nfc_tag_t4a_new(target, &poll_a, &iso_dep_poll_a));
+    g_assert(NFC_IS_TAG_T4A(t4a));
+    tag = &t4a->tag;
+    nfc_tag_unref(tag);
+
+    nfc_target_unref(target);
+    g_main_loop_unref(loop);
+}
+
+static
+void
+test_basic_b(
+    void)
+{
+    static const guint8 hlr[] = {0x01, 0x02, 0x03, 0x04};
+    static const GUtilData hlr_data = { TEST_ARRAY_AND_SIZE(hlr) };
+
+    GMainLoop* loop = g_main_loop_new(NULL, TRUE);
+    NfcTarget* target = g_object_new(TEST_TYPE_TARGET, NULL);
+    NfcParamPollB poll_b;
+    NfcParamIsoDepPollB iso_dep_poll_b;
+    NfcTagType4* t4b;
+    NfcTag* tag;
+
+    memset(&poll_b, 0, sizeof(poll_b));
+    poll_b.fsc = 256;
+    memset(&iso_dep_poll_b, 0, sizeof(iso_dep_poll_b));
+    target->technology = NFC_TECHNOLOGY_B;
+
+    t4b = NFC_TAG_T4(nfc_tag_t4b_new(target, &poll_b, &iso_dep_poll_b));
+    g_assert(NFC_IS_TAG_T4B(t4b));
+    tag = &t4b->tag;
+    nfc_tag_unref(tag);
+
+    /* Handle case with HILR present */
+    iso_dep_poll_b.hlr = hlr_data;
+    t4b = NFC_TAG_T4(nfc_tag_t4b_new(target, &poll_b, &iso_dep_poll_b));
+    g_assert(NFC_IS_TAG_T4B(t4b));
+    tag = &t4b->tag;
+    nfc_tag_unref(tag);
+
+    /* Handle case with no ISO-DEP param */
+    t4b = NFC_TAG_T4(nfc_tag_t4b_new(target, &poll_b, NULL));
+    g_assert(NFC_IS_TAG_T4B(t4b));
+    tag = &t4b->tag;
+    nfc_tag_unref(tag);
+
+    nfc_target_unref(target);
+    g_main_loop_unref(loop);
+}
+
 
 /*==========================================================================*
  * init_seq
@@ -1078,6 +1164,8 @@ int main(int argc, char* argv[])
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("null"), test_null);
     g_test_add_func(TEST_("basic"), test_basic);
+    g_test_add_func(TEST_("basic_a"), test_basic_a);
+    g_test_add_func(TEST_("basic_b"), test_basic_b);
     for (i = 0; i < G_N_ELEMENTS(init_tests); i++) {
         const TestInitData* test = init_tests + i;
         char* path = g_strconcat(TEST_("init_seq/"), test->name, NULL);
