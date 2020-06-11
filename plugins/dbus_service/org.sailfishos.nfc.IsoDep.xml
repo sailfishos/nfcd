@@ -3,6 +3,20 @@
 <node>
   <!-- ISO-DEP specific extensions to org.sailfishos.nfc.Tag -->
   <interface name="org.sailfishos.nfc.IsoDep">
+  <!--
+      Activation Parameters:
+        NFC-A:
+          "T0" - "y", Format Byte T0
+          "TA" - "y", Interface Bytes TA (optional)
+          "TB" - "y", Interface Bytes TB (optional)
+          "TC" - "y", Interface Bytes TC (optional)
+          "HB" - "ay", Historical Bytes
+
+        NFC-B:
+          "MBLI" - "y", Maximum Buffer Length Index
+          "DID" - "y", Device ID
+          "HLR" - "ay", Higher Layer Response (optional)
+    -->
     <method name="GetAll">
       <arg name="version" type="i" direction="out"/>
     </method>
@@ -23,6 +37,14 @@
       </arg>
       <arg name="SW1" type="y" direction="out"/>
       <arg name="SW2" type="y" direction="out"/>
+    </method>
+    <!-- Interface version 2 -->
+    <method name="GetAll2">
+      <arg name="version" type="i" direction="out"/>
+      <arg name="parameters" type="a{sv}" direction="out"/>
+    </method>
+    <method name="GetActivationParameters">
+      <arg name="parameters" type="a{sv}" direction="out"/>
     </method>
   </interface>
 </node>
