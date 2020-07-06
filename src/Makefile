@@ -182,11 +182,14 @@ endif
 # Install
 #
 
+UNITDIR ?= usr/lib/systemd/system
+ABS_UNITDIR := $(shell echo /$(UNITDIR) | sed -r 's|/+|/|g')
+
 INSTALL = install
 INSTALL_DIRS = $(INSTALL) -d
 
 INSTALL_SBIN_DIR = $(DESTDIR)/usr/sbin
-INSTALL_SYSTEMD_DIR = $(DESTDIR)/usr/lib/systemd/system
+INSTALL_SYSTEMD_DIR = $(DESTDIR)$(ABS_UNITDIR)
 
 install: $(RELEASE_EXE) $(INSTALL_SBIN_DIR) $(INSTALL_SYSTEMD_DIR)
 	$(INSTALL) -m 644 nfcd.service "$(INSTALL_SYSTEMD_DIR)"

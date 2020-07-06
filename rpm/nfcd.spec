@@ -54,7 +54,7 @@ make LIBDIR=%{_libdir} KEEP_SYMBOLS=1 release pkgconfig
 %define settings_dir %{_sharedstatedir}/nfcd/
 %define settings_file %{settings_dir}/settings
 rm -rf %{buildroot}
-make install DESTDIR=%{buildroot} LIBDIR=%{_libdir}
+make install DESTDIR=%{buildroot} LIBDIR=%{_libdir} UNITDIR=%{_unitdir}
 install -d -m 0700 %{buildroot}/%{settings_dir}
 mkdir -p %{buildroot}/%{target_wants_dir}
 ln -s ../nfcd.service %{buildroot}/%{target_wants_dir}/nfcd.service
