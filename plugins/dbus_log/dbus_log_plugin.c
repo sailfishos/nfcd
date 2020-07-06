@@ -106,8 +106,12 @@ dbus_log_plugin_func(
     const char* format,
     va_list va)
 {
+    va_list va2;
+
+    va_copy(va2, va);
     dbus_log_server_logv(self->logserver, dbus_log_level_from_gutil(level),
-        log->name, format, va);
+        log->name, format, va2);
+    va_end(va2);
     if (self->default_func) {
         self->default_func(log, level, format, va);
     }
