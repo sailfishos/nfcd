@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -36,6 +36,7 @@
 #include <nfc_plugin_impl.h>
 
 #include <dbuslog_server_gio.h>
+#include <dbuslog_util.h>
 
 #define GLOG_MODULE_NAME dbus_log_log
 #include <gutil_log.h>
@@ -97,52 +98,6 @@ dbus_log_plugin_category_free(
 }
 
 static
-DBUSLOG_LEVEL
-dbus_log_plugin_convert_to_dbus_level(
-    int level)
-{
-    switch (level) {
-    case GLOG_LEVEL_ALWAYS:
-        return DBUSLOG_LEVEL_ALWAYS;
-    case GLOG_LEVEL_ERR:
-        return DBUSLOG_LEVEL_ERROR;
-    case GLOG_LEVEL_WARN:
-        return DBUSLOG_LEVEL_WARNING;
-    case GLOG_LEVEL_INFO:
-        return DBUSLOG_LEVEL_INFO;
-    case GLOG_LEVEL_DEBUG:
-        return DBUSLOG_LEVEL_DEBUG;
-    case GLOG_LEVEL_VERBOSE:
-        return DBUSLOG_LEVEL_VERBOSE;
-    default:
-        return DBUSLOG_LEVEL_UNDEFINED;
-    }
-}
-
-static
-int
-dbus_log_plugin_convert_from_dbus_level(
-    DBUSLOG_LEVEL level)
-{
-    switch (level) {
-    case DBUSLOG_LEVEL_ALWAYS:
-        return GLOG_LEVEL_ALWAYS;
-    case DBUSLOG_LEVEL_ERROR:
-        return GLOG_LEVEL_ERR;
-    case DBUSLOG_LEVEL_WARNING:
-        return GLOG_LEVEL_WARN;
-    case DBUSLOG_LEVEL_INFO:
-        return GLOG_LEVEL_INFO;
-    case DBUSLOG_LEVEL_DEBUG:
-        return GLOG_LEVEL_DEBUG;
-    case DBUSLOG_LEVEL_VERBOSE:
-        return GLOG_LEVEL_VERBOSE;
-    default:
-        return GLOG_LEVEL_NONE;
-    }
-}
-
-static
 void
 dbus_log_plugin_func(
     DBusLogPlugin* self,
@@ -151,8 +106,12 @@ dbus_log_plugin_func(
     const char* format,
     va_list va)
 {
-    dbus_log_server_logv(self->logserver,
-        dbus_log_plugin_convert_to_dbus_level(level), log->name, format, va);
+    va_list va2;
+
+    va_copy(va2, va);
+    dbus_log_server_logv(self->logserver, dbus_log_level_from_gutil(level),
+        log->name, format, va2);
+    va_end(va2);
     if (self->default_func) {
         self->default_func(log, level, format, va);
     }
@@ -192,7 +151,7 @@ dbus_log_plugin_add_category(
         flags |= DBUSLOG_CATEGORY_FLAG_HIDE_NAME;
     }
     dbus_log_server_add_category(self->logserver, log->name,
-        dbus_log_plugin_convert_to_dbus_level(log->level), flags);
+        dbus_log_level_from_gutil(log->level), flags);
 }
 
 /*==========================================================================*
@@ -240,7 +199,7 @@ dbus_log_plugin_category_level_changed(
     gpointer user_data)
 {
     DBusLogPlugin* self = DBUS_LOG_PLUGIN(user_data);
-    const int level = dbus_log_plugin_convert_from_dbus_level(dbus_level);
+    const int level = dbus_log_level_to_gutil(dbus_level);
     DBusLogPluginCategory* cat = g_hash_table_lookup(self->log_modules, name);
 
     GASSERT(cat);
@@ -256,7 +215,7 @@ dbus_log_plugin_default_level_changed(
     DBUSLOG_LEVEL dbus_level,
     gpointer user_data)
 {
-    const int level = dbus_log_plugin_convert_from_dbus_level(dbus_level);
+    const int level = dbus_log_level_to_gutil(dbus_level);
 
     if (level != GLOG_LEVEL_NONE) {
         gutil_log_default.level = level;
@@ -310,7 +269,7 @@ dbus_log_plugin_start(
     self->default_func = gutil_log_func2;
     gutil_log_func2 = dbus_log_plugin_hook;
     dbus_log_server_set_default_level(self->logserver,
-        dbus_log_plugin_convert_to_dbus_level(gutil_log_default.level));
+        dbus_log_level_from_gutil(gutil_log_default.level));
     dbus_log_server_start(self->logserver);
     return TRUE;
 }
