@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -65,7 +65,9 @@ typedef struct nfcd_opt {
     gboolean dont_unload;
 } NfcdOpt;
 
+#ifndef DEFAULT_PLUGIN_DIR
 #define DEFAULT_PLUGIN_DIR "/usr/lib/nfcd/plugins"
+#endif
 
 #define RET_OK      (0)
 #define RET_CMDLINE (1)
