@@ -32,6 +32,10 @@ BUILD_DIR = build
 DEBUG_BUILD_DIR = $(BUILD_DIR)/debug
 RELEASE_BUILD_DIR = $(BUILD_DIR)/release
 
+LIBDIR ?= usr/lib
+ABS_LIBDIR := $(shell echo /$(LIBDIR) | sed -r 's|/+|/|g')
+DEFAULT_PLUGIN_DIR := $(ABS_LIBDIR)/nfcd/plugins
+
 #
 # libnfc-core
 #
@@ -63,6 +67,7 @@ RELEASE_FLAGS =
 DEBUG_DEFS = -DDEBUG
 RELEASE_DEFS =
 WARNINGS = -Wall -Wstrict-aliasing -Wunused-result
+DEFINES += -DDEFAULT_PLUGIN_DIR='"$(DEFAULT_PLUGIN_DIR)"'
 INCLUDES = -I. -I$(NFC_CORE_DIR)/include -I$(NFC_PLUGINS_DIR)
 FULL_CFLAGS = -fPIC $(CFLAGS) $(DEFINES) $(WARNINGS) $(INCLUDES) \
   -MMD -MP $(shell pkg-config --cflags $(PKGS))
