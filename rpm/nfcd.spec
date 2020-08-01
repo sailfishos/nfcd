@@ -11,7 +11,6 @@ Source: %{name}-%{version}.tar.bz2
 %define glib_version 2.32
 
 BuildRequires: pkgconfig(glib-2.0) >= %{glib_version}
-BuildRequires: pkgconfig(libmce-glib)
 BuildRequires: pkgconfig(libdbusaccess)
 BuildRequires: pkgconfig(libglibutil) >= %{libglibutil_version}
 BuildRequires: pkgconfig(libdbuslogserver-gio) >= %{libdbuslog_version}

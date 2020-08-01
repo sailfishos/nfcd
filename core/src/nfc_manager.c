@@ -49,6 +49,8 @@ struct nfc_manager_priv {
     NfcPlugins* plugins;
     GHashTable* adapters;
     guint next_adapter_index;
+    gboolean requested_power;
+    NFC_MODE requested_mode;
 };
 
 typedef GObjectClass NfcManagerClass;
@@ -211,6 +213,8 @@ nfc_manager_add_adapter(
 
             nfc_adapter_set_name(adapter, name);
             nfc_adapter_set_enabled(adapter, self->enabled);
+            nfc_adapter_request_mode(adapter, priv->requested_mode);
+            nfc_adapter_request_power(adapter, priv->requested_power);
             g_hash_table_insert(priv->adapters, name, nfc_adapter_ref(adapter));
             g_free(self->adapters);
             self->adapters = nfc_manager_adapters(priv);
@@ -271,8 +275,10 @@ nfc_manager_request_power(
     gboolean on)
 {
     if (G_LIKELY(self)) {
+        NfcManagerPriv* priv = self->priv;
         NfcAdapter** adapters = nfc_manager_ref_adapters(self->priv);
 
+        priv->requested_power = on;
         if (adapters) {
             NfcAdapter** ptr = adapters;
 
@@ -290,8 +296,10 @@ nfc_manager_request_mode(
     NFC_MODE mode)
 {
     if (G_LIKELY(self)) {
+        NfcManagerPriv* priv = self->priv;
         NfcAdapter** adapters = nfc_manager_ref_adapters(self->priv);
 
+        priv->requested_mode = mode;
         if (adapters) {
             NfcAdapter** ptr = adapters;
 

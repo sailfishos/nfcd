@@ -146,8 +146,6 @@ $(COVERAGE_DBUS_NEARD_BUILD_DIR):
 # Setting plugin
 #
 
-PKGS += libmce-glib
-
 SETTINGS_DIR = settings
 SETTINGS_PLUGIN_SRC = \
   settings_plugin.c
