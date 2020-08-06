@@ -38,7 +38,7 @@
 
 #include <gutil_misc.h>
 
-#define TRANSMIT_TIMEOUT_MS (500)
+#define DEFAULT_TRANSMIT_TIMEOUT_MS (500)
 #define DEFAULT_REACTIVATION_TIMEOUT_MS (1000)
 
 typedef struct nfc_target_request NfcTargetRequest;
@@ -77,6 +77,7 @@ struct nfc_target_priv {
     NfcTargetRequest* req_active;
     NfcTargetSequenceQueue seq_queue;
     NfcTargetRequestQueue req_queue;
+    guint tx_timeout_ms;
     /* Reactivation */
     NfcTargetFunc ra_func;
     void* ra_data;
@@ -367,9 +368,11 @@ nfc_target_submit_request(
         nfc_target_set_sequence(self, req->seq);
     }
     if (NFC_TARGET_GET_CLASS(self)->transmit(self, data, len)) {
-        GASSERT(!req->timeout);
-        req->timeout = g_timeout_add(TRANSMIT_TIMEOUT_MS,
-            nfc_target_transmit_timeout, req);
+        if (priv->tx_timeout_ms) {
+            GASSERT(!req->timeout);
+            req->timeout = g_timeout_add(priv->tx_timeout_ms,
+                nfc_target_transmit_timeout, req);
+        }
         return TRUE;
     } else {
         priv->req_active = NULL;
@@ -592,6 +595,27 @@ nfc_target_cancel_transmit(
 }
 
 void
+nfc_target_set_transmit_timeout(
+    NfcTarget* self,
+    int ms) /* Since 1.0.37 */
+{
+    if (G_LIKELY(self)) {
+        NfcTargetPriv* priv = self->priv;
+
+        if (ms < 0) {
+            priv->tx_timeout_ms = DEFAULT_TRANSMIT_TIMEOUT_MS;
+        } else {
+            priv->tx_timeout_ms = ms;
+            if (priv->tx_timeout_ms) {
+                GDEBUG("Transmission timeout %u ms", priv->tx_timeout_ms);
+            } else {
+                GDEBUG("No transmission timeout");
+            }
+        }
+    }
+}
+
+void
 nfc_target_deactivate(
     NfcTarget* self)
 {
@@ -797,6 +821,7 @@ nfc_target_init(
     self->present = TRUE;
     self->priv = priv;
     priv->ra_timeout_ms = DEFAULT_REACTIVATION_TIMEOUT_MS;
+    priv->tx_timeout_ms = DEFAULT_TRANSMIT_TIMEOUT_MS;
 }
 
 static
