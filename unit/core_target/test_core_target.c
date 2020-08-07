@@ -62,27 +62,6 @@ test_clear_bytes(
 }
 
 static
-gboolean
-test_timeout(
-    gpointer loop)
-{
-    g_assert_not_reached();
-    return G_SOURCE_REMOVE;
-}
-
-static
-guint
-test_setup_timeout(
-    GMainLoop* loop)
-{
-    if (!(test_opt.flags & TEST_FLAG_DEBUG)) {
-        return g_timeout_add_seconds(TEST_TIMEOUT, test_timeout, loop);
-    } else {
-        return 0;
-    }
-}
-
-static
 void
 test_sequence_started(
     NfcTarget* target,
@@ -400,6 +379,7 @@ test_null(
     nfc_target_deactivate(NULL);
     g_assert(!nfc_target_can_reactivate(NULL));
     g_assert(!nfc_target_reactivate(NULL, NULL, NULL));
+    nfc_target_set_transmit_timeout(NULL, 0);
     nfc_target_set_reactivate_timeout(NULL, 0);
     nfc_target_remove_handler(NULL, 0);
     g_assert(!nfc_target_cancel_transmit(NULL, 0));
@@ -495,8 +475,12 @@ test_transmit_ok(
     GUtilData resp1, resp2;
     TestTarget* test = test_target_new();
     NfcTarget* target = &test->target;
-    guint timeout_id = 0, id1, id2, id3;
+    guint id1, id2, id3;
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
+
+    if (!(test_opt.flags & TEST_FLAG_DEBUG)) {
+        nfc_target_set_transmit_timeout(target, TEST_TIMEOUT_SEC * 1000);
+    }
 
     TEST_BYTES_SET(resp1, data1);
     TEST_BYTES_SET(resp2, data2);
@@ -515,11 +499,7 @@ test_transmit_ok(
     g_assert(id2);
     g_assert(id3);
 
-    timeout_id = test_setup_timeout(loop);
-    g_main_loop_run(loop);
-    if (timeout_id) {
-        g_source_remove(timeout_id);
-    }
+    test_run(&test_opt, loop);
 
     g_assert(test->succeeded == 2);
     g_assert(!resp1.bytes);
@@ -571,8 +551,12 @@ test_transmit_fail(
     GUtilData resp1, resp2, resp3;
     TestTarget* test = test_target_new();
     NfcTarget* target = &test->target;
-    guint timeout_id = 0, id1, id2, id3, id4;
+    guint id1, id2, id3, id4;
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
+
+    if (!(test_opt.flags & TEST_FLAG_DEBUG)) {
+        nfc_target_set_transmit_timeout(target, -1);
+    }
 
     TEST_BYTES_SET(resp1, data1);
     TEST_BYTES_SET(resp2, data2);
@@ -596,11 +580,7 @@ test_transmit_fail(
     g_assert(id3);
     g_assert(id4);
 
-    timeout_id = test_setup_timeout(loop);
-    g_main_loop_run(loop);
-    if (timeout_id) {
-        g_source_remove(timeout_id);
-    }
+    test_run(&test_opt, loop);
 
     g_assert(test->succeeded == 1);
     g_assert(test->failed == 2);
@@ -691,7 +671,7 @@ test_transmit_destroy(
     GUtilData resp1, resp2;
     TestTarget* test = test_target_new();
     NfcTarget* target = &test->target;
-    guint timeout_id = 0, id1, id2;
+    guint id1, id2;
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
 
     TEST_BYTES_SET(resp1, data1);
@@ -709,11 +689,7 @@ test_transmit_destroy(
     g_assert(id2);
 
     g_idle_add_full(G_PRIORITY_HIGH, test_transmit_destroy_quit, loop, NULL);
-    timeout_id = test_setup_timeout(loop);
-    g_main_loop_run(loop);
-    if (timeout_id) {
-        g_source_remove(timeout_id);
-    }
+    test_run(&test_opt, loop);
 
     g_assert(!test->failed);
     g_assert(resp1.bytes);
@@ -773,12 +749,13 @@ test_sequence_ok(
     GUtilData resp1, resp2, resp3;
     TestTarget* test = test_target_new();
     NfcTarget* target = &test->target;
-    guint timeout_id = 0, id1, id2, id3, id4;
+    guint id1, id2, id3, id4;
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
     NfcTargetSequence* seq;
     int sequence_started = 0, sequence_finished = 0;
     gulong id[2];
 
+    nfc_target_set_transmit_timeout(target, 0);
     id[0] = nfc_target_add_sequence_handler(target,
         test_sequence_started, &sequence_started);
     id[1] = nfc_target_add_sequence_handler(target,
@@ -815,11 +792,7 @@ test_sequence_ok(
     g_assert(id3);
     g_assert(id4);
 
-    timeout_id = test_setup_timeout(loop);
-    g_main_loop_run(loop);
-    if (timeout_id) {
-        g_source_remove(timeout_id);
-    }
+    test_run(&test_opt, loop);
 
     g_assert(sequence_started == 1);
     g_assert(sequence_finished == 1);
@@ -847,7 +820,7 @@ test_sequence2(
     GUtilData resp1, resp2, resp3;
     TestTarget* test = test_target_new();
     NfcTarget* target = &test->target;
-    guint timeout_id = 0, id1, id2, id3, id4;
+    guint id1, id2, id3, id4;
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
     NfcTargetSequence* seq1;
     NfcTargetSequence* seq2;
@@ -892,11 +865,7 @@ test_sequence2(
     g_assert(id3);
     g_assert(id4);
 
-    timeout_id = test_setup_timeout(loop);
-    g_main_loop_run(loop);
-    if (timeout_id) {
-        g_source_remove(timeout_id);
-    }
+    test_run(&test_opt, loop);
 
     /* Two starts, one finish */
     g_assert(sequence_started == 2);
@@ -965,16 +934,11 @@ test_reactivate_ok(
     TestTarget2* test = test_target2_new();
     NfcTarget* target = NFC_TARGET(test);
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
-    guint timeout_id;
 
     g_assert(nfc_target_can_reactivate(target));
     g_assert(nfc_target_reactivate(target, test_reactivate_ok_done, loop));
 
-    timeout_id = test_setup_timeout(loop);
-    g_main_loop_run(loop);
-    if (timeout_id) {
-        g_source_remove(timeout_id);
-    }
+    test_run(&test_opt, loop);
 
     nfc_target_unref(target);
     g_main_loop_unref(loop);
@@ -1013,17 +977,13 @@ test_reactivate_timeout(
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
     gulong gone_id = nfc_target_add_gone_handler(target,
         test_reactivate_timeout_expired, loop);
-    guint timeout_id = test_setup_timeout(loop);
 
     test->mode = TEST_REACTIVATE_MODE_TIMEOUT;
     nfc_target_set_reactivate_timeout(target, 100); /* Default is quite long */
     g_assert(nfc_target_can_reactivate(target));
     g_assert(nfc_target_reactivate(target, test_reactivate_timeout_cb, NULL));
 
-    g_main_loop_run(loop);
-    if (timeout_id) {
-        g_source_remove(timeout_id);
-    }
+    test_run(&test_opt, loop);
 
     nfc_target_remove_handler(target, gone_id);
     nfc_target_unref(target);

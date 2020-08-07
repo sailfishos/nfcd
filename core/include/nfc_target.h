@@ -88,6 +88,16 @@ void
 nfc_target_unref(
     NfcTarget* target);
 
+/*
+ * -1: Use default timeout
+ *  0: No timeout at all
+ * >0: Transmision timeout in milliseconds
+ */
+void
+nfc_target_set_transmit_timeout(
+    NfcTarget* target,
+    int ms); /* Since 1.0.37 */
+
 gulong
 nfc_target_add_sequence_handler(
     NfcTarget* target,
