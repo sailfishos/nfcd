@@ -39,7 +39,7 @@
 #include <gutil_misc.h>
 
 #define DEFAULT_TRANSMIT_TIMEOUT_MS (500)
-#define DEFAULT_REACTIVATION_TIMEOUT_MS (1000)
+#define DEFAULT_REACTIVATION_TIMEOUT_MS (1500)
 
 typedef struct nfc_target_request NfcTargetRequest;
 struct nfc_target_request {
