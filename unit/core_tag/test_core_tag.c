@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2018-2020 Jolla Ltd.
  * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -184,6 +185,10 @@ test_basic_b(
 {
     static const guint8 nfcid0[] = {0x01, 0x01, 0x02, 0x04};
     static const GUtilData nfcid0_data = { TEST_ARRAY_AND_SIZE(nfcid0) };
+    static const guint8 app_data[] = {0x05, 0x06, 0x07, 0x08};
+    static const guint8 prot_info[] = {0x09, 0x0A, 0x0B, 0x0C, 0x0D};
+    static const GUtilData prot_info_data = { TEST_ARRAY_AND_SIZE(prot_info) };
+    static const guint8 app_data_empty[] = {0x00, 0x00, 0x00, 0x00};
 
     NfcTag* tag = g_object_new(NFC_TYPE_TAG, NULL);
     NfcTarget* target = test_target_new_tech(NFC_TECHNOLOGY_B);
@@ -192,13 +197,20 @@ test_basic_b(
 
     memset(&poll, 0, sizeof(poll));
     poll.b.nfcid0 = nfcid0_data;
+    poll.b.prot_info = prot_info_data;
+    memcpy(poll.b.app_data, app_data, sizeof(app_data));
     nfc_tag_init_base(tag, target, &poll);
     g_assert(tag->target == target);
     g_assert(tag->present == TRUE);
     poll_b = &nfc_tag_param(tag)->b;
     g_assert(poll_b);
+    g_assert(poll_b->nfcid0.bytes != poll.b.nfcid0.bytes);
+    g_assert(poll_b->prot_info.bytes != poll.b.prot_info.bytes);
     g_assert_cmpuint(poll_b->nfcid0.size, == ,sizeof(nfcid0));
     g_assert(!memcmp(poll_b->nfcid0.bytes, nfcid0, sizeof(nfcid0)));
+    g_assert_cmpuint(poll_b->prot_info.size, == ,sizeof(prot_info));
+    g_assert(!memcmp(poll_b->prot_info.bytes, prot_info, sizeof(prot_info)));
+    g_assert(!memcmp(poll_b->app_data, app_data, sizeof(app_data)));
     nfc_tag_unref(tag);
 
     /* Make sure NULL nfcid0 is handled */
@@ -209,6 +221,59 @@ test_basic_b(
     g_assert(poll_b);
     g_assert_cmpuint(poll_b->nfcid0.size, == ,0);
     g_assert(!poll_b->nfcid0.bytes);
+    nfc_tag_unref(tag);
+
+    /* Make sure no prot_info and no app_data is handled */
+    tag = g_object_new(NFC_TYPE_TAG, NULL);
+    memset(&poll, 0, sizeof(poll));
+    poll.b.nfcid0 = nfcid0_data;
+    nfc_tag_init_base(tag, target, &poll);
+    g_assert(tag->target == target);
+    g_assert(tag->present == TRUE);
+    poll_b = &nfc_tag_param(tag)->b;
+    g_assert(poll_b);
+    g_assert_cmpuint(poll_b->nfcid0.size, == ,sizeof(nfcid0));
+    g_assert(!memcmp(poll_b->nfcid0.bytes, nfcid0, sizeof(nfcid0)));
+    g_assert_cmpuint(poll_b->prot_info.size, == ,0);
+    g_assert(!poll_b->prot_info.bytes);
+    g_assert(!memcmp(poll_b->app_data, app_data_empty, sizeof(app_data_empty)));
+    nfc_tag_unref(tag);
+
+    /* Make sure no app_data is handled properly */
+    tag = g_object_new(NFC_TYPE_TAG, NULL);
+    memset(&poll, 0, sizeof(poll));
+    poll.b.nfcid0 = nfcid0_data;
+    poll.b.prot_info = prot_info_data;
+    nfc_tag_init_base(tag, target, &poll);
+    g_assert(tag->target == target);
+    g_assert(tag->present == TRUE);
+    poll_b = &nfc_tag_param(tag)->b;
+    g_assert(poll_b);
+    g_assert(poll_b->nfcid0.bytes != poll.b.nfcid0.bytes);
+    g_assert(poll_b->prot_info.bytes != poll.b.prot_info.bytes);
+    g_assert_cmpuint(poll_b->nfcid0.size, == ,sizeof(nfcid0));
+    g_assert(!memcmp(poll_b->nfcid0.bytes, nfcid0, sizeof(nfcid0)));
+    g_assert_cmpuint(poll_b->prot_info.size, == ,sizeof(prot_info));
+    g_assert(!memcmp(poll_b->prot_info.bytes, prot_info, sizeof(prot_info)));
+    g_assert(!memcmp(poll_b->app_data, app_data_empty, sizeof(app_data_empty)));
+    nfc_tag_unref(tag);
+
+    /* Make sure NULL prot_info is handled  */
+    tag = g_object_new(NFC_TYPE_TAG, NULL);
+    memset(&poll, 0, sizeof(poll));
+    poll.b.nfcid0 = nfcid0_data;
+    memcpy(poll.b.app_data, app_data, sizeof(app_data));
+    nfc_tag_init_base(tag, target, &poll);
+    g_assert(tag->target == target);
+    g_assert(tag->present == TRUE);
+    poll_b = &nfc_tag_param(tag)->b;
+    g_assert(poll_b);
+    g_assert(poll_b->nfcid0.bytes != poll.b.nfcid0.bytes);
+    g_assert_cmpuint(poll_b->nfcid0.size, == ,sizeof(nfcid0));
+    g_assert(!memcmp(poll_b->nfcid0.bytes, nfcid0, sizeof(nfcid0)));
+    g_assert_cmpuint(poll_b->prot_info.size, == ,0);
+    g_assert(!poll_b->prot_info.bytes);
+    g_assert(!memcmp(poll_b->app_data, app_data, sizeof(app_data)));
     nfc_tag_unref(tag);
 
     nfc_target_unref(target);

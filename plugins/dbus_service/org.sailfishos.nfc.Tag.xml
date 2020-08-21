@@ -59,5 +59,19 @@
       <arg name="wait" type="b" direction="in"/>
     </method>
     <method name="Release"/>
+    <!-- Interface version 3 -->
+    <method name="GetAll3">
+      <arg name="version" type="i" direction="out"/>
+      <arg name="present" type="b" direction="out"/>
+      <arg name="technology" type="u" direction="out"/>
+      <arg name="protocol" type="u" direction="out"/>
+      <arg name="type" type="u" direction="out"/>
+      <arg name="interfaces" type="as" direction="out"/>
+      <arg name="ndef_records" type="ao" direction="out"/>
+      <arg name="parameters" type="a{sv}" direction="out"/>
+    </method>
+    <method name="GetPollParameters">
+      <arg name="parameters" type="a{sv}" direction="out"/>
+    </method>
   </interface>
 </node>
