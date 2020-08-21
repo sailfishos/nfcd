@@ -45,13 +45,6 @@ struct nfc_ndef_rec_priv {
 
 G_DEFINE_TYPE(NfcNdefRec, nfc_ndef_rec, G_TYPE_OBJECT)
 
-static const GUtilData nfc_ndef_rec_type_hs = { (const guint8*) "Hs", 2 };
-static const GUtilData nfc_ndef_rec_type_hr = { (const guint8*) "Hr", 2 };
-static const GUtilData nfc_ndef_rec_type_hc = { (const guint8*) "Hc", 2 };
-static const GUtilData nfc_ndef_rec_type_ac = { (const guint8*) "ac", 2 };
-static const GUtilData nfc_ndef_rec_type_cr = { (const guint8*) "cr", 2 };
-static const GUtilData nfc_ndef_rec_type_err = { (const guint8*) "err", 3 };
-
 static
 NfcNdefRec*
 nfc_ndef_rec_alloc(
