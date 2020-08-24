@@ -35,6 +35,15 @@
 
 #include <nfc_types.h>
 
+/*
+ * For whatever reason, g_assert() is a special case and can be disabled
+ * with G_DISABLE_ASSERT macro, unlike all other g_assert_* macros. Make
+ * sure that it actually works.
+ */
+#ifdef G_DISABLE_ASSERT
+#  error "g_assert is required by unit tests"
+#endif
+
 #define TEST_FLAG_DEBUG (0x01)
 typedef struct test_opt {
     int flags;
