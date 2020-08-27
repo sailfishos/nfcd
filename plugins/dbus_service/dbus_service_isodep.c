@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2019 Jolla Ltd.
- * Copyright (C) 2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019-2020 Jolla Ltd.
+ * Copyright (C) 2019-2020 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
@@ -32,6 +32,7 @@
  */
 
 #include "dbus_service.h"
+#include "dbus_service_util.h"
 #include "dbus_service/org.sailfishos.nfc.IsoDep.h"
 
 #include <nfc_tag_t4.h>
@@ -61,50 +62,6 @@ typedef struct dbus_service_isodep_async_call {
     OrgSailfishosNfcIsoDep* iface;
     GDBusMethodInvocation* call;
 } DBusServiceIsoDepAsyncCall;
-
-static
-GVariant*
-dbus_service_isodep_dup_data_as_variant(
-    const void* data,
-    guint size)
-{
-    return size ?
-        g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE, data, size, 1) :
-        g_variant_new_from_data(G_VARIANT_TYPE("ay"), NULL, 0, TRUE,
-            NULL, NULL);
-}
-
-static
-void
-dbus_service_isodep_dict_add_value(
-    GVariantBuilder* builder,
-    const char* name,
-    GVariant* value)
-{
-    g_variant_builder_add(builder, "{sv}", name, value);
-}
-
-static
-void
-dbus_service_isodep_dict_add_byte(
-    GVariantBuilder* builder,
-    const char* name,
-    guint8 value)
-{
-    dbus_service_isodep_dict_add_value(builder, name,
-        g_variant_new_byte(value));
-}
-
-static
-void
-dbus_service_isodep_dict_add_bytes_array(
-    GVariantBuilder* builder,
-    const char* name,
-    const GUtilData* data)
-{
-    dbus_service_isodep_dict_add_value(builder, name,
-        dbus_service_isodep_dup_data_as_variant(data->bytes, data->size));
-}
 
 static
 NfcTargetSequence*
@@ -199,7 +156,7 @@ dbus_service_isodep_handle_transmit_done(
     if (sw) {
         GDEBUG("%04X", sw);
         org_sailfishos_nfc_iso_dep_complete_transmit(async->iface, async->call,
-            dbus_service_isodep_dup_data_as_variant(data, len),
+            dbus_service_dup_byte_array_as_variant(data, len),
             sw >> 8, sw & 0xff);
     } else {
         GDEBUG("oops");
@@ -250,29 +207,29 @@ dbus_service_isodep_get_act_parameters(
     NfcTagType4* t4,
     const NfcParamIsoDep* act)
 {
-    GVariantBuilder gvb;
-    g_variant_builder_init(&gvb, G_VARIANT_TYPE("a{sv}"));
+    GVariantBuilder builder;
+    g_variant_builder_init(&builder, G_VARIANT_TYPE_VARDICT);
 
     if (G_LIKELY(act)) {
         switch(t4->tag.target->technology) {
         case NFC_TECHNOLOGY_A:
-            dbus_service_isodep_dict_add_byte(&gvb, "T0", act->a.t0);
+            dbus_service_dict_add_byte(&builder, "T0", act->a.t0);
             if (act->a.t0 & NFC_PARAM_ISODEP_T0_A) {
-                dbus_service_isodep_dict_add_byte(&gvb, "TA", act->a.ta);
+                dbus_service_dict_add_byte(&builder, "TA", act->a.ta);
             }
             if (act->a.t0 & NFC_PARAM_ISODEP_T0_B) {
-                dbus_service_isodep_dict_add_byte(&gvb, "TB", act->a.tb);
+                dbus_service_dict_add_byte(&builder, "TB", act->a.tb);
             }
             if (act->a.t0 & NFC_PARAM_ISODEP_T0_C) {
-                dbus_service_isodep_dict_add_byte(&gvb, "TC", act->a.tc);
+                dbus_service_dict_add_byte(&builder, "TC", act->a.tc);
             }
-            dbus_service_isodep_dict_add_bytes_array(&gvb, "HB", &act->a.t1);
+            dbus_service_dict_add_byte_array_data(&builder, "HB", &act->a.t1);
             break;
         case NFC_TECHNOLOGY_B:
-            dbus_service_isodep_dict_add_byte(&gvb, "MBLI", act->b.mbli);
-            dbus_service_isodep_dict_add_byte(&gvb, "DID", act->b.did);
+            dbus_service_dict_add_byte(&builder, "MBLI", act->b.mbli);
+            dbus_service_dict_add_byte(&builder, "DID", act->b.did);
             if (act->b.hlr.bytes) {
-                dbus_service_isodep_dict_add_bytes_array(&gvb, "HLR",
+                dbus_service_dict_add_byte_array_data(&builder, "HLR",
                     &act->b.hlr);
             }
             break;
@@ -281,7 +238,7 @@ dbus_service_isodep_get_act_parameters(
             break;
         }
     }
-    return g_variant_builder_end(&gvb);
+    return g_variant_builder_end(&builder);
 }
 
 /* GetAll2 */

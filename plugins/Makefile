@@ -44,6 +44,7 @@ DBUS_SERVICE_PLUGIN_SRC = \
   dbus_service_name.c \
   dbus_service_ndef.c \
   dbus_service_plugin.c \
+  dbus_service_util.c \
   dbus_service_tag.c \
   dbus_service_tag_t2.c
 

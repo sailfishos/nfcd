@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
@@ -32,6 +32,7 @@
  */
 
 #include "dbus_service.h"
+#include "dbus_service_util.h"
 #include "dbus_service/org.sailfishos.nfc.Tag.h"
 
 #include <nfc_tag.h>
@@ -142,40 +143,6 @@ dbus_service_tag_find_waiter(
         }
     }
     return NULL;
-}
-
-static
-GVariant*
-dbus_service_tag_dup_data_as_variant(
-    const void* data,
-    guint size)
-{
-    return size ?
-        g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE, data, size, 1) :
-        g_variant_new_from_data(G_VARIANT_TYPE("ay"), NULL, 0, TRUE,
-            NULL, NULL);
-}
-
-static
-void
-dbus_service_tag_dict_add_value(
-    GVariantBuilder* builder,
-    const char* name,
-    GVariant* value)
-{
-    g_variant_builder_add(builder, "{sv}", name, value);
-}
-
-static
-void
-dbus_service_tag_dict_add_bytes_array(
-    GVariantBuilder* builder,
-    const char* name,
-    const void* data,
-    guint size)
-{
-    dbus_service_tag_dict_add_value(builder, name,
-        dbus_service_tag_dup_data_as_variant(data, size));
 }
 
 NfcTargetSequence*
@@ -807,18 +774,18 @@ dbus_service_tag_get_poll_parameters(
     const NfcParamPoll* poll)
 {
     GVariantBuilder builder;
-    g_variant_builder_init(&builder, G_VARIANT_TYPE("a{sv}"));
+    g_variant_builder_init(&builder, G_VARIANT_TYPE_VARDICT);
 
     if (G_LIKELY(tag) && G_UNLIKELY(poll)) {
         const NfcTarget* target = tag->target;
         if (G_LIKELY(target)) {
             switch(tag->target->technology) {
             case NFC_TECHNOLOGY_B:
-                dbus_service_tag_dict_add_bytes_array(&builder, "APPDATA",
+                dbus_service_dict_add_byte_array(&builder, "APPDATA",
                     poll->b.app_data, sizeof(poll->b.app_data));
                 if (poll->b.prot_info.bytes) {
-                    dbus_service_tag_dict_add_bytes_array(&builder, "PROTINFO",
-                        poll->b.prot_info.bytes, poll->b.prot_info.size);
+                    dbus_service_dict_add_byte_array_data(&builder, "PROTINFO",
+                        &poll->b.prot_info);
                 }
                 break;
             case NFC_TECHNOLOGY_A:
