@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2019-2020 Jolla Ltd.
  * Copyright (C) 2019-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -47,7 +48,7 @@
 
 #define NFC_SERVICE "org.sailfishos.nfc.daemon"
 #define NFC_TAG_INTERFACE "org.sailfishos.nfc.Tag"
-#define MIN_INTERFACE_VERSION (2)
+#define MIN_INTERFACE_VERSION (3)
 
 static TestOpt test_opt;
 static const char test_sender_1[] = ":1.1";
@@ -1625,6 +1626,275 @@ test_lock_fail(
 }
 
 /*==========================================================================*
+ * get_all3
+ *==========================================================================*/
+
+static
+void
+test_get_all3_done(
+    GObject* object,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    gint version = 0;
+    gboolean present = FALSE;
+    guint tech, protocol, type;
+    gchar** ifaces = NULL;
+    gchar** records = NULL;
+    GVariant* prot_params = NULL;
+    GVariantIter iter;
+    GVariant* value = NULL;
+    gchar* key = NULL;
+    GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
+        result, NULL);
+
+    g_assert(var);
+    g_variant_get(var, "(ibuuu^as^ao@a{sv})", &version, &present, &tech,
+        &protocol, &type, &ifaces, &records, &prot_params);
+    g_assert(ifaces);
+    g_assert(records);
+    g_assert(prot_params);
+    g_assert(!g_variant_iter_init (&iter, prot_params));
+    GDEBUG("version=%d, present=%d, tech=%u, protocol=%u, type=%u, "
+        "%u interface(s), %u record(s)", version, present, tech, protocol,
+           type, g_strv_length(ifaces), g_strv_length(records));
+    while (g_variant_iter_loop (&iter, "{sv}", &key, &value)) {
+        GDEBUG("Item '%s' has type '%s'\n", key,
+            g_variant_get_type_string (value));
+    }
+    g_assert(version >= MIN_INTERFACE_VERSION);
+    g_assert(present);
+    g_assert(tech == NFC_TECHNOLOGY_UNKNOWN);
+    g_assert(protocol == NFC_PROTOCOL_UNKNOWN);
+    g_assert(g_strv_length(records) == 0);
+    g_strfreev(ifaces);
+    g_strfreev(records);
+    g_variant_unref(prot_params);
+    g_variant_unref(var);
+    test_quit_later(test->loop);
+}
+
+static
+void
+test_get_all3_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+
+    nfc_tag_set_initialized(test->adapter->tags[0]);
+    test_start_and_get(test, client, server, "GetAll3", test_get_all3_done);
+}
+
+static
+void
+test_get_all3(
+    void)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_data_init(&test);
+    dbus = test_dbus_new(test_get_all3_start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+/*==========================================================================*
+ * get_poll_parameters
+ *==========================================================================*/
+
+static
+void
+test_get_poll_parameters_done(
+    GObject* object,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    GVariant* prot_params = NULL;
+    GVariantIter iter;
+    GVariant* value = NULL;
+    gchar* key = NULL;
+    GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
+        result, NULL);
+
+    g_assert(var);
+    g_variant_get(var, "(@a{sv})", &prot_params);
+    g_assert(prot_params);
+    g_assert(!g_variant_iter_init (&iter, prot_params));
+    while (g_variant_iter_loop (&iter, "{sv}", &key, &value)) {
+        GDEBUG("Item '%s' has type '%s'\n", key,
+            g_variant_get_type_string (value));
+    }
+    g_assert(!key || !value);
+    g_variant_unref(prot_params);
+    g_variant_unref(var);
+    test_quit_later(test->loop);
+}
+
+static
+void
+test_get_poll_parameters_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+
+    nfc_tag_set_initialized(test->adapter->tags[0]);
+    test_start_and_get(test, client, server, "GetPollParameters",
+        test_get_poll_parameters_done);
+}
+
+static
+void
+test_get_poll_parameters(
+    void)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_data_init(&test);
+    dbus = test_dbus_new(test_get_poll_parameters_start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+/*==========================================================================*
+ * get_all3_tag_b
+ *==========================================================================*/
+
+static const guint8 nfcid0[] = {0x01, 0x01, 0x02, 0x04};
+static const GUtilData nfcid0_data = { TEST_ARRAY_AND_SIZE(nfcid0) };
+static const guint8 app_data[] = {0x05, 0x06, 0x07, 0x08};
+static const guint8 prot_info[] = {0x09, 0x0A, 0x0B, 0x0C, 0x0D};
+static const GUtilData prot_info_data = { TEST_ARRAY_AND_SIZE(prot_info) };
+
+static
+void
+test_data_init_tag_b(
+    TestData* test)
+{
+    NfcPluginsInfo pi;
+    NfcTarget* target;
+    NfcParamPoll poll;
+
+    g_assert(!test_name_watches);
+    memset(test, 0, sizeof(*test));
+    memset(&pi, 0, sizeof(pi));
+    g_assert((test->manager = nfc_manager_new(&pi)) != NULL);
+    g_assert((test->adapter = test_adapter_new()) != NULL);
+
+    target = test_target_new_tech(NFC_TECHNOLOGY_B);
+    memset(&poll, 0, sizeof(poll));
+    poll.b.nfcid0 = nfcid0_data;
+    poll.b.prot_info = prot_info_data;
+    memcpy(poll.b.app_data, app_data, sizeof(app_data));
+    g_assert(nfc_adapter_add_other_tag2(test->adapter, target, &poll));
+    nfc_target_unref(target);
+
+    g_assert(nfc_manager_add_adapter(test->manager, test->adapter));
+    test->loop = g_main_loop_new(NULL, TRUE);
+    test->pool = gutil_idle_pool_new();
+}
+
+static
+void
+test_get_all3_tag_b_done(
+    GObject* object,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    gint version = 0;
+    gboolean present = FALSE;
+    guint tech, protocol, type;
+    gchar** ifaces = NULL;
+    gchar** records = NULL;
+    GVariant* prot_params = NULL;
+    GVariantIter iter;
+    GVariant* value = NULL;
+    gchar* key = NULL;
+    const guint8* value_ptr = NULL;
+    GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
+        result, NULL);
+
+    g_assert(var);
+    g_variant_get(var, "(ibuuu^as^ao@a{sv})", &version, &present, &tech,
+        &protocol, &type, &ifaces, &records, &prot_params);
+    g_assert(ifaces);
+    g_assert(records);
+    g_assert(prot_params);
+    g_assert(2 == g_variant_iter_init (&iter, prot_params));
+    GDEBUG("version=%d, present=%d, tech=%u, protocol=%u, type=%u, "
+        "%u interface(s), %u record(s)", version, present, tech, protocol,
+           type, g_strv_length(ifaces), g_strv_length(records));
+    while (g_variant_iter_loop (&iter, "{sv}", &key, &value)) {
+        GDEBUG("Item '%s' has type '%s'\n", key,
+            g_variant_get_type_string (value));
+        g_assert(!g_strcmp0(key, "PROTINFO") || !g_strcmp0(key, "APPDATA"));
+
+        if (!g_strcmp0(key, "PROTINFO")) {
+            value_ptr = (guint8*)g_variant_get_data(value);
+            g_assert(value_ptr);
+            g_assert(sizeof(prot_info) == g_variant_get_size(value));
+            g_assert(!memcmp(value_ptr, prot_info, sizeof(prot_info)));
+        }
+
+        if (!g_strcmp0(key, "APPDATA")) {
+            value_ptr = (guint8*)g_variant_get_data(value);
+            g_assert(value_ptr);
+            g_assert(sizeof(app_data) == g_variant_get_size(value));
+            g_assert(!memcmp(value_ptr, app_data, sizeof(app_data)));
+        }
+    }
+    g_assert(version >= MIN_INTERFACE_VERSION);
+    g_assert(present);
+    g_assert(tech == NFC_TECHNOLOGY_B);
+    g_assert(protocol == NFC_PROTOCOL_UNKNOWN);
+    g_assert(g_strv_length(records) == 0);
+    g_strfreev(ifaces);
+    g_strfreev(records);
+    g_variant_unref(prot_params);
+    g_variant_unref(var);
+    test_quit_later(test->loop);
+}
+
+static
+void
+test_get_all3_tag_b_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+
+    nfc_tag_set_initialized(test->adapter->tags[0]);
+    test_start_and_get(test, client, server, "GetAll3",
+        test_get_all3_tag_b_done);
+}
+
+static
+void
+test_get_all3_tag_b(
+    void)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_data_init_tag_b(&test);
+    dbus = test_dbus_new(test_get_all3_tag_b_start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -1656,6 +1926,9 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("lock_drop_wait"), test_lock_drop_wait);
     g_test_add_func(TEST_("lock_release_wait"), test_lock_release_wait);
     g_test_add_func(TEST_("lock_fail"), test_lock_fail);
+    g_test_add_func(TEST_("get_all3"), test_get_all3);
+    g_test_add_func(TEST_("get_poll_parameters"), test_get_poll_parameters);
+    g_test_add_func(TEST_("get_all3_tag_b"), test_get_all3_tag_b);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2018-2019 Jolla Ltd.
  * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -64,6 +65,8 @@ enum {
     CALL_DEACTIVATE,
     CALL_ACQUIRE,
     CALL_RELEASE,
+    CALL_GET_ALL3,
+    CALL_GET_POLL_PARAMETERS,
     CALL_COUNT
 };
 
@@ -117,7 +120,7 @@ struct dbus_service_tag {
 };
 
 #define NFC_DBUS_TAG_INTERFACE "org.sailfishos.nfc.Tag"
-#define NFC_DBUS_TAG_INTERFACE_VERSION  (2)
+#define NFC_DBUS_TAG_INTERFACE_VERSION  (3)
 
 static const char* const dbus_service_tag_default_interfaces[] = {
     NFC_DBUS_TAG_INTERFACE, NULL
@@ -139,6 +142,40 @@ dbus_service_tag_find_waiter(
         }
     }
     return NULL;
+}
+
+static
+GVariant*
+dbus_service_tag_dup_data_as_variant(
+    const void* data,
+    guint size)
+{
+    return size ?
+        g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE, data, size, 1) :
+        g_variant_new_from_data(G_VARIANT_TYPE("ay"), NULL, 0, TRUE,
+            NULL, NULL);
+}
+
+static
+void
+dbus_service_tag_dict_add_value(
+    GVariantBuilder* builder,
+    const char* name,
+    GVariant* value)
+{
+    g_variant_builder_add(builder, "{sv}", name, value);
+}
+
+static
+void
+dbus_service_tag_dict_add_bytes_array(
+    GVariantBuilder* builder,
+    const char* name,
+    const void* data,
+    guint size)
+{
+    dbus_service_tag_dict_add_value(builder, name,
+        dbus_service_tag_dup_data_as_variant(data, size));
 }
 
 NfcTargetSequence*
@@ -761,6 +798,87 @@ dbus_service_tag_handle_release(
     return TRUE;
 }
 
+/* Interface Version 3 */
+
+static
+GVariant*
+dbus_service_tag_get_poll_parameters(
+    NfcTag* tag,
+    const NfcParamPoll* poll)
+{
+    GVariantBuilder builder;
+    g_variant_builder_init(&builder, G_VARIANT_TYPE("a{sv}"));
+
+    if (G_LIKELY(tag) && G_UNLIKELY(poll)) {
+        const NfcTarget* target = tag->target;
+        if (G_LIKELY(target)) {
+            switch(tag->target->technology) {
+            case NFC_TECHNOLOGY_B:
+                dbus_service_tag_dict_add_bytes_array(&builder, "APPDATA",
+                    poll->b.app_data, sizeof(poll->b.app_data));
+                if (poll->b.prot_info.bytes) {
+                    dbus_service_tag_dict_add_bytes_array(&builder, "PROTINFO",
+                        poll->b.prot_info.bytes, poll->b.prot_info.size);
+                }
+                break;
+            case NFC_TECHNOLOGY_A:
+            case NFC_TECHNOLOGY_F:
+            case NFC_TECHNOLOGY_UNKNOWN:
+                break;
+            }
+        }
+    }
+    return g_variant_builder_end(&builder);
+}
+
+/* GetAll3 */
+
+static
+void
+dbus_service_tag_complete_get_all3(
+    GDBusMethodInvocation* call,
+    DBusServiceTag* self)
+{
+    NfcTag* tag = self->tag;
+    NfcTarget* target = tag->target;
+
+    org_sailfishos_nfc_tag_complete_get_all3(self->iface, call,
+        NFC_DBUS_TAG_INTERFACE_VERSION, tag->present, target->technology,
+        target->protocol, tag->type, self->interfaces ? self->interfaces :
+        dbus_service_tag_default_interfaces,
+        dbus_service_tag_get_ndef_rec_paths(self),
+        dbus_service_tag_get_poll_parameters(self->tag,
+            nfc_tag_param(self->tag)));
+}
+
+static
+gboolean
+dbus_service_tag_handle_get_all3(
+    OrgSailfishosNfcTag* iface,
+    GDBusMethodInvocation* call,
+    DBusServiceTag* self)
+{
+    /* Queue the call if the tag is not initialized yet */
+    return dbus_service_tag_handle_call(self, call,
+        dbus_service_tag_complete_get_all3);
+}
+
+/* GetPollParameters */
+
+static
+gboolean
+dbus_service_tag_handle_get_poll_parameters(
+    OrgSailfishosNfcTag* iface,
+    GDBusMethodInvocation* call,
+    DBusServiceTag* self)
+{
+    NfcTag* tag = self->tag;
+
+    org_sailfishos_nfc_tag_complete_get_poll_parameters(iface, call,
+        dbus_service_tag_get_poll_parameters(tag, nfc_tag_param(tag)));
+    return TRUE;
+}
+
 /*==========================================================================*
  * Interface
  *==========================================================================*/
@@ -871,6 +989,12 @@ dbus_service_tag_new(
     self->call_id[CALL_RELEASE] =
         g_signal_connect(self->iface, "handle-release",
         G_CALLBACK(dbus_service_tag_handle_release), self);
+    self->call_id[CALL_GET_ALL3] =
+        g_signal_connect(self->iface, "handle-get-all3",
+        G_CALLBACK(dbus_service_tag_handle_get_all3), self);
+    self->call_id[CALL_GET_POLL_PARAMETERS] =
+        g_signal_connect(self->iface, "handle-get-poll-parameters",
+        G_CALLBACK(dbus_service_tag_handle_get_poll_parameters), self);
 
     if (tag->flags & NFC_TAG_FLAG_INITIALIZED) {
         dbus_service_tag_export_all(self);

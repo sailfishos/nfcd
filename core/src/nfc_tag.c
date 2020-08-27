@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2018-2020 Jolla Ltd.
  * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -186,6 +187,8 @@ nfc_tag_init_base(
     if (poll) {
         const gsize aligned_size = G_ALIGN8(sizeof(*poll));
         const GUtilData* src;
+        const NfcParamPollB* poll_b;
+        guint8* dest;
         gsize size;
 
         /*
@@ -198,21 +201,32 @@ nfc_tag_init_base(
             size = src->size ? (aligned_size + src->size) : sizeof(*poll);
             *(priv->param = g_malloc0(size)) = *poll;
             if (src->bytes) {
-                guint8* dest = (guint8*)priv->param + aligned_size;
+                dest = (guint8*)priv->param + aligned_size;
 
                 memcpy(dest, src->bytes, src->size);
                 priv->param->a.nfcid1.bytes = dest;
             }
             break;
         case NFC_TECHNOLOGY_B:
-            src = &poll->b.nfcid0;
-            size = src->size ? (aligned_size + src->size) : sizeof(*poll);
+            poll_b = &poll->b;
+            if (poll_b->nfcid0.size || poll_b->prot_info.size) {
+                size = aligned_size + G_ALIGN8(poll_b->nfcid0.size) +
+                    poll_b->prot_info.size;
+            } else {
+                size = sizeof(*poll);
+            }
             *(priv->param = g_malloc0(size)) = *poll;
+            dest = (guint8*)priv->param + aligned_size;
+            src = &poll_b->nfcid0;
             if (src->bytes) {
-                guint8* dest = (guint8*)priv->param + aligned_size;
-
                 memcpy(dest, src->bytes, src->size);
                 priv->param->b.nfcid0.bytes = dest;
+                dest += G_ALIGN8(src->size);
+            }
+            src = &poll_b->prot_info;
+            if (src->bytes) {
+                memcpy(dest, src->bytes, src->size);
+                priv->param->b.prot_info.bytes = dest;
             }
             break;
         case NFC_TECHNOLOGY_F:

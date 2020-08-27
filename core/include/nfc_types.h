@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2018-2020 Jolla Ltd.
  * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -111,6 +112,13 @@ typedef struct nfc_param_poll_a {
 typedef struct nfc_param_poll_b {
     guint fsc;          /* FSC (FSCI converted to bytes) */
     GUtilData nfcid0;
+    /* Since 1.0.40 */
+    /*
+    * NFCForum-TS-DigitalProtocol-1.0
+    * Table 25: SENSB_RES Format
+    */
+    guint8 app_data[4];
+    GUtilData prot_info;
 } NfcParamPollB; /* Since 1.0.20 */
 
 typedef union nfc_param_poll {
