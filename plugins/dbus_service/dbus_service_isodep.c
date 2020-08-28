@@ -208,8 +208,8 @@ dbus_service_isodep_get_act_parameters(
     const NfcParamIsoDep* act)
 {
     GVariantBuilder builder;
-    g_variant_builder_init(&builder, G_VARIANT_TYPE_VARDICT);
 
+    g_variant_builder_init(&builder, G_VARIANT_TYPE_VARDICT);
     if (G_LIKELY(act)) {
         switch(t4->tag.target->technology) {
         case NFC_TECHNOLOGY_A:
@@ -251,11 +251,10 @@ dbus_service_isodep_handle_get_all2(
     DBusServiceIsoDep* self)
 {
     NfcTagType4* t4 = self->t4;
-    const NfcParamIsoDep *act = t4->iso_dep;
 
     org_sailfishos_nfc_iso_dep_complete_get_all2(iface, call,
         NFC_DBUS_ISODEP_INTERFACE_VERSION,
-        dbus_service_isodep_get_act_parameters(t4, act));
+        dbus_service_isodep_get_act_parameters(t4, t4->iso_dep));
     return TRUE;
 }
 
@@ -269,10 +268,9 @@ dbus_service_isodep_handle_get_act_parameters(
     DBusServiceIsoDep* self)
 {
     NfcTagType4* t4 = self->t4;
-    const NfcParamIsoDep *act = t4->iso_dep;
 
     org_sailfishos_nfc_iso_dep_complete_get_activation_parameters(iface,
-        call, dbus_service_isodep_get_act_parameters(t4, act));
+        call, dbus_service_isodep_get_act_parameters(t4, t4->iso_dep));
     return TRUE;
 }
 
