@@ -28,7 +28,8 @@ plugins_dbus_handlers_type_text \
 plugins_dbus_handlers_type_uri \
 plugins_dbus_service_adapter \
 plugins_dbus_service_plugin \
-plugins_dbus_service_tag"
+plugins_dbus_service_tag \
+plugins_dbus_service_util"
 
 function err() {
     echo "*** ERROR!" $1
