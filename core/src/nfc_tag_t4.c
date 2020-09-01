@@ -120,7 +120,6 @@ static const GUtilData ndef_cc_ef_data = { ndef_cc_ef, sizeof(ndef_cc_ef) };
  * Implementation
  *==========================================================================*/
 
-static
 gboolean
 nfc_tag_t4_build_apdu(
     GByteArray* buf,
@@ -135,13 +134,13 @@ nfc_tag_t4_build_apdu(
     /*
      * Command APDU encoding options (ISO/IEC 7816-4):
      *
-     * Case 1:  |CLA|INS|P1|P2|                                 n = 4
-     * Case 2s: |CLA|INS|P1|P2|LE |                             n = 5
-     * Case 3s: |CLA|INS|P1|P2|LC |...BODY...|                  n = 6..260
-     * Case 4s: |CLA|INS|P1|P2|LC |...BODY...|LE |              n = 7..261
-     * Case 2e: |CLA|INS|P1|P2|00 |LE1|LE2|                     n = 7
-     * Case 3e: |CLA|INS|P1|P2|00 |LC1|LC2|...BODY...|          n = 8..65542
-     * Case 4e: |CLA|INS|P1|P2|00 |LC1|LC2|...BODY...|LE1|LE2|  n = 10..65544
+     * Case 1:  |CLA|INS|P1|P2|                                n = 4
+     * Case 2s: |CLA|INS|P1|P2|LE|                             n = 5
+     * Case 3s: |CLA|INS|P1|P2|LC|...BODY...|                  n = 6..260
+     * Case 4s: |CLA|INS|P1|P2|LC|...BODY...|LE |              n = 7..261
+     * Case 2e: |CLA|INS|P1|P2|00|LE1|LE2|                     n = 7
+     * Case 3e: |CLA|INS|P1|P2|00|LC1|LC2|...BODY...|          n = 8..65542
+     * Case 4e: |CLA|INS|P1|P2|00|LC1|LC2|...BODY...|LE1|LE2|  n = 10..65544
      *
      * LE, LE1, LE2 may be 0x00, 0x00|0x00 (means the maximum, 256 or 65536)
      * LC must not be 0x00 and LC1|LC2 must not be 0x00|0x00
@@ -153,13 +152,13 @@ nfc_tag_t4_build_apdu(
         buf->data[2] = p1;
         buf->data[3] = p2;
         if (len > 0) {
-            if (len < 0x100) {
-                /* Short Lc field */
+            if (len <= 0xff) {
+                /* Cases 3s and 4s */
                 guint8 lc = (guint8)len;
 
                 g_byte_array_append(buf, &lc, 1);
             } else {
-                /* Extended Lc field */
+                /* Cases 3e and 4e */
                 guint8 lc[3];
 
                 lc[0] = 0;
@@ -170,13 +169,13 @@ nfc_tag_t4_build_apdu(
             g_byte_array_append(buf, data, len);
         }
         if (exp > 0) {
-            if (exp <= 0x100) {
-                /* Short Le field */
+            if (exp <= 0x100 && len <= 0xff) {
+                /* Cases 2s and 4s */
                 guint8 le = (exp == 0x100) ? 0 : ((guint8)exp);
 
                 g_byte_array_append(buf, &le, 1);
             } else {
-                /* Extended Le field */
+                /* Cases 4e and 2e */
                 guint8 le[2];
 
                 if (exp == 0x10000) {
@@ -184,6 +183,11 @@ nfc_tag_t4_build_apdu(
                 } else {
                     le[0] = (guint8)(exp >> 8);
                     le[1] = (guint8)exp;
+                }
+                if (!len) {
+                    /* Case 2e */
+                    g_byte_array_set_size(buf, 5);
+                    buf->data[4] = 0;
                 }
                 g_byte_array_append(buf, le, sizeof(le));
             }

@@ -64,6 +64,19 @@ nfc_tag_t4_init_base(
     const NfcParamIsoDep* iso_dep)
     NFCD_INTERNAL;
 
+/* For unit tests */
+gboolean
+nfc_tag_t4_build_apdu(
+    GByteArray* buf,
+    guint8 cla,          /* Class byte */
+    guint8 ins,          /* Instruction byte */
+    guint8 p1,           /* Parameter byte 1 */
+    guint8 p2,           /* Parameter byte 2 */
+    guint len,           /* Command data length */
+    const void* data,    /* Command data */
+    guint exp)           /* Expected length */
+    NFCD_INTERNAL;
+
 #endif /* NFC_TAG_T4_PRIVATE_H */
 
 /*
