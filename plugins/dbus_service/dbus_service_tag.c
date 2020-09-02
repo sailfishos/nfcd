@@ -68,6 +68,7 @@ enum {
     CALL_RELEASE,
     CALL_GET_ALL3,
     CALL_GET_POLL_PARAMETERS,
+    CALL_TRANSCEIVE,
     CALL_COUNT
 };
 
@@ -102,6 +103,11 @@ typedef struct dbus_service_tag_lock_waiter {
     GSList* pending_calls;  /* GDBusMethodInvocation references */
 } DBusServiceTagLockWaiter;
 
+typedef struct dbus_service_tag_async_call {
+    OrgSailfishosNfcTag* iface;
+    GDBusMethodInvocation* call;
+} DBusServiceTagAsyncCall;
+
 struct dbus_service_tag {
     char* path;
     GDBusConnection* connection;
@@ -121,7 +127,7 @@ struct dbus_service_tag {
 };
 
 #define NFC_DBUS_TAG_INTERFACE "org.sailfishos.nfc.Tag"
-#define NFC_DBUS_TAG_INTERFACE_VERSION  (3)
+#define NFC_DBUS_TAG_INTERFACE_VERSION  (4)
 
 static const char* const dbus_service_tag_default_interfaces[] = {
     NFC_DBUS_TAG_INTERFACE, NULL
@@ -148,9 +154,11 @@ dbus_service_tag_find_waiter(
 NfcTargetSequence*
 dbus_service_tag_sequence(
     DBusServiceTag* self,
-    const char* sender)
+    GDBusMethodInvocation* call)
 {
-    if (G_LIKELY(self) && G_LIKELY(sender)) {
+    const char* sender = g_dbus_method_invocation_get_sender(call);
+
+    if (G_LIKELY(sender)) {
         if (self->lock && !g_strcmp0(self->lock->name, sender)) {
             return self->lock->seq;
         } else {
@@ -846,6 +854,79 @@ dbus_service_tag_handle_get_poll_parameters(
     return TRUE;
 }
 
+/* Interface Version 4 */
+
+static
+void
+dbus_service_tag_async_free(
+    DBusServiceTagAsyncCall* async)
+{
+    g_object_unref(async->iface);
+    g_object_unref(async->call);
+    g_slice_free1(sizeof(*async), async);
+}
+
+static
+void
+dbus_service_tag_async_destroy(
+    void* async)
+{
+    dbus_service_tag_async_free((DBusServiceTagAsyncCall*)async);
+}
+
+static
+void
+dbus_service_tag_handle_transmit_complete(
+    NfcTarget* target,
+    NFC_TRANSMIT_STATUS status,
+    const void* data,
+    guint len,
+    void* user_data)
+{
+    DBusServiceTagAsyncCall* async = user_data;
+
+    switch (status) {
+    case NFC_TRANSMIT_STATUS_OK:
+        org_sailfishos_nfc_tag_complete_transceive(async->iface, async->call,
+            dbus_service_dup_byte_array_as_variant(data, len));
+        break;
+    case NFC_TRANSMIT_STATUS_NACK:
+    case NFC_TRANSMIT_STATUS_ERROR:
+    case NFC_TRANSMIT_STATUS_CORRUPTED:
+    case NFC_TRANSMIT_STATUS_TIMEOUT:
+        g_dbus_method_invocation_return_error_literal(async->call,
+            DBUS_SERVICE_ERROR, DBUS_SERVICE_ERROR_FAILED,
+            "Transmission failed");
+        break;
+    }
+}
+
+static
+gboolean
+dbus_service_tag_handle_transceive(
+    OrgSailfishosNfcTag* iface,
+    GDBusMethodInvocation* call,
+    GVariant* data,
+    DBusServiceTag* self)
+{
+    NfcTag* tag = self->tag;
+    DBusServiceTagAsyncCall* async = g_slice_new(DBusServiceTagAsyncCall);
+
+    g_object_ref(async->iface = iface);
+    g_object_ref(async->call = call);
+    if (!nfc_target_transmit(tag->target,
+        g_variant_get_data(data), g_variant_get_size(data),
+        dbus_service_tag_sequence(self, call),
+        dbus_service_tag_handle_transmit_complete,
+        dbus_service_tag_async_destroy, async)) {
+        dbus_service_tag_async_free(async);
+        g_dbus_method_invocation_return_error_literal(call,
+            DBUS_SERVICE_ERROR, DBUS_SERVICE_ERROR_FAILED,
+            "Failed to send data to the target");
+    }
+    return TRUE;
+}
+
 /*==========================================================================*
  * Interface
  *==========================================================================*/
@@ -962,6 +1043,9 @@ dbus_service_tag_new(
     self->call_id[CALL_GET_POLL_PARAMETERS] =
         g_signal_connect(self->iface, "handle-get-poll-parameters",
         G_CALLBACK(dbus_service_tag_handle_get_poll_parameters), self);
+    self->call_id[CALL_TRANSCEIVE] =
+        g_signal_connect(self->iface, "handle-transceive",
+        G_CALLBACK(dbus_service_tag_handle_transceive), self);
 
     if (tag->flags & NFC_TAG_FLAG_INITIALIZED) {
         dbus_service_tag_export_all(self);

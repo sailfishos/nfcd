@@ -73,5 +73,14 @@
     <method name="GetPollParameters">
       <arg name="parameters" type="a{sv}" direction="out"/>
     </method>
+    <!-- Interface version 4 -->
+    <method name="Transceive">
+      <arg name="data" type="ay" direction="in">
+        <annotation name="org.gtk.GDBus.C.ForceGVariant" value="true"/>
+      </arg>
+      <arg name="response" type="ay" direction="out">
+        <annotation name="org.gtk.GDBus.C.ForceGVariant" value="true"/>
+      </arg>
+    </method>
   </interface>
 </node>

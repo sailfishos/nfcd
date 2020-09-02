@@ -37,18 +37,20 @@
 #include "test_dbus.h"
 
 #include "dbus_service/dbus_service.h"
+#include "dbus_service/dbus_service_util.h"
 
 #include "internal/nfc_manager_i.h"
 #include "nfc_plugins.h"
 #include "nfc_adapter_p.h"
 #include "nfc_target_p.h"
 #include "nfc_tag_p.h"
+#include "nfc_ndef.h"
 
 #include <gutil_idlepool.h>
 
 #define NFC_SERVICE "org.sailfishos.nfc.daemon"
 #define NFC_TAG_INTERFACE "org.sailfishos.nfc.Tag"
-#define MIN_INTERFACE_VERSION (3)
+#define MIN_INTERFACE_VERSION (4)
 
 static TestOpt test_opt;
 static const char test_sender_1[] = ":1.1";
@@ -168,11 +170,12 @@ test_call_release(
 static
 void
 test_complete_ok(
-    GDBusConnection* connection,
+    GObject* conn,
     GAsyncResult* result)
 {
     GError* error = NULL;
-    GVariant* out = g_dbus_connection_call_finish(connection, result, &error);
+    GVariant* out = g_dbus_connection_call_finish(G_DBUS_CONNECTION(conn),
+        result, &error);
 
     g_assert(out);
     g_variant_unref(out);
@@ -180,17 +183,34 @@ test_complete_ok(
 
 static
 void
+test_get_interface_version_complete_ok(
+    GObject* conn,
+    GAsyncResult* result)
+{
+    gint version = 0;
+    GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(conn),
+        result, NULL);
+
+    g_assert(var);
+    g_variant_get(var, "(i)", &version);
+    GDEBUG("version=%d", version);
+    g_assert(version >= MIN_INTERFACE_VERSION);
+    g_variant_unref(var);
+}
+
+static
+void
 test_complete_error(
-    GDBusConnection* connection,
+    GObject* connection,
     GAsyncResult* result,
     DBusServiceError code)
 {
     GError* error = NULL;
 
-    /* This call is expected to fail with org.sailfishos.nfc.Error.Aborted */
-    g_assert(!g_dbus_connection_call_finish(connection, result, &error));
-    g_assert(error->domain == DBUS_SERVICE_ERROR);
-    g_assert(error->code == code);
+    /* This call is expected to fail */
+    g_assert(!g_dbus_connection_call_finish(G_DBUS_CONNECTION(connection),
+        result, &error));
+    g_assert_error(error, DBUS_SERVICE_ERROR, code);
     g_error_free(error);
 }
 
@@ -332,7 +352,6 @@ test_null(
     void)
 {
     dbus_service_tag_free(NULL);
-    g_assert(!dbus_service_tag_sequence(NULL, NULL));
 }
 
 /*==========================================================================*
@@ -453,20 +472,13 @@ test_get_all(
 static
 void
 test_get_interface_version_done(
-    GObject* object,
+    GObject* connection,
     GAsyncResult* result,
     gpointer user_data)
 {
     TestData* test = user_data;
-    gint version = 0;
-    GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
-        result, NULL);
 
-    g_assert(var);
-    g_variant_get(var, "(i)", &version);
-    GDEBUG("version=%d", version);
-    g_assert(version >= MIN_INTERFACE_VERSION);
-    g_variant_unref(var);
+    test_get_interface_version_complete_ok(connection, result);
     test_quit_later(test->loop);
 }
 
@@ -751,12 +763,12 @@ test_get_interfaces(
 }
 
 /*==========================================================================*
- * get_records
+ * get_ndef_records0
  *==========================================================================*/
 
 static
 void
-test_get_records_done(
+test_get_ndef_records0_done(
     GObject* object,
     GAsyncResult* result,
     gpointer user_data)
@@ -778,7 +790,7 @@ test_get_records_done(
 
 static
 void
-test_get_records_start(
+test_get_ndef_records0_start(
     GDBusConnection* client,
     GDBusConnection* server,
     void* user_data)
@@ -787,19 +799,76 @@ test_get_records_start(
 
     nfc_tag_set_initialized(test->adapter->tags[0]);
     test_start_and_get(test, client, server,
-        "GetNdefRecords", test_get_records_done);
+        "GetNdefRecords", test_get_ndef_records0_done);
 }
 
 static
 void
-test_get_records(
+test_get_ndef_records0(
     void)
 {
     TestData test;
     TestDBus* dbus;
 
     test_data_init(&test);
-    dbus = test_dbus_new(test_get_records_start, &test);
+    dbus = test_dbus_new(test_get_ndef_records0_start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+/*==========================================================================*
+ * get_ndef_records1
+ *==========================================================================*/
+
+static
+void
+test_get_ndef_records1_done(
+    GObject* object,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    gchar** records = NULL;
+    GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
+        result, NULL);
+
+    g_assert(var);
+    g_variant_get(var, "(^ao)", &records);
+    g_assert(records);
+    GDEBUG("%u record(s)", g_strv_length(records));
+    g_assert(g_strv_length(records) == 1);
+    g_strfreev(records);
+    g_variant_unref(var);
+    test_quit_later(test->loop);
+}
+
+static
+void
+test_get_ndef_records1_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+    NfcTag* tag = test->adapter->tags[0];
+
+    tag->ndef = NFC_NDEF_REC(nfc_ndef_rec_t_new("test","en"));
+    nfc_tag_set_initialized(tag);
+    test_start_and_get(test, client, server,
+        "GetNdefRecords", test_get_ndef_records1_done);
+}
+
+static
+void
+test_get_ndef_records1(
+    void)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_data_init(&test);
+    dbus = test_dbus_new(test_get_ndef_records1_start, &test);
     test_run(&test_opt, test.loop);
     test_data_cleanup(&test);
     test_dbus_free(dbus);
@@ -818,8 +887,7 @@ test_early_free_done(
 {
     TestData* test = user_data;
 
-    test_complete_error(G_DBUS_CONNECTION(connection), result,
-        DBUS_SERVICE_ERROR_ABORTED);
+    test_complete_error(connection, result, DBUS_SERVICE_ERROR_ABORTED);
     test_quit_later(test->loop);
 }
 
@@ -832,7 +900,7 @@ test_early_free_continue(
 {
     TestData* test = user_data;
 
-    test_complete_ok(G_DBUS_CONNECTION(connection), result);
+    test_get_interface_version_complete_ok(connection, result);
     /* This completes pending GetInterfaces with an error */
     nfc_tag_deactivate(test->adapter->tags[0]);
 }
@@ -874,11 +942,11 @@ test_early_free(
 static
 void
 test_early_free2_locked(
-    GObject* object,
+    GObject* connection,
     GAsyncResult* result,
     gpointer test)
 {
-    test_complete_ok(G_DBUS_CONNECTION(object), result);
+    test_complete_ok(connection, result);
     GDEBUG("Lock acquired (1)");
     /* Change the sender */
     test_sender = test_sender_2;
@@ -952,7 +1020,7 @@ test_block_continue(
 {
     TestData* test = user_data;
 
-    test_complete_ok(G_DBUS_CONNECTION(connection), result);
+    test_get_interface_version_complete_ok(connection, result);
     /* This unblocks pending GetInterfaces and GetAll calls */
     nfc_tag_set_initialized(test->adapter->tags[0]);
 }
@@ -1076,12 +1144,11 @@ test_lock_released_3(
 static
 void
 test_lock_released_2(
-    GObject* object,
+    GObject* connection,
     GAsyncResult* result,
     gpointer user_data)
 {
     TestData* test = user_data;
-    GDBusConnection* connection = G_DBUS_CONNECTION(object);
 
     test_complete_ok(connection, result);
     GDEBUG("Lock released (2)");
@@ -1092,12 +1159,10 @@ test_lock_released_2(
 static
 void
 test_lock_released_1(
-    GObject* object,
+    GObject* connection,
     GAsyncResult* result,
     gpointer test)
 {
-    GDBusConnection* connection = G_DBUS_CONNECTION(object);
-
     test_complete_ok(connection, result);
     GDEBUG("Lock released (1)");
     test_call_release(test, test_lock_released_2);
@@ -1106,12 +1171,10 @@ test_lock_released_1(
 static
 void
 test_lock_acquired_2(
-    GObject* object,
+    GObject* connection,
     GAsyncResult* result,
     gpointer test)
 {
-    GDBusConnection* connection = G_DBUS_CONNECTION(object);
-
     test_complete_ok(connection, result);
     GDEBUG("Lock acquired (2)");
     test_call_release(test, test_lock_released_1);
@@ -1120,12 +1183,10 @@ test_lock_acquired_2(
 static
 void
 test_lock_acquired_1(
-    GObject* object,
+    GObject* connection,
     GAsyncResult* result,
     gpointer test)
 {
-    GDBusConnection* connection = G_DBUS_CONNECTION(object);
-
     test_complete_ok(connection, result);
     GDEBUG("Lock acquired (1)");
     test_call_acquire(test, TRUE, test_lock_acquired_2);
@@ -1168,13 +1229,13 @@ test_lock(
 static
 void
 test_lock_drop_done(
-    GObject* object,
+    GObject* connection,
     GAsyncResult* result,
     gpointer user_data)
 {
     TestData* test = user_data;
 
-    test_complete_ok(G_DBUS_CONNECTION(object), result);
+    test_complete_ok(connection, result);
     GDEBUG("Released lock 1");
     test_quit_later(test->loop);
 }
@@ -1190,8 +1251,7 @@ test_lock_drop_wait_dropped(
 
    GDEBUG("Pending lock 2 has been dropped");
     /* This call is expected to fail with org.sailfishos.nfc.Error.Aborted */
-    test_complete_error(G_DBUS_CONNECTION(connection), result,
-        DBUS_SERVICE_ERROR_ABORTED);
+    test_complete_error(connection, result, DBUS_SERVICE_ERROR_ABORTED);
 
     /* Release the first lock */
     test_sender = test_sender_1;
@@ -1205,7 +1265,7 @@ test_lock_drop_wait_continue(
     GAsyncResult* result,
     gpointer user_data)
 {
-    test_complete_ok(G_DBUS_CONNECTION(connection), result);
+    test_get_interface_version_complete_ok(connection, result);
     GDEBUG("Dropping pending lock 2");
     test_name_watch_vanish(test_sender_2);
 }
@@ -1213,11 +1273,11 @@ test_lock_drop_wait_continue(
 static
 void
 test_lock_drop_wait_locked(
-    GObject* object,
+    GObject* connection,
     GAsyncResult* result,
     gpointer test)
 {
-    test_complete_ok(G_DBUS_CONNECTION(object), result);
+    test_complete_ok(connection, result);
     GDEBUG("Lock acquired (1)");
     /* Change the sender */
     test_sender = test_sender_2;
@@ -1265,13 +1325,13 @@ test_lock_drop_wait(
 static
 void
 test_lock_release_wait_done(
-    GObject* object,
+    GObject* connection,
     GAsyncResult* result,
     gpointer user_data)
 {
     TestData* test = user_data;
 
-    test_complete_ok(G_DBUS_CONNECTION(object), result);
+    test_complete_ok(connection, result);
     GDEBUG("Released lock 1");
     test_quit_later(test->loop);
 }
@@ -1279,12 +1339,10 @@ test_lock_release_wait_done(
 static
 void
 test_lock_release_wait_released(
-    GObject* object,
+    GObject* connection,
     GAsyncResult* result,
     gpointer test)
 {
-    GDBusConnection* connection = G_DBUS_CONNECTION(object);
-
     test_complete_ok(connection, result);
     GDEBUG("Released pending lock 2");
     test_sender = test_sender_1;
@@ -1300,8 +1358,7 @@ test_lock_release_wait_dropped(
 {
     GDEBUG("Pending lock 2 has been dropped");
     /* This call is expected to fail with org.sailfishos.nfc.Error.Aborted */
-    test_complete_error(G_DBUS_CONNECTION(connection), result,
-        DBUS_SERVICE_ERROR_ABORTED);
+    test_complete_error(connection, result, DBUS_SERVICE_ERROR_ABORTED);
 }
 
 static
@@ -1313,7 +1370,7 @@ test_lock_release_wait_continue(
 {
     TestData* test = user_data;
 
-    test_complete_ok(G_DBUS_CONNECTION(connection), result);
+    test_get_interface_version_complete_ok(connection, result);
     GDEBUG("Releasing pending lock 2");
     test_call_release(test, test_lock_release_wait_released);
 }
@@ -1321,11 +1378,11 @@ test_lock_release_wait_continue(
 static
 void
 test_lock_release_wait_locked(
-    GObject* object,
+    GObject* connection,
     GAsyncResult* result,
     gpointer test)
 {
-    test_complete_ok(G_DBUS_CONNECTION(object), result);
+    test_complete_ok(connection, result);
     GDEBUG("Lock acquired (1)");
     /* Change the sender */
     test_sender = test_sender_2;
@@ -1373,13 +1430,13 @@ test_lock_release_wait(
 static
 void
 test_lock_wait_released(
-    GObject* object,
+    GObject* connection,
     GAsyncResult* result,
     gpointer user_data)
 {
     TestData* test = user_data;
 
-    test_complete_ok(G_DBUS_CONNECTION(object), result);
+    test_complete_ok(connection, result);
     GDEBUG("Released lock 2");
     test_quit_later(test->loop);
 }
@@ -1387,11 +1444,11 @@ test_lock_wait_released(
 static
 void
 test_lock_wait_locked_again(
-    GObject* object,
+    GObject* connection,
     GAsyncResult* result,
     gpointer test)
 {
-    test_complete_ok(G_DBUS_CONNECTION(object), result);
+    test_complete_ok(connection, result);
     GDEBUG("Lock acquired (2)");
     test_call_release(test, test_lock_wait_released);
 }
@@ -1404,18 +1461,18 @@ test_lock_wait_continue(
     gpointer user_data)
 {
     GDEBUG("Dropping lock 1");
-    test_complete_ok(G_DBUS_CONNECTION(connection), result);
+    test_get_interface_version_complete_ok(connection, result);
     test_name_watch_vanish(test_sender_1);
 }
 
 static
 void
 test_lock_wait_locked(
-    GObject* object,
+    GObject* connection,
     GAsyncResult* result,
     gpointer test)
 {
-    test_complete_ok(G_DBUS_CONNECTION(object), result);
+    test_complete_ok(connection, result);
     GDEBUG("Lock acquired (1)");
     /* Change the sender */
     test_sender = test_sender_2;
@@ -1463,13 +1520,13 @@ test_lock_wait(
 static
 void
 test_lock_wait2_locked_again2(
-    GObject* object,
+    GObject* connection,
     GAsyncResult* result,
     gpointer user_data)
 {
     TestData* test = user_data;
 
-    test_complete_ok(G_DBUS_CONNECTION(object), result);
+    test_complete_ok(connection, result);
     GDEBUG("Lock 2 acquired (2)");
     test_quit_later(test->loop);
 }
@@ -1477,22 +1534,22 @@ test_lock_wait2_locked_again2(
 static
 void
 test_lock_wait2_locked_again1(
-    GObject* object,
+    GObject* connection,
     GAsyncResult* result,
     gpointer test)
 {
-    test_complete_ok(G_DBUS_CONNECTION(object), result);
+    test_complete_ok(connection, result);
     GDEBUG("Lock 2 acquired (1) ");
 }
 
 static
 void
 test_lock_wait2_released(
-    GObject* object,
+    GObject* connection,
     GAsyncResult* result,
     gpointer user_data)
 {
-    test_complete_ok(G_DBUS_CONNECTION(object), result);
+    test_complete_ok(connection, result);
     GDEBUG("Released lock 1");
 }
 static
@@ -1505,7 +1562,7 @@ test_lock_wait2_continue(
     TestData* test = user_data;
 
     GDEBUG("Releasing lock 1");
-    test_complete_ok(G_DBUS_CONNECTION(connection), result);
+    test_get_interface_version_complete_ok(connection, result);
     test_sender = test_sender_1;
     test_call_release(test, test_lock_wait2_released);
 }
@@ -1513,11 +1570,11 @@ test_lock_wait2_continue(
 static
 void
 test_lock_wait2_locked(
-    GObject* object,
+    GObject* connection,
     GAsyncResult* result,
     gpointer test)
 {
-    test_complete_ok(G_DBUS_CONNECTION(object), result);
+    test_complete_ok(connection, result);
     GDEBUG("Lock 1 acquired");
     /* Change the sender */
     test_sender = test_sender_2;
@@ -1583,11 +1640,11 @@ test_lock_fail_done(
 static
 void
 test_lock_fail_locked(
-    GObject* object,
+    GObject* connection,
     GAsyncResult* result,
     gpointer test)
 {
-    test_complete_ok(G_DBUS_CONNECTION(object), result);
+    test_complete_ok(connection, result);
     GDEBUG("Lock acquired");
     /* Change the sender */
     test_sender = test_sender_2;
@@ -1895,6 +1952,150 @@ test_get_all3_tag_b(
 }
 
 /*==========================================================================*
+ * transceive_ok
+ *==========================================================================*/
+
+static const guint8 test_transceive_in[] = { 0x01, 0x02, 0x03 };
+static const guint8 test_transceive_out[] = { 0x04, 0x05 };
+
+static
+void
+test_transceive_ok_done(
+    GObject* conn,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    GVariant* response = NULL;
+    GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(conn),
+        result, NULL);
+
+    g_assert(var);
+    g_variant_get(var, "(@ay)", &response);
+    g_assert_cmpuint(g_variant_get_size(response), ==,
+        sizeof(test_transceive_out));
+    g_assert(!memcmp(g_variant_get_data(response),
+        TEST_ARRAY_AND_SIZE(test_transceive_out)));
+    g_variant_unref(var);
+    g_variant_unref(response);
+    test_quit_later(test->loop);
+}
+
+static
+void
+test_transceive_ok_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+    NfcTag* tag = test->adapter->tags[0];
+
+    nfc_tag_set_initialized(test->adapter->tags[0]);
+    g_object_ref(test->connection = client);
+    test->service = dbus_service_adapter_new(test->adapter, server);
+    g_assert(test->service);
+
+    g_dbus_connection_call(test->connection, NULL, test_tag_path(test, tag),
+        NFC_TAG_INTERFACE, "Transceive", g_variant_new("(@ay)",
+        dbus_service_dup_byte_array_as_variant(
+        TEST_ARRAY_AND_SIZE(test_transceive_in))),
+        NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+        test_transceive_ok_done, test);
+}
+
+static
+void
+test_transceive_ok(
+    void)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_data_init(&test);
+    test_target_add_data(test.adapter->tags[0]->target,
+        TEST_ARRAY_AND_SIZE(test_transceive_in),
+        TEST_ARRAY_AND_SIZE(test_transceive_out));
+    dbus = test_dbus_new(test_transceive_ok_start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+/*==========================================================================*
+ * transceive_error
+ *==========================================================================*/
+
+static
+void
+test_transceive_error_done(
+    GObject* connection,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+
+    test_complete_error(connection, result, DBUS_SERVICE_ERROR_FAILED);
+    test_quit_later(test->loop);
+}
+
+static
+void
+test_transceive_error_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+    NfcTag* tag = test->adapter->tags[0];
+
+    nfc_tag_set_initialized(test->adapter->tags[0]);
+    g_object_ref(test->connection = client);
+    test->service = dbus_service_adapter_new(test->adapter, server);
+    g_assert(test->service);
+
+    g_dbus_connection_call(test->connection, NULL, test_tag_path(test, tag),
+        NFC_TAG_INTERFACE, "Transceive", g_variant_new("(@ay)",
+        dbus_service_dup_byte_array_as_variant(
+        TEST_ARRAY_AND_SIZE(test_transceive_in))),
+        NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+        test_transceive_error_done, test);
+}
+
+static
+void
+test_transceive_error1(
+    void)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_data_init(&test);
+    dbus = test_dbus_new(test_transceive_error_start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+static
+void
+test_transceive_error2(
+    void)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_data_init(&test);
+    /* Simulate error at completion stage */
+    test_target_add_data(test.adapter->tags[0]->target,
+        TEST_ARRAY_AND_SIZE(test_transceive_in), NULL, 0);
+    dbus = test_dbus_new(test_transceive_error_start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -1915,7 +2116,8 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("get_protocol"), test_get_protocol);
     g_test_add_func(TEST_("get_type"), test_get_type);
     g_test_add_func(TEST_("get_interfaces"), test_get_interfaces);
-    g_test_add_func(TEST_("get_records"), test_get_records);
+    g_test_add_func(TEST_("get_ndef_records/0"), test_get_ndef_records0);
+    g_test_add_func(TEST_("get_ndef_records/1"), test_get_ndef_records1);
     g_test_add_func(TEST_("early_free"), test_early_free);
     g_test_add_func(TEST_("early_free2"), test_early_free2);
     g_test_add_func(TEST_("block"), test_block);
@@ -1929,6 +2131,9 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("get_all3"), test_get_all3);
     g_test_add_func(TEST_("get_poll_parameters"), test_get_poll_parameters);
     g_test_add_func(TEST_("get_all3_tag_b"), test_get_all3_tag_b);
+    g_test_add_func(TEST_("transceive/ok"), test_transceive_ok);
+    g_test_add_func(TEST_("transceive/error1"), test_transceive_error1);
+    g_test_add_func(TEST_("transceive/error2"), test_transceive_error2);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

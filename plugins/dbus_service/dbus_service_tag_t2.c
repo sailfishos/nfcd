@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -126,8 +126,7 @@ dbus_service_tag_t2_sequence(
     DBusServiceTagType2* self,
     GDBusMethodInvocation* call)
 {
-    return dbus_service_tag_sequence(self->owner,
-        g_dbus_method_invocation_get_sender(call));
+    return dbus_service_tag_sequence(self->owner, call);
 }
 
 /*==========================================================================*
