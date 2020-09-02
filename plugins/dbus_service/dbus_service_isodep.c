@@ -69,8 +69,7 @@ dbus_service_isodep_sequence(
     DBusServiceIsoDep* self,
     GDBusMethodInvocation* call)
 {
-    return dbus_service_tag_sequence(self->owner,
-        g_dbus_method_invocation_get_sender(call));
+    return dbus_service_tag_sequence(self->owner, call);
 }
 
 /*==========================================================================*

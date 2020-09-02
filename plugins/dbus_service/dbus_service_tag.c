@@ -148,9 +148,11 @@ dbus_service_tag_find_waiter(
 NfcTargetSequence*
 dbus_service_tag_sequence(
     DBusServiceTag* self,
-    const char* sender)
+    GDBusMethodInvocation* call)
 {
-    if (G_LIKELY(self) && G_LIKELY(sender)) {
+    const char* sender = g_dbus_method_invocation_get_sender(call);
+
+    if (G_LIKELY(sender)) {
         if (self->lock && !g_strcmp0(self->lock->name, sender)) {
             return self->lock->seq;
         } else {

@@ -332,7 +332,6 @@ test_null(
     void)
 {
     dbus_service_tag_free(NULL);
-    g_assert(!dbus_service_tag_sequence(NULL, NULL));
 }
 
 /*==========================================================================*
