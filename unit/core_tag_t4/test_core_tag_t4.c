@@ -32,6 +32,7 @@
  */
 
 #include "test_common.h"
+#include "test_target.h"
 
 #include "nfc_ndef.h"
 #include "nfc_tag_p.h"
@@ -185,146 +186,6 @@ test_tag_quit_loop_cb(
 }
 
 /*==========================================================================*
- * Test target
- *==========================================================================*/
-
-typedef NfcTargetClass TestTargetClass;
-typedef struct test_target {
-    NfcTarget target;
-    guint transmit_id;
-    GPtrArray* cmd_resp;
-    int fail_transmit;
-} TestTarget;
-
-G_DEFINE_TYPE(TestTarget, test_target, NFC_TYPE_TARGET)
-#define TEST_TYPE_TARGET (test_target_get_type())
-#define TEST_TARGET(obj) (G_TYPE_CHECK_INSTANCE_CAST(obj, \
-        TEST_TYPE_TARGET, TestTarget))
-
-static
-GUtilData*
-test_target_next_data(
-    TestTarget* self)
-{
-    if (self->cmd_resp->len) {
-        GUtilData* data = self->cmd_resp->pdata[0];
-
-        self->cmd_resp->pdata[0] = NULL;
-        g_ptr_array_remove_index(self->cmd_resp, 0);
-        return data;
-    }
-    return NULL;
-}
-
-static
-void
-test_target_cancel_transmit(
-    NfcTarget* target)
-{
-    TestTarget* self = TEST_TARGET(target);
-
-    g_assert(self->transmit_id);
-    g_source_remove(self->transmit_id);
-    self->transmit_id = 0;
-}
-
-static
-gboolean
-test_target_transmit_done(
-    gpointer user_data)
-{
-    TestTarget* self = TEST_TARGET(user_data);
-    NfcTarget* target = &self->target;
-
-    g_assert(self->transmit_id);
-    self->transmit_id = 0;
-    if (self->cmd_resp->len) {
-        GUtilData* data = test_target_next_data(self);
-
-        if (data) {
-            nfc_target_transmit_done(target, NFC_TRANSMIT_STATUS_OK,
-                data->bytes, data->size);
-            g_free(data);
-        } else {
-            nfc_target_transmit_done(target, NFC_TRANSMIT_STATUS_OK, NULL, 0);
-        }
-    } else {
-        nfc_target_transmit_done(target, NFC_TRANSMIT_STATUS_ERROR, NULL, 0);
-    }
-    return G_SOURCE_REMOVE;
-}
-
-static
-gboolean
-test_target_transmit(
-    NfcTarget* target,
-    const void* data,
-    guint len)
-{
-    TestTarget* self = TEST_TARGET(target);
-    GUtilData* expected = test_target_next_data(self);
-
-    if (self->fail_transmit > 0 && --self->fail_transmit == 0) {
-        GDEBUG("Simulating transmit failure");
-        g_free(expected);
-        return FALSE;
-    } else {
-        if (expected) {
-            g_assert_cmpuint(expected->size, ==, len);
-            g_assert(!memcmp(data, expected->bytes,  len));
-            g_free(expected);
-        }
-        self->transmit_id = g_idle_add(test_target_transmit_done, self);
-        return TRUE;
-    }
-}
-
-static
-void
-test_target_init(
-    TestTarget* self)
-{
-    self->cmd_resp = g_ptr_array_new_with_free_func(g_free);
-}
-
-static
-void
-test_target_finalize(
-    GObject* object)
-{
-    TestTarget* self = TEST_TARGET(object);
-
-    if (self->transmit_id) {
-        g_source_remove(self->transmit_id);
-    }
-    g_ptr_array_free(self->cmd_resp, TRUE);
-    G_OBJECT_CLASS(test_target_parent_class)->finalize(object);
-}
-
-static
-void
-test_target_class_init(
-    NfcTargetClass* klass)
-{
-    klass->transmit = test_target_transmit;
-    klass->cancel_transmit = test_target_cancel_transmit;
-    G_OBJECT_CLASS(klass)->finalize = test_target_finalize;
-}
-
-static
-void
-test_target_add_cmd(
-    TestTarget* self,
-    const void* cmd_bytes,
-    guint cmd_len,
-    const void* resp_bytes,
-    guint resp_len)
-{
-    g_ptr_array_add(self->cmd_resp, test_alloc_data(cmd_bytes, cmd_len));
-    g_ptr_array_add(self->cmd_resp, test_alloc_data(resp_bytes, resp_len));
-}
-
-/*==========================================================================*
  * Test target with reactivate
  *==========================================================================*/
 
@@ -373,6 +234,9 @@ void
 test_target2_init(
     TestTarget2* self)
 {
+    /* Tests assume NFC-B and no failures */
+    self->parent.target.technology = NFC_TECHNOLOGY_B;
+    self->parent.fail_transmit = 0;
 }
 
 static
@@ -1035,7 +899,8 @@ test_apdu_ok(
 {
     const TestApduData* data = test_data;
     const GUtilData* expected = &data->expected;
-    NfcTarget* target = g_object_new(TEST_TYPE_TARGET, NULL);
+    NfcTarget* target = test_target_new_tech_with_data(NFC_TECHNOLOGY_B,
+        expected->bytes, expected->size, TEST_ARRAY_AND_SIZE(test_resp_ok));
     NfcParamPollB poll_b;
     NfcTagType4* t4b;
     NfcTag* tag;
@@ -1055,9 +920,6 @@ test_apdu_ok(
     g_assert(tag->flags & NFC_TAG_FLAG_INITIALIZED);
 
     /* Submit and validate APDU */
-    test_target_add_cmd(TEST_TARGET(tag->target),
-        expected->bytes, expected->size,
-        TEST_ARRAY_AND_SIZE(test_resp_ok));
     g_assert(nfc_isodep_transmit(t4b, data->cla, data->ins,
         data->p1, data->p2, data->data.bytes ? &data->data : NULL, data->le,
         NULL, test_apdu_ok_done, test_apdu_ok_destroy, &test));
@@ -1101,7 +963,7 @@ test_apdu_fail(
     gulong id;
 
     /* Command-response pair for missing NDEF application */
-    test_target_add_cmd(TEST_TARGET(target),
+    test_target_add_data(target,
         TEST_ARRAY_AND_SIZE(test_cmd_select_ndef_app),
         TEST_ARRAY_AND_SIZE(test_resp_not_found));
 
@@ -1137,7 +999,7 @@ test_apdu_fail(
     test_run(&test_opt, loop);
 
     /* Short response */
-    test_target_add_cmd(TEST_TARGET(tag->target),
+    test_target_add_data(tag->target,
         TEST_ARRAY_AND_SIZE(select_mf_expected), &zero, 1);
     g_assert(nfc_isodep_transmit(t4b, 0x00, 0xa4, 0x00, 0x00, NULL, 0,
         NULL, test_apdu_fail_done, NULL, loop));

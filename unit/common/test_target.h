@@ -33,7 +33,20 @@
 #ifndef TEST_TARGET_H
 #define TEST_TARGET_H
 
-#include <nfc_types.h>
+#include "nfc_target_impl.h"
+
+typedef NfcTargetClass TestTargetClass;
+typedef struct test_target {
+    NfcTarget target;
+    guint transmit_id;
+    GPtrArray* cmd_resp;
+    int fail_transmit;
+} TestTarget;
+
+GType test_target_get_type(void);
+#define TEST_TYPE_TARGET (test_target_get_type())
+#define TEST_TARGET(obj) (G_TYPE_CHECK_INSTANCE_CAST(obj, \
+        TEST_TYPE_TARGET, TestTarget))
 
 NfcTarget*
 test_target_new(
@@ -42,6 +55,25 @@ test_target_new(
 NfcTarget*
 test_target_new_tech(
     NFC_TECHNOLOGY tech);
+
+NfcTarget*
+test_target_new_tech_with_data(
+    NFC_TECHNOLOGY tech,
+    const void* cmd_bytes,
+    guint cmd_len,
+    const void* resp_bytes,
+    guint resp_len);
+
+#define test_target_new_with_data(cmd,cmd_len,resp,resp_len) \
+    test_target_new_tech_with_data(NFC_TECHNOLOGY_A,cmd,cmd_len,resp,resp_len)
+
+void
+test_target_add_data(
+    NfcTarget* target,
+    const void* cmd_bytes,
+    guint cmd_len,
+    const void* resp_bytes,
+    guint resp_len);
 
 #endif /* TEST_TARGET_H */
 
