@@ -222,6 +222,7 @@ test_target2_reactivate(
 
     g_assert(!test->reactivate_id);
     if (test->fail_reactivate) {
+        GDEBUG("Failing reactivation");
         return FALSE;
     } else {
         test->reactivate_id = g_idle_add(test_target2_reactivated, test);
