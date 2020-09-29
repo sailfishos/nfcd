@@ -175,6 +175,8 @@ static const guint8 test_resp_read_ndef_2[] = {
     0x73, 0x74, 0x20, 0x74, 0x65, 0x73, 0x74, /* Data */
     0x90, 0x00                                /* SW1|SW2 */
 };
+static gint reset_count = 0;
+static gint reset_free_count = 0;
 
 static
 void
@@ -183,6 +185,28 @@ test_tag_quit_loop_cb(
     void* user_data)
 {
     g_main_loop_quit((GMainLoop*)user_data);
+}
+
+static
+void
+test_tag_reset_cb(
+    NfcTagType4* t4,
+    gboolean ok,
+    void* user_data)
+{
+    g_assert(ok);
+    g_assert(user_data);
+    ++reset_count;
+    test_tag_quit_loop_cb(&t4->tag, user_data);
+}
+
+static
+void
+test_tag_reset_free1(
+    void* user_data)
+{
+    g_assert(user_data);
+    ++reset_free_count;
 }
 
 /*==========================================================================*
@@ -280,6 +304,7 @@ test_null(
     g_assert(!nfc_tag_t4b_new(target, NULL, NULL));
     g_assert(!nfc_isodep_transmit(NULL, 0, 0, 0, 0, NULL, 0,
         NULL, NULL, NULL, NULL));
+    g_assert(!nfc_isodep_reset(NULL, NULL, NULL, NULL, NULL));
     nfc_target_unref(target);
 }
 
@@ -398,6 +423,62 @@ test_basic_b(
     g_main_loop_unref(loop);
 }
 
+static
+void
+test_basic_reset(
+    void)
+{
+    GMainLoop* loop = g_main_loop_new(NULL, TRUE);
+
+    TestTarget2* test = g_object_new(TEST_TYPE_TARGET2, NULL);
+    NfcTarget* target = NFC_TARGET(test);
+
+    NfcParamIsoDepPollA iso_dep_poll_a;
+    NfcTagType4* t4a;
+    NfcTag* tag;
+
+    memset(&iso_dep_poll_a, 0, sizeof(iso_dep_poll_a));
+    iso_dep_poll_a.fsc = 256;
+    target->technology = NFC_TECHNOLOGY_A;
+    t4a = NFC_TAG_T4(nfc_tag_t4a_new(target, NULL, &iso_dep_poll_a));
+    g_assert(NFC_IS_TAG_T4A(t4a));
+    tag = &t4a->tag;
+
+    /* If the target supports reactivation, tag doesn't get initialized
+     * right away (and obviously there won't be any NDEF) */
+    g_assert(!(tag->flags & NFC_TAG_FLAG_INITIALIZED));
+    g_assert(!tag->ndef);
+
+    const gulong id = nfc_tag_add_initialized_handler(tag,
+            test_tag_quit_loop_cb, loop);
+
+    test_run(&test_opt, loop);
+    nfc_tag_remove_handler(tag, id);
+
+
+    /* Now it must be initialized  */
+    g_assert(tag->flags & NFC_TAG_FLAG_INITIALIZED);
+
+    /* Now try to reset */
+    reset_count = 0;
+    reset_free_count = 0;
+    g_assert(nfc_isodep_reset(t4a, NULL, test_tag_reset_cb,
+        test_tag_reset_free1, loop));
+    /* Can't be scheduled second time */
+    g_assert(!nfc_isodep_reset(t4a, NULL, test_tag_reset_cb,
+        test_tag_reset_free1, loop));
+
+    test_run(&test_opt, loop);
+    g_assert(reset_count == 1);
+    g_assert(reset_free_count == 1);
+
+    /* Now must be still initialized  */
+    g_assert(tag->flags & NFC_TAG_FLAG_INITIALIZED);
+
+    nfc_tag_unref(tag);
+    nfc_target_unref(target);
+    g_main_loop_unref(loop);
+}
 
 /*==========================================================================*
  * init_seq
@@ -1383,6 +1464,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("basic"), test_basic);
     g_test_add_func(TEST_("basic_a"), test_basic_a);
     g_test_add_func(TEST_("basic_b"), test_basic_b);
+    g_test_add_func(TEST_("basic_reset"), test_basic_reset);
     for (i = 0; i < G_N_ELEMENTS(init_tests); i++) {
         const TestInitData* test = init_tests + i;
         char* path = g_strconcat(TEST_("init_seq/"), test->name, NULL);

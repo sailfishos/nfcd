@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2018-2020 Jolla Ltd.
  * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -379,7 +380,7 @@ test_null(
     g_assert(!nfc_target_generate_id(NULL));
     nfc_target_deactivate(NULL);
     g_assert(!nfc_target_can_reactivate(NULL));
-    g_assert(!nfc_target_reactivate(NULL, NULL, NULL, NULL));
+    g_assert(!nfc_target_reactivate(NULL, NULL, NULL, NULL, NULL));
     nfc_target_set_transmit_timeout(NULL, 0);
     nfc_target_set_reactivate_timeout(NULL, 0);
     nfc_target_remove_handler(NULL, 0);
@@ -420,7 +421,7 @@ test_basic(
 
     /* Reactivation is not supported by this target */
     g_assert(!nfc_target_can_reactivate(target));
-    g_assert(!nfc_target_reactivate(target, NULL, NULL, NULL));
+    g_assert(!nfc_target_reactivate(target, NULL, NULL, NULL, NULL));
     nfc_target_reactivated(target); /* Does nothing */
 
     /* Deactivate only sets the flag */
@@ -898,11 +899,11 @@ test_reactivate(
     /* Reactivation get successfully initiated */
     test->mode = TEST_REACTIVATE_MODE_OK;
     g_assert(nfc_target_can_reactivate(target));
-    g_assert(nfc_target_reactivate(target, NULL, NULL, NULL));
+    g_assert(nfc_target_reactivate(target, NULL, NULL, NULL, NULL));
 
     /* Second one fails because the request has already been submitted */
     g_assert(!nfc_target_can_reactivate(target));
-    g_assert(!nfc_target_reactivate(target, NULL, NULL, NULL));
+    g_assert(!nfc_target_reactivate(target, NULL, NULL, NULL, NULL));
 
     /* And delete it without waiting for reactivation to complete */
     nfc_target_unref(target);
@@ -935,7 +936,7 @@ test_reactivate_ok(
 
     g_assert(nfc_target_can_reactivate(target));
     g_assert(nfc_target_reactivate(target, NULL,
-        test_reactivate_ok_done, loop));
+        test_reactivate_ok_done, NULL, loop));
 
     test_run(&test_opt, loop);
 
@@ -982,7 +983,7 @@ test_reactivate_timeout(
     nfc_target_set_reactivate_timeout(target, 100); /* Default is quite long */
     g_assert(nfc_target_can_reactivate(target));
     g_assert(nfc_target_reactivate(target, NULL,
-        test_reactivate_timeout_cb, NULL));
+        test_reactivate_timeout_cb, NULL, NULL));
 
     test_run(&test_opt, loop);
 
