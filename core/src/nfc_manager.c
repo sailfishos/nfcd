@@ -433,6 +433,7 @@ nfc_manager_init(
     self->priv = priv;
     self->adapters = g_new0(NfcAdapter*, 1);
     self->enabled = TRUE;
+    priv->requested_mode = NFC_MODE_READER_WRITER;
     priv->adapters = g_hash_table_new_full(g_str_hash, g_str_equal,
         g_free, g_object_unref);
 }
