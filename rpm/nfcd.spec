@@ -1,5 +1,5 @@
 Name: nfcd
-Version: 1.0.41
+Version: 1.0.42
 Release: 0
 Summary: NFC daemon
 License: BSD
