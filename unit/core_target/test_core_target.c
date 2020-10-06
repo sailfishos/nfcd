@@ -376,9 +376,10 @@ test_null(
     g_assert(!nfc_target_transmit(NULL, NULL, 0, NULL, NULL, NULL, NULL));
     g_assert(!nfc_target_add_gone_handler(NULL, NULL, NULL));
     g_assert(!nfc_target_add_sequence_handler(NULL, NULL, NULL));
+    g_assert(!nfc_target_generate_id(NULL));
     nfc_target_deactivate(NULL);
     g_assert(!nfc_target_can_reactivate(NULL));
-    g_assert(!nfc_target_reactivate(NULL, NULL, NULL));
+    g_assert(!nfc_target_reactivate(NULL, NULL, NULL, NULL));
     nfc_target_set_transmit_timeout(NULL, 0);
     nfc_target_set_reactivate_timeout(NULL, 0);
     nfc_target_remove_handler(NULL, 0);
@@ -419,7 +420,7 @@ test_basic(
 
     /* Reactivation is not supported by this target */
     g_assert(!nfc_target_can_reactivate(target));
-    g_assert(!nfc_target_reactivate(target, NULL, NULL));
+    g_assert(!nfc_target_reactivate(target, NULL, NULL, NULL));
     nfc_target_reactivated(target); /* Does nothing */
 
     /* Deactivate only sets the flag */
@@ -894,19 +895,14 @@ test_reactivate(
     /* Reactivation is supported */
     g_assert(nfc_target_can_reactivate(target));
 
-    /* Immediate reactivation failure */
-    test->mode = TEST_REACTIVATE_MODE_FAIL;
-    g_assert(nfc_target_can_reactivate(target)); /* At least we can try */
-    g_assert(!nfc_target_reactivate(target, NULL, NULL)); /* But fail */
-
-    /* This one succeeds */
+    /* Reactivation get successfully initiated */
     test->mode = TEST_REACTIVATE_MODE_OK;
     g_assert(nfc_target_can_reactivate(target));
-    g_assert(nfc_target_reactivate(target, NULL, NULL));
+    g_assert(nfc_target_reactivate(target, NULL, NULL, NULL));
 
     /* Second one fails because the request has already been submitted */
     g_assert(!nfc_target_can_reactivate(target));
-    g_assert(!nfc_target_reactivate(target, NULL, NULL));
+    g_assert(!nfc_target_reactivate(target, NULL, NULL, NULL));
 
     /* And delete it without waiting for reactivation to complete */
     nfc_target_unref(target);
@@ -920,9 +916,11 @@ static
 void
 test_reactivate_ok_done(
     NfcTarget* target,
+    NFC_REACTIVATE_STATUS status,
     void* user_data)
 {
     GDEBUG("Reactivation done");
+    g_assert_cmpint(status, == ,NFC_REACTIVATE_STATUS_SUCCESS);
     g_main_loop_quit((GMainLoop*)user_data);
 }
 
@@ -936,7 +934,8 @@ test_reactivate_ok(
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
 
     g_assert(nfc_target_can_reactivate(target));
-    g_assert(nfc_target_reactivate(target, test_reactivate_ok_done, loop));
+    g_assert(nfc_target_reactivate(target, NULL,
+        test_reactivate_ok_done, loop));
 
     test_run(&test_opt, loop);
 
@@ -952,9 +951,10 @@ static
 void
 test_reactivate_timeout_cb(
     NfcTarget* target,
+    NFC_REACTIVATE_STATUS status,
     void* user_data)
 {
-    g_assert_not_reached();
+    g_assert_cmpint(status, == ,NFC_REACTIVATE_STATUS_TIMEOUT);
 }
 
 static
@@ -981,7 +981,8 @@ test_reactivate_timeout(
     test->mode = TEST_REACTIVATE_MODE_TIMEOUT;
     nfc_target_set_reactivate_timeout(target, 100); /* Default is quite long */
     g_assert(nfc_target_can_reactivate(target));
-    g_assert(nfc_target_reactivate(target, test_reactivate_timeout_cb, NULL));
+    g_assert(nfc_target_reactivate(target, NULL,
+        test_reactivate_timeout_cb, NULL));
 
     test_run(&test_opt, loop);
 

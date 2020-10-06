@@ -37,6 +37,19 @@
 
 #include <nfc_target.h>
 
+typedef enum nfc_reactivate_status {
+    NFC_REACTIVATE_STATUS_SUCCESS,   /* Reactivation successful */
+    NFC_REACTIVATE_STATUS_GONE,      /* Target is done */
+    NFC_REACTIVATE_STATUS_TIMEOUT    /* Reactivation timed out */
+} NFC_REACTIVATE_STATUS;
+
+typedef
+void
+(*NfcTargetReactivateFunc)(
+    NfcTarget* target,
+    NFC_REACTIVATE_STATUS status,
+    void* user_data);
+
 void
 nfc_target_deactivate(
     NfcTarget* target)
@@ -50,7 +63,8 @@ nfc_target_can_reactivate(
 gboolean
 nfc_target_reactivate(
     NfcTarget* target,
-    NfcTargetFunc func,
+    NfcTargetSequence* seq,
+    NfcTargetReactivateFunc func,
     void* user_data)
     NFCD_INTERNAL;
 

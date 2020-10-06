@@ -36,24 +36,50 @@
 #include "nfc_target_p.h"
 #include "nfc_log.h"
 
+#include <gutil_macros.h>
 #include <gutil_misc.h>
 
 #define DEFAULT_TRANSMIT_TIMEOUT_MS (500)
 #define DEFAULT_REACTIVATION_TIMEOUT_MS (1500)
 
 typedef struct nfc_target_request NfcTargetRequest;
+typedef struct nfc_target_request_type {
+    const char* name;
+    gboolean (*submit)(NfcTargetRequest* req);
+    void (*cancel)(NfcTargetRequest* req);
+    void (*abandon)(NfcTargetRequest* req);
+    guint (*timeout_ms)(NfcTargetRequest* req);
+    void (*transmit_done)(NfcTargetRequest* req, NFC_TRANSMIT_STATUS status,
+        const void* data, guint len);
+    void (*reactivated)(NfcTargetRequest* req);
+    void (*timed_out)(NfcTargetRequest* req);
+    void (*failed)(NfcTargetRequest* req);
+    void (*free)(NfcTargetRequest* req);
+} NfcTargetRequestType;
+
 struct nfc_target_request {
     NfcTargetRequest* next;
     NfcTargetSequence* seq;
+    const NfcTargetRequestType* type;
     NfcTarget* target;
     guint id;
-    void* data;
-    guint len;
     guint timeout;
-    NfcTargetTransmitFunc complete;
     GDestroyNotify destroy;
     void* user_data;
 };
+
+typedef struct nfc_target_transmit_request {
+    NfcTargetRequest request;
+    const void* data;
+    void* copied_data;
+    guint len;
+    NfcTargetTransmitFunc complete;
+} NfcTargetTransmitRequest;
+
+typedef struct nfc_target_reactivate_request {
+    NfcTargetRequest request;
+    NfcTargetReactivateFunc callback;
+} NfcTargetReactivateRequest;
 
 typedef struct nfc_target_request_queue {
     NfcTargetRequest* first;
@@ -78,11 +104,8 @@ struct nfc_target_priv {
     NfcTargetSequenceQueue seq_queue;
     NfcTargetRequestQueue req_queue;
     guint tx_timeout_ms;
-    /* Reactivation */
-    NfcTargetFunc ra_func;
-    void* ra_data;
     guint ra_timeout_ms;
-    guint ra_timeout;
+    gboolean reactivating;
 };
 
 G_DEFINE_ABSTRACT_TYPE(NfcTarget, nfc_target, G_TYPE_OBJECT)
@@ -102,7 +125,7 @@ static guint nfc_target_signals[SIGNAL_COUNT] = { 0 };
 
 static
 void
-nfc_target_schedule_next_transmit(
+nfc_target_schedule_next_request(
     NfcTarget* self);
 
 static
@@ -110,6 +133,301 @@ void
 nfc_target_set_sequence(
     NfcTarget* self,
     NfcTargetSequence* seq);
+
+/*==========================================================================*
+ * Transmit request
+ *==========================================================================*/
+
+static inline
+NfcTargetTransmitRequest*
+nfc_target_transmit_request_cast(
+    NfcTargetRequest* req)
+{
+    return G_CAST(req, NfcTargetTransmitRequest, request);
+}
+
+static
+gboolean
+nfc_target_transmit_request_submit(
+    NfcTargetRequest* req)
+{
+    NfcTarget* target = req->target;
+    NfcTargetTransmitRequest* tx = nfc_target_transmit_request_cast(req);
+
+    return NFC_TARGET_GET_CLASS(target)->transmit(target, tx->data, tx->len);
+}
+
+static
+void
+nfc_target_transmit_request_cancel(
+    NfcTargetRequest* req)
+{
+    NFC_TARGET_GET_CLASS(req->target)->cancel_transmit(req->target);
+}
+
+static
+void
+nfc_target_transmit_request_abandon(
+    NfcTargetRequest* req)
+{
+    nfc_target_transmit_request_cast(req)->complete = NULL;
+}
+
+static
+guint
+nfc_target_transmit_request_timeout_ms(
+    NfcTargetRequest* req)
+{
+    return req->target->priv->tx_timeout_ms;
+}
+
+static
+void
+nfc_target_transmit_request_done(
+    NfcTargetRequest* req,
+    NFC_TRANSMIT_STATUS status,
+    const void* data,
+    guint len)
+{
+    NfcTargetTransmitRequest* tx = nfc_target_transmit_request_cast(req);
+    NfcTargetTransmitFunc complete = tx->complete;
+
+    if (complete) {
+        tx->complete = NULL;
+        complete(req->target, status, data, len, req->user_data);
+    }
+}
+
+static
+void
+nfc_target_transmit_request_failed(
+    NfcTargetRequest* req)
+{
+    nfc_target_transmit_request_done(req, NFC_TRANSMIT_STATUS_ERROR, NULL, 0);
+}
+
+static
+void
+nfc_target_transmit_request_timed_out(
+    NfcTargetRequest* req)
+{
+    nfc_target_transmit_request_done(req, NFC_TRANSMIT_STATUS_TIMEOUT, NULL, 0);
+}
+
+static
+void
+nfc_target_transmit_request_free(
+    NfcTargetRequest* req)
+{
+    NfcTargetTransmitRequest* tx = nfc_target_transmit_request_cast(req);
+
+    g_free(tx->copied_data);
+    g_slice_free1(sizeof(*tx), tx);
+}
+
+static
+NfcTargetTransmitRequest*
+nfc_target_transmit_request_new(
+    NfcTarget* target,
+    const void* data,
+    guint len,
+    NfcTargetSequence* seq,
+    NfcTargetTransmitFunc complete,
+    GDestroyNotify destroy,
+    void* user_data)
+{
+    static const NfcTargetRequestType transmit_request_type = {
+        "Transmit",
+        nfc_target_transmit_request_submit,
+        nfc_target_transmit_request_cancel,
+        nfc_target_transmit_request_abandon,
+        nfc_target_transmit_request_timeout_ms,
+        nfc_target_transmit_request_done,
+        nfc_target_transmit_request_failed, /* Not expected to be called */
+        nfc_target_transmit_request_timed_out,
+        nfc_target_transmit_request_failed,
+        nfc_target_transmit_request_free
+    };
+
+    NfcTargetTransmitRequest* tx = g_slice_new0(NfcTargetTransmitRequest);
+    NfcTargetRequest* req = &tx->request;
+
+    GASSERT(!seq || seq->target == target);
+    if (seq && seq->target == target) {
+        req->seq = nfc_target_sequence_ref(seq);
+    }
+
+    req->id = nfc_target_generate_id(target);
+    req->type = &transmit_request_type;
+    req->target = target;
+    req->destroy = destroy;
+    req->user_data = user_data;
+    tx->data = data;
+    tx->len = len;
+    tx->complete = complete;
+    return tx;
+};
+
+/*==========================================================================*
+ * Reactivate request
+ *==========================================================================*/
+
+static
+void
+nfc_target_request_nop(
+    NfcTargetRequest* req)
+{
+}
+
+static inline
+NfcTargetReactivateRequest*
+nfc_target_reactivate_request_cast(
+    NfcTargetRequest* req)
+{
+    return G_CAST(req, NfcTargetReactivateRequest, request);
+}
+
+static
+gboolean
+nfc_target_reactivate_request_submit(
+    NfcTargetRequest* req)
+{
+    NfcTarget* target = req->target;
+
+    if (NFC_TARGET_GET_CLASS(target)->reactivate(target)) {
+        NfcTargetPriv* priv = target->priv;
+
+        GASSERT(!priv->reactivating);
+        priv->reactivating = TRUE;
+        return TRUE;
+    }
+    return FALSE;
+}
+
+static
+void
+nfc_target_reactivate_request_abandon(
+    NfcTargetRequest* req)
+{
+    nfc_target_reactivate_request_cast(req)->callback = NULL;
+}
+
+static
+guint
+nfc_target_reactivate_request_timeout_ms(
+    NfcTargetRequest* req)
+{
+    return req->target->priv->ra_timeout_ms;
+}
+
+static
+void
+nfc_target_reactivate_request_unexpected_call(
+    NfcTargetRequest* req,
+    NFC_TRANSMIT_STATUS status,
+    const void* data,
+    guint len)
+{
+    /* Not expected to be called */
+}
+
+static
+void
+nfc_target_reactivate_request_done(
+    NfcTargetRequest* req,
+    NFC_REACTIVATE_STATUS status)
+{
+    NfcTargetReactivateRequest* re = nfc_target_reactivate_request_cast(req);
+    NfcTargetReactivateFunc cb = re->callback;
+    NfcTargetPriv* priv = req->target->priv;
+
+    /*
+     * Note that priv->reactivating is going to be FALSE if
+     * reactivation failed to start but we still invoke the
+     * callback because nfc_target_reactivate() has returned
+     * or is going to return TRUE.
+     */
+    priv->reactivating = FALSE;
+    if (cb) {
+        re->callback = NULL;
+        cb(req->target, status, req->user_data);
+    }
+}
+
+static
+void
+nfc_target_reactivate_request_ok(
+    NfcTargetRequest* req)
+{
+    nfc_target_reactivate_request_done(req, NFC_REACTIVATE_STATUS_SUCCESS);
+}
+
+static
+void
+nfc_target_reactivate_request_timed_out(
+    NfcTargetRequest* req)
+{
+    nfc_target_reactivate_request_done(req, NFC_REACTIVATE_STATUS_TIMEOUT);
+    NFC_TARGET_GET_CLASS(req->target)->deactivate(req->target);
+}
+
+static
+void
+nfc_target_reactivate_request_failed(
+    NfcTargetRequest* req)
+{
+    nfc_target_reactivate_request_done(req, NFC_REACTIVATE_STATUS_GONE);
+}
+
+static
+void
+nfc_target_reactivate_request_free(
+    NfcTargetRequest* req)
+{
+    NfcTargetReactivateRequest* re = nfc_target_reactivate_request_cast(req);
+
+    GASSERT(!req->target->priv->reactivating);
+    g_slice_free1(sizeof(*re), re);
+}
+
+static
+NfcTargetRequest*
+nfc_target_reactivate_request_new(
+    NfcTarget* target,
+    NfcTargetSequence* seq,
+    NfcTargetReactivateFunc cb,
+    GDestroyNotify destroy,
+    void* user_data)
+{
+    static const NfcTargetRequestType reactivate_request_type = {
+        "Reactivate",
+        nfc_target_reactivate_request_submit,
+        nfc_target_request_nop,
+        nfc_target_reactivate_request_abandon,
+        nfc_target_reactivate_request_timeout_ms,
+        nfc_target_reactivate_request_unexpected_call,
+        nfc_target_reactivate_request_ok,
+        nfc_target_reactivate_request_timed_out,
+        nfc_target_reactivate_request_failed,
+        nfc_target_reactivate_request_free
+    };
+
+    NfcTargetReactivateRequest* re = g_slice_new0(NfcTargetReactivateRequest);
+    NfcTargetRequest* req = &re->request;
+
+    GASSERT(!seq || seq->target == target);
+    if (seq && seq->target == target) {
+        req->seq = nfc_target_sequence_ref(seq);
+    }
+
+    req->id = nfc_target_generate_id(target);
+    req->type = &reactivate_request_type;
+    req->target = target;
+    req->destroy = destroy;
+    req->user_data = user_data;
+    re->callback = cb;
+    return req;
+};
 
 /*==========================================================================*
  * Sequence
@@ -161,7 +479,7 @@ nfc_target_sequence_dealloc(
             nfc_target_set_sequence(target, req ? req->seq : queue->first);
 
             /* Finished sequence can unblock some requests */
-            nfc_target_schedule_next_transmit(target);
+            nfc_target_schedule_next_request(target);
         }
         self->target = NULL;
         self->next = NULL;
@@ -252,6 +570,8 @@ void
 nfc_target_free_request(
     NfcTargetRequest* req)
 {
+    const NfcTargetRequestType* rt = req->type;
+
     nfc_target_sequence_unref(req->seq);
     if (req->timeout) {
         g_source_remove(req->timeout);
@@ -259,8 +579,7 @@ nfc_target_free_request(
     if (req->destroy) {
         req->destroy(req->user_data);
     }
-    g_free(req->data);
-    g_slice_free(NfcTargetRequest, req);
+    rt->free(req);
 }
 
 static
@@ -269,35 +588,32 @@ nfc_target_fail_request(
     NfcTarget* self,
     NfcTargetRequest* req)
 {
-    if (req->complete) {
-        req->complete(req->target, NFC_TRANSMIT_STATUS_ERROR, NULL, 0,
-            req->user_data);
-    }
+    const NfcTargetRequestType* rt = req->type;
+
+    rt->failed(req);
     nfc_target_free_request(req);
 }
 
 static
 gboolean
-nfc_target_transmit_timeout(
+nfc_target_request_timeout(
     gpointer user_data)
 {
     NfcTargetRequest* req = user_data;
+    const NfcTargetRequestType* rt = req->type;
     NfcTarget* self = nfc_target_ref(req->target);
     NfcTargetPriv* priv = self->priv;
 
-    GDEBUG("Timeout out");
+    GDEBUG("%s request timed out", rt->name);
     GASSERT(req->timeout);
     req->timeout = 0;
 
     GASSERT(req == priv->req_active);
     priv->req_active = NULL;
-    NFC_TARGET_GET_CLASS(self)->cancel_transmit(self);
-    if (req->complete) {
-        req->complete(req->target, NFC_TRANSMIT_STATUS_TIMEOUT, NULL, 0,
-            req->user_data);
-    }
+    rt->cancel(req);
+    rt->timed_out(req);
     nfc_target_free_request(req);
-    nfc_target_schedule_next_transmit(self);
+    nfc_target_schedule_next_request(self);
     nfc_target_unref(self);
     return G_SOURCE_REMOVE;
 }
@@ -314,6 +630,21 @@ nfc_target_transmit_find_req(
         req = req->next;
     }
     return req;
+}
+
+static
+void
+nfc_target_transmit_queue_req(
+    NfcTargetRequestQueue* queue,
+    NfcTargetRequest* req)
+{
+    if (queue->last) {
+        queue->last->next = req;
+    } else {
+        GASSERT(!queue->first);
+        queue->first = req;
+    }
+    queue->last = req;
 }
 
 static
@@ -357,26 +688,50 @@ static
 gboolean
 nfc_target_submit_request(
     NfcTarget* self,
-    NfcTargetRequest* req,
-    const void* data,
-    guint len)
+    NfcTargetRequest* req)
 {
     NfcTargetPriv* priv = self->priv;
+    const NfcTargetRequestType* rt = req->type;
 
     priv->req_active = req;
     if (!self->sequence && req->seq) {
         nfc_target_set_sequence(self, req->seq);
     }
-    if (NFC_TARGET_GET_CLASS(self)->transmit(self, data, len)) {
-        if (priv->tx_timeout_ms) {
+    if (rt->submit(req)) {
+        const guint ms = rt->timeout_ms(req);
+
+        if (ms) {
             GASSERT(!req->timeout);
-            req->timeout = g_timeout_add(priv->tx_timeout_ms,
-                nfc_target_transmit_timeout, req);
+            req->timeout = g_timeout_add(ms, nfc_target_request_timeout, req);
         }
         return TRUE;
     } else {
         priv->req_active = NULL;
         return FALSE;
+    }
+}
+
+static
+void
+nfc_target_submit_next_request(
+    NfcTarget* self)
+{
+    NfcTargetPriv* priv = self->priv;
+
+    if (!priv->req_active) {
+        NfcTargetRequest* req = nfc_target_transmit_dequeue_req(self);
+
+        nfc_target_ref(self);
+        while (req) {
+            if (nfc_target_submit_request(self, req)) {
+                /* Request submitted, wait for completion */
+                nfc_target_unref(self);
+                return;
+            }
+            nfc_target_fail_request(self, req);
+            req = nfc_target_transmit_dequeue_req(self);
+        }
+        nfc_target_unref(self);
     }
 }
 
@@ -389,26 +744,13 @@ nfc_target_next_transmit(
     NfcTargetPriv* priv = self->priv;
 
     priv->continue_id = 0;
-    if (!priv->req_active) {
-        NfcTargetRequest* req = nfc_target_transmit_dequeue_req(self);
-
-        nfc_target_ref(self);
-        while (req) {
-            if (nfc_target_submit_request(self, req, req->data, req->len)) {
-                /* Request submitted, wait for nfc_target_transmit_done() */
-                break;
-            }
-            nfc_target_fail_request(self, req);
-            req = nfc_target_transmit_dequeue_req(self);
-        }
-        nfc_target_unref(self);
-    }
+    nfc_target_submit_next_request(self);
     return G_SOURCE_REMOVE;
 }
 
 static
 void
-nfc_target_schedule_next_transmit(
+nfc_target_schedule_next_request(
     NfcTarget* self)
 {
     NfcTargetPriv* priv = self->priv;
@@ -416,22 +758,6 @@ nfc_target_schedule_next_transmit(
     if (priv->req_queue.first && !priv->continue_id) {
         priv->continue_id = g_idle_add(nfc_target_next_transmit, self);
     }
-}
-
-static
-gboolean
-nfc_target_reactivate_timeout(
-    gpointer user_data)
-{
-    NfcTarget* self = NFC_TARGET(user_data);
-    NfcTargetPriv* priv = self->priv;
-
-    GDEBUG("Reactivation timed out");
-    priv->ra_timeout = 0;
-    priv->ra_func = NULL;
-    priv->ra_data = NULL;
-    NFC_TARGET_GET_CLASS(self)->deactivate(self);
-    return G_SOURCE_REMOVE;
 }
 
 /*==========================================================================*
@@ -495,47 +821,32 @@ nfc_target_transmit(
 
     if (G_LIKELY(self)) {
         NfcTargetPriv* priv = self->priv;
-        NfcTargetRequest* req = g_slice_new0(NfcTargetRequest);
+        NfcTargetTransmitRequest* tx = nfc_target_transmit_request_new(self,
+            data, len, seq, complete, destroy, user_data);
+        NfcTargetRequest* req = &tx->request;
 
-        GASSERT(!seq || seq->target == self);
-        if (seq && seq->target == self) {
-            req->seq = nfc_target_sequence_ref(seq);
-        }
-
-        req->id = id = nfc_target_generate_id(self);
-        req->target = self;
-        req->complete = complete;
-        req->destroy = destroy;
-        req->user_data = user_data;
+        /* Request id to return */
+        id = req->id;
 
         /* Check if the request can be submitted right away */
-        if (!priv->req_active &&
-            ((!req->seq && !self->sequence) ||
-             (req->seq && req->seq == self->sequence &&
-              !nfc_target_transmit_find_req(&priv->req_queue, req->seq)))) {
-            /* The data will be copied by the transmit method, no need
-             * to make another copy and attach it to the request. */
-            if (!nfc_target_submit_request(self, req, data, len)) {
+        if (!priv->req_active && (req->seq == self->sequence)) {
+            /*
+             * The data will be copied by the transmit method, no need
+             * to make another copy and attach it to the request.
+             */
+            if (!nfc_target_submit_request(self, req)) {
                 nfc_target_set_sequence(self, NULL);
                 id = 0;
                 req->destroy = NULL;
                 nfc_target_free_request(req);
             }
         } else {
-            NfcTargetRequestQueue* queue = &priv->req_queue;
-
-            /* Queue the request */
-            if (queue->last) {
-                queue->last->next = req;
-            } else {
-                GASSERT(!queue->first);
-                queue->first = req;
-            }
-            queue->last = req;
-            /* Can't pass the data pointer to the transmit implementation
-             * right away, make a copy. */
-            req->data = g_memdup(data, len);
-            req->len = len;
+            /*
+             * Can't pass the data pointer to the transmit implementation
+             * right away, make a copy.
+             */
+            tx->data = tx->copied_data = g_memdup(data, len);
+            nfc_target_transmit_queue_req(&priv->req_queue, req);
         }
     }
     return id;
@@ -551,11 +862,13 @@ nfc_target_cancel_transmit(
         NfcTargetRequest* req = priv->req_active;
 
         if (req && req->id == id) {
-            req->complete = NULL;
+            const NfcTargetRequestType* rt = req->type;
+
             priv->req_active = NULL;
-            NFC_TARGET_GET_CLASS(self)->cancel_transmit(self);
+            rt->abandon(req);
+            rt->cancel(req);
             nfc_target_free_request(req);
-            nfc_target_schedule_next_transmit(self);
+            nfc_target_schedule_next_request(self);
             return TRUE;
         } else {
             NfcTargetRequestQueue* queue = &priv->req_queue;
@@ -563,8 +876,10 @@ nfc_target_cancel_transmit(
             req = queue->first;
             if (req) {
                 if (req->id == id) {
+                    const NfcTargetRequestType* rt = req->type;
+
                     /* The first queued request is cancelled */
-                    req->complete = NULL;
+                    rt->abandon(req);
                     if (!(queue->first = req->next)) {
                         queue->last = NULL;
                     }
@@ -577,7 +892,9 @@ nfc_target_cancel_transmit(
                     req = req->next;
                     while (req) {
                         if (req->id == id) {
-                            req->complete = NULL;
+                            const NfcTargetRequestType* rt = req->type;
+
+                            rt->abandon(req);
                             if (!(prev->next = req->next)) {
                                 queue->last = prev;
                             }
@@ -628,36 +945,28 @@ gboolean
 nfc_target_can_reactivate(
     NfcTarget* self)
 {
-    return G_LIKELY(self) && !self->priv->ra_timeout &&
+    return G_LIKELY(self) && !self->priv->reactivating &&
         NFC_TARGET_GET_CLASS(self)->reactivate;
 }
 
 gboolean
 nfc_target_reactivate(
     NfcTarget* self,
-    NfcTargetFunc func,
+    NfcTargetSequence* seq,
+    NfcTargetReactivateFunc func,
     void* user_data)
 {
     if (G_LIKELY(self)) {
         NfcTargetPriv* priv = self->priv;
+        NfcTargetClass* klass = NFC_TARGET_GET_CLASS(self);
 
-        if (!priv->ra_timeout) {
-            NfcTargetClass* klass = NFC_TARGET_GET_CLASS(self);
+        if (!priv->reactivating && klass->reactivate) {
+            NfcTargetRequest* req = nfc_target_reactivate_request_new(self,
+                seq, func, NULL, user_data);
 
-            if (klass->reactivate) {
-                priv->ra_func = func;
-                priv->ra_data = user_data;
-                priv->ra_timeout = g_timeout_add(priv->ra_timeout_ms,
-                    nfc_target_reactivate_timeout, self);
-                if (klass->reactivate(self)) {
-                    return TRUE;
-                } else {
-                    g_source_remove(priv->ra_timeout);
-                    priv->ra_timeout = 0;
-                    priv->ra_func = NULL;
-                    priv->ra_data = NULL;
-                }
-            }
+            nfc_target_transmit_queue_req(&priv->req_queue, req);
+            nfc_target_submit_next_request(self);
+            return TRUE;
         }
     }
     return FALSE;
@@ -722,17 +1031,18 @@ nfc_target_reactivated(
 {
     if (G_LIKELY(self)) {
         NfcTargetPriv* priv = self->priv;
-        NfcTargetFunc cb = priv->ra_func;
-        void* cb_data = priv->ra_data;
+        NfcTargetRequest* req = priv->req_active;
 
-        if (priv->ra_timeout) {
-            g_source_remove(priv->ra_timeout);
-            priv->ra_timeout = 0;
-        }
-        priv->ra_func = NULL;
-        priv->ra_data = NULL;
-        if (cb) {
-            cb(self, cb_data);
+        GASSERT(req);
+        if (req) {
+            const NfcTargetRequestType* rt = req->type;
+
+            nfc_target_ref(self);
+            priv->req_active = NULL;
+            rt->reactivated(req);
+            nfc_target_free_request(req);
+            nfc_target_schedule_next_request(self);
+            nfc_target_unref(self);
         }
     }
 }
@@ -750,13 +1060,13 @@ nfc_target_transmit_done(
 
         GASSERT(req);
         if (req) {
+            const NfcTargetRequestType* rt = req->type;
+
             nfc_target_ref(self);
             priv->req_active = NULL;
-            if (req->complete) {
-                req->complete(req->target, status, data, len, req->user_data);
-            }
+            rt->transmit_done(req, status, data, len);
             nfc_target_free_request(req);
-            nfc_target_schedule_next_transmit(self);
+            nfc_target_schedule_next_request(self);
             nfc_target_unref(self);
         }
     }
@@ -839,9 +1149,10 @@ nfc_target_dispose(
     }
     if (priv->req_active) {
         NfcTargetRequest* req = priv->req_active;
+        const NfcTargetRequestType* rt = req->type;
 
         priv->req_active = NULL;
-        NFC_TARGET_GET_CLASS(self)->cancel_transmit(self);
+        rt->cancel(req);
         nfc_target_fail_request(self, req);
     }
     while (queue->first) {
@@ -853,12 +1164,6 @@ nfc_target_dispose(
         req->next = NULL;
         nfc_target_fail_request(self, req);
     }
-    if (priv->ra_timeout) {
-        g_source_remove(priv->ra_timeout);
-        priv->ra_timeout = 0;
-    }
-    priv->ra_func = NULL;
-    priv->ra_data = NULL;
     G_OBJECT_CLASS(nfc_target_parent_class)->dispose(object);
 }
 
