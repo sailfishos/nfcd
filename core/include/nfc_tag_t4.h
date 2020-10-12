@@ -126,6 +126,13 @@ void
     guint len,
     void* user_data);
 
+typedef
+void
+(*NfcTagType4ResetRespFunc)(
+    NfcTagType4* tag,
+    gboolean ok,
+    void* user_data);
+
 guint
 nfc_isodep_transmit(
     NfcTagType4* tag,
@@ -139,6 +146,14 @@ nfc_isodep_transmit(
     NfcTagType4ResponseFunc resp,
     GDestroyNotify destroy,
     void* user_data);
+
+gboolean
+nfc_isodep_reset(
+    NfcTagType4* tag,
+    NfcTargetSequence* seq,
+    NfcTagType4ResetRespFunc resp,
+    GDestroyNotify destroy,
+    void* user_data); /* Since 1.0.44 */
 
 G_END_DECLS
 

@@ -66,6 +66,13 @@ struct nfc_tag_t4_priv {
     NfcParamIsoDep* iso_dep; /* Since 1.0.39 */
 };
 
+typedef struct nfc_isodep_reset_data {
+    NfcTagType4* t4;
+    NfcTagType4ResetRespFunc resp;
+    GDestroyNotify destroy;
+    void* user_data;
+} NfcIsoDepResetData;
+
 G_DEFINE_ABSTRACT_TYPE(NfcTagType4, nfc_tag_t4, NFC_TYPE_TAG)
 
 /*
@@ -419,7 +426,7 @@ nfc_tag_t4_ndef_read_done(
      */
     GDEBUG("Reactivating Type 4 tag");
     if (!nfc_target_reactivate(self->tag.target, priv->init_seq,
-        nfc_tag_t4_init_done, self)) {
+        nfc_tag_t4_init_done, NULL, self)) {
         GDEBUG("Oops. Failed to reactivate, leaving the tag as is");
         nfc_tag_t4_initialized(self);
     }
@@ -680,6 +687,44 @@ nfc_tag_t4_init_select_ndef_app_resp(
     nfc_tag_t4_initialized(self);
 }
 
+static
+void
+nfc_tag_t4_reset_data_free(
+    NfcIsoDepResetData* rst)
+{
+    GDestroyNotify destroy = rst->destroy;
+
+    if (destroy) {
+        rst->destroy = NULL;
+        destroy(rst->user_data);
+    }
+    g_slice_free1(sizeof(*rst), rst);
+}
+
+static
+void
+nfc_tag_t4_reset_data_free1(
+    void* data)
+{
+    nfc_tag_t4_reset_data_free((NfcIsoDepResetData*)data);
+}
+
+static
+void
+nfc_tag_t4_reset_data_resp(
+    NfcTarget* target,
+    NFC_REACTIVATE_STATUS status,
+    void* user_data)
+{
+    NfcIsoDepResetData* rst = user_data;
+
+    if (rst->resp) {
+        /* Result is FALSE in case of tag was gone or reactivation timed out */
+        rst->resp(rst->t4, status == NFC_REACTIVATE_STATUS_SUCCESS,
+            rst->user_data);
+    }
+}
+
 /*==========================================================================*
  * Internal interface
  *==========================================================================*/
@@ -791,6 +836,43 @@ nfc_isodep_transmit(
 {
     return G_LIKELY(self) ? nfc_isodep_submit(self, cla, ins, p1, p2,
         data, le, seq, resp, destroy, user_data) : 0;
+}
+
+gboolean
+nfc_isodep_reset(
+    NfcTagType4* self,
+    NfcTargetSequence* seq,
+    NfcTagType4ResetRespFunc resp,
+    GDestroyNotify destroy,
+    void* user_data) /* Since 1.0.44 */
+{
+    if (G_LIKELY(self)) {
+        NfcTag* tag = &self->tag;
+
+        if (G_LIKELY(tag) && nfc_target_can_reactivate(tag->target)) {
+            NfcIsoDepResetData* rst = g_slice_new0(NfcIsoDepResetData);
+
+            rst->t4 = self;
+            rst->resp = resp;
+            rst->destroy = destroy;
+            rst->user_data = user_data;
+
+            if (nfc_target_reactivate(tag->target, seq, resp ?
+                nfc_tag_t4_reset_data_resp : NULL, nfc_tag_t4_reset_data_free1,
+                rst)) {
+                return TRUE;
+            } else {
+                /*
+                * Should never get here, 'cause nfc_target_reactivate() will
+                * always return TRUE in case if nfc_target_can_reactivate()
+                * succeeds.
+                */
+                rst->destroy = NULL;
+                nfc_tag_t4_reset_data_free(rst);
+            }
+        }
+    }
+    return FALSE;
 }
 
 /*==========================================================================*

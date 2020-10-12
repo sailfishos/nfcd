@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2018-2020 Jolla Ltd.
  * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -65,6 +66,7 @@ nfc_target_reactivate(
     NfcTarget* target,
     NfcTargetSequence* seq,
     NfcTargetReactivateFunc func,
+    GDestroyNotify destroy,
     void* user_data)
     NFCD_INTERNAL;
 

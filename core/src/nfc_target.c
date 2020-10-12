@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2018-2020 Jolla Ltd.
  * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -954,6 +955,7 @@ nfc_target_reactivate(
     NfcTarget* self,
     NfcTargetSequence* seq,
     NfcTargetReactivateFunc func,
+    GDestroyNotify destroy,
     void* user_data)
 {
     if (G_LIKELY(self)) {
@@ -962,7 +964,7 @@ nfc_target_reactivate(
 
         if (!priv->reactivating && klass->reactivate) {
             NfcTargetRequest* req = nfc_target_reactivate_request_new(self,
-                seq, func, NULL, user_data);
+                seq, func, destroy, user_data);
 
             nfc_target_transmit_queue_req(&priv->req_queue, req);
             nfc_target_submit_next_request(self);

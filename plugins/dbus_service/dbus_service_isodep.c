@@ -46,6 +46,7 @@ enum {
     CALL_TRANSMIT,
     CALL_GET_ALL2,
     CALL_GET_ACTIVATION_PARAMETERS,
+    CALL_RESET,
     CALL_COUNT
 };
 
@@ -56,7 +57,7 @@ struct dbus_service_isodep {
     gulong call_id[CALL_COUNT];
 };
 
-#define NFC_DBUS_ISODEP_INTERFACE_VERSION  (2)
+#define NFC_DBUS_ISODEP_INTERFACE_VERSION  (3)
 
 typedef struct dbus_service_isodep_async_call {
     OrgSailfishosNfcIsoDep* iface;
@@ -273,6 +274,52 @@ dbus_service_isodep_handle_get_act_parameters(
     return TRUE;
 }
 
+/* Interface version 3 */
+
+/* Reset*/
+
+static
+void
+dbus_service_isodep_handle_reset_done(
+    NfcTagType4* tag,
+    gboolean ok,
+    void* user_data)
+{
+    DBusServiceIsoDepAsyncCall* async = user_data;
+
+    GDEBUG("ISO-DEP reset %s", ok ? "succeeded" : "failed");
+
+    if (ok) {
+        org_sailfishos_nfc_iso_dep_complete_reset(async->iface, async->call);
+    } else {
+        GDEBUG("oops");
+        g_dbus_method_invocation_return_error_literal(async->call,
+            DBUS_SERVICE_ERROR, DBUS_SERVICE_ERROR_FAILED,
+            "ISO-DEP reset failed");
+    }
+}
+
+static
+gboolean
+dbus_service_isodep_handle_reset(
+    OrgSailfishosNfcIsoDep* iface,
+    GDBusMethodInvocation* call,
+    DBusServiceIsoDep* self)
+{
+    DBusServiceIsoDepAsyncCall* async =
+        dbus_service_isodep_async_call_new(iface, call);
+
+    if (!nfc_isodep_reset(self->t4, dbus_service_isodep_sequence(self, call),
+        dbus_service_isodep_handle_reset_done,
+        dbus_service_isodep_async_call_free1, async)) {
+        dbus_service_isodep_async_call_free(async);
+        g_dbus_method_invocation_return_error_literal(call,
+            DBUS_SERVICE_ERROR, DBUS_SERVICE_ERROR_FAILED,
+            "Failed to submit Reset");
+    }
+    return TRUE;
+}
+
 /*==========================================================================*
  * Interface
  *==========================================================================*/
@@ -319,6 +366,9 @@ dbus_service_isodep_new(
     self->call_id[CALL_GET_ACTIVATION_PARAMETERS] =
         g_signal_connect(self->iface, "handle-get-activation-parameters",
         G_CALLBACK(dbus_service_isodep_handle_get_act_parameters), self);
+    self->call_id[CALL_RESET] =
+        g_signal_connect(self->iface, "handle-reset",
+        G_CALLBACK(dbus_service_isodep_handle_reset), self);
 
     if (g_dbus_interface_skeleton_export(G_DBUS_INTERFACE_SKELETON
         (self->iface), connection, path, &error)) {
