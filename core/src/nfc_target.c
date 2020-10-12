@@ -620,20 +620,6 @@ nfc_target_request_timeout(
 }
 
 static
-NfcTargetRequest*
-nfc_target_transmit_find_req(
-    NfcTargetRequestQueue* queue,
-    NfcTargetSequence* seq)
-{
-    NfcTargetRequest* req = queue->first;
-
-    while ((req && req->seq != seq)) {
-        req = req->next;
-    }
-    return req;
-}
-
-static
 void
 nfc_target_transmit_queue_req(
     NfcTargetRequestQueue* queue,
