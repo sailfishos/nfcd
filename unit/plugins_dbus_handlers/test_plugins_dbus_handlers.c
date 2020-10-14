@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2019 Jolla Ltd.
- * Copyright (C) 2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019-2020 Jolla Ltd.
+ * Copyright (C) 2019-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -111,8 +111,6 @@ test_start(
     /* Typical start callback */
     g_assert(g_dbus_interface_skeleton_export(G_DBUS_INTERFACE_SKELETON
         (test->dbus_handler), server, TEST_PATH, NULL));
-    g_assert(g_bus_own_name_on_connection(server, TEST_SERVICE,
-        G_BUS_NAME_OWNER_FLAGS_NONE, NULL, NULL, test, NULL));
 
     test->handlers = dbus_handlers_new(client, test->dir);
     g_assert(test->handlers);
@@ -184,8 +182,6 @@ test_cancel_start(
 
     g_assert(g_dbus_interface_skeleton_export(G_DBUS_INTERFACE_SKELETON
         (test->dbus_handler), server, TEST_PATH, NULL));
-    g_assert(g_bus_own_name_on_connection(server, TEST_SERVICE,
-        G_BUS_NAME_OWNER_FLAGS_NONE, NULL, NULL, test, NULL));
 
     /* dbus_handlers_new will fail without config dir */
     g_assert(!dbus_handlers_new(client, NULL));
