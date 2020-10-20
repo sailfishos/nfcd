@@ -786,17 +786,33 @@ dbus_service_tag_get_poll_parameters(
 
     if (G_LIKELY(tag) && G_UNLIKELY(poll)) {
         const NfcTarget* target = tag->target;
+        const NfcParamPollA* poll_a = NULL;
+        const NfcParamPollB* poll_b = NULL;
+
         if (G_LIKELY(target)) {
             switch(tag->target->technology) {
             case NFC_TECHNOLOGY_B:
+                poll_b = &poll->b;
                 dbus_service_dict_add_byte_array(&builder, "APPDATA",
-                    poll->b.app_data, sizeof(poll->b.app_data));
-                if (poll->b.prot_info.bytes) {
+                    poll_b->app_data, sizeof(poll_b->app_data));
+                if (poll_b->prot_info.bytes) {
                     dbus_service_dict_add_byte_array_data(&builder, "PROTINFO",
-                        &poll->b.prot_info);
+                        &poll_b->prot_info);
+                }
+                if (poll_b->nfcid0.bytes) {
+                    dbus_service_dict_add_byte_array_data(&builder, "NFCID0",
+                        &poll_b->nfcid0);
                 }
                 break;
             case NFC_TECHNOLOGY_A:
+                poll_a = &poll->a;
+                dbus_service_dict_add_byte(&builder, "SEL_RES",
+                    poll_a->sel_res);
+                if (poll_a->nfcid1.bytes) {
+                    dbus_service_dict_add_byte_array_data(&builder, "NFCID1",
+                        &poll_a->nfcid1);
+                }
+                break;
             case NFC_TECHNOLOGY_F:
             case NFC_TECHNOLOGY_UNKNOWN:
                 break;

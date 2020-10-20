@@ -1887,14 +1887,22 @@ test_get_all3_tag_b_done(
     g_assert(ifaces);
     g_assert(records);
     g_assert(prot_params);
-    g_assert(2 == g_variant_iter_init (&iter, prot_params));
+    g_assert_cmpuint(g_variant_iter_init(&iter, prot_params), ==, 3);
     GDEBUG("version=%d, present=%d, tech=%u, protocol=%u, type=%u, "
         "%u interface(s), %u record(s)", version, present, tech, protocol,
            type, g_strv_length(ifaces), g_strv_length(records));
     while (g_variant_iter_loop (&iter, "{sv}", &key, &value)) {
         GDEBUG("Item '%s' has type '%s'\n", key,
             g_variant_get_type_string (value));
-        g_assert(!g_strcmp0(key, "PROTINFO") || !g_strcmp0(key, "APPDATA"));
+        g_assert(!g_strcmp0(key, "PROTINFO") || !g_strcmp0(key, "APPDATA") ||
+            !g_strcmp0(key, "NFCID0"));
+
+        if (!g_strcmp0(key, "NFCID0")) {
+            value_ptr = (guint8*)g_variant_get_data(value);
+            g_assert(value_ptr);
+            g_assert(sizeof(nfcid0) == g_variant_get_size(value));
+            g_assert(!memcmp(value_ptr, nfcid0, sizeof(nfcid0)));
+        }
 
         if (!g_strcmp0(key, "PROTINFO")) {
             value_ptr = (guint8*)g_variant_get_data(value);
@@ -1946,6 +1954,130 @@ test_get_all3_tag_b(
 
     test_data_init_tag_b(&test);
     dbus = test_dbus_new(test_get_all3_tag_b_start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+/*==========================================================================*
+ * get_all3_tag_a
+ *==========================================================================*/
+
+static const guint8 nfcid1[] = {0x01, 0x01, 0x02, 0x04};
+static const GUtilData nfcid1_data = { TEST_ARRAY_AND_SIZE(nfcid1) };
+
+static
+void
+test_data_init_tag_a(
+    TestData* test)
+{
+    NfcPluginsInfo pi;
+    NfcTarget* target;
+    NfcParamPoll poll;
+
+    g_assert(!test_name_watches);
+    memset(test, 0, sizeof(*test));
+    memset(&pi, 0, sizeof(pi));
+    g_assert((test->manager = nfc_manager_new(&pi)) != NULL);
+    g_assert((test->adapter = test_adapter_new()) != NULL);
+
+    target = test_target_new_tech(NFC_TECHNOLOGY_A);
+    memset(&poll, 0, sizeof(poll));
+    poll.a.sel_res = 1;
+    poll.a.nfcid1 = nfcid1_data;
+    g_assert(nfc_adapter_add_other_tag2(test->adapter, target, &poll));
+    nfc_target_unref(target);
+
+    g_assert(nfc_manager_add_adapter(test->manager, test->adapter));
+    test->loop = g_main_loop_new(NULL, TRUE);
+    test->pool = gutil_idle_pool_new();
+}
+
+static
+void
+test_get_all3_tag_a_done(
+    GObject* object,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    gint version = 0;
+    gboolean present = FALSE;
+    guint tech, protocol, type;
+    gchar** ifaces = NULL;
+    gchar** records = NULL;
+    GVariant* prot_params = NULL;
+    GVariantIter iter;
+    GVariant* value = NULL;
+    gchar* key = NULL;
+    const guint8* value_ptr = NULL;
+    GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
+        result, NULL);
+
+    g_assert(var);
+    g_variant_get(var, "(ibuuu^as^ao@a{sv})", &version, &present, &tech,
+        &protocol, &type, &ifaces, &records, &prot_params);
+    g_assert(ifaces);
+    g_assert(records);
+    g_assert(prot_params);
+    g_assert_cmpuint(g_variant_iter_init(&iter, prot_params), ==, 2);
+    GDEBUG("version=%d, present=%d, tech=%u, protocol=%u, type=%u, "
+        "%u interface(s), %u record(s)", version, present, tech, protocol,
+           type, g_strv_length(ifaces), g_strv_length(records));
+    while (g_variant_iter_loop (&iter, "{sv}", &key, &value)) {
+        GDEBUG("Item '%s' has type '%s'\n", key,
+            g_variant_get_type_string (value));
+        g_assert(!g_strcmp0(key, "SEL_RES") || !g_strcmp0(key, "NFCID1"));
+
+        if (!g_strcmp0(key, "SEL_RES")) {
+            guint8 sel_res_value = g_variant_get_byte(value);
+            g_assert(sel_res_value);
+            g_assert(sel_res_value == 1);
+        }
+
+        if (!g_strcmp0(key, "NFCID1")) {
+            value_ptr = (guint8*)g_variant_get_data(value);
+            g_assert(value_ptr);
+            g_assert(sizeof(nfcid1) == g_variant_get_size(value));
+            g_assert(!memcmp(value_ptr, nfcid1, sizeof(nfcid1)));
+        }
+    }
+    g_assert(version >= MIN_INTERFACE_VERSION);
+    g_assert(present);
+    g_assert(tech == NFC_TECHNOLOGY_A);
+    g_assert(protocol == NFC_PROTOCOL_UNKNOWN);
+    g_assert(g_strv_length(records) == 0);
+    g_strfreev(ifaces);
+    g_strfreev(records);
+    g_variant_unref(prot_params);
+    g_variant_unref(var);
+    test_quit_later(test->loop);
+}
+
+static
+void
+test_get_all3_tag_a_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+
+    nfc_tag_set_initialized(test->adapter->tags[0]);
+    test_start_and_get(test, client, server, "GetAll3",
+        test_get_all3_tag_a_done);
+}
+
+static
+void
+test_get_all3_tag_a(
+    void)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_data_init_tag_a(&test);
+    dbus = test_dbus_new(test_get_all3_tag_a_start, &test);
     test_run(&test_opt, test.loop);
     test_data_cleanup(&test);
     test_dbus_free(dbus);
@@ -2131,6 +2263,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("get_all3"), test_get_all3);
     g_test_add_func(TEST_("get_poll_parameters"), test_get_poll_parameters);
     g_test_add_func(TEST_("get_all3_tag_b"), test_get_all3_tag_b);
+    g_test_add_func(TEST_("get_all3_tag_a"), test_get_all3_tag_a);
     g_test_add_func(TEST_("transceive/ok"), test_transceive_ok);
     g_test_add_func(TEST_("transceive/error1"), test_transceive_error1);
     g_test_add_func(TEST_("transceive/error2"), test_transceive_error2);
