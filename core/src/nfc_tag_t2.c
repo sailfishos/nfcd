@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2018-2020 Jolla Ltd.
  * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -114,7 +115,6 @@ struct nfc_tag_t2_priv {
     GHashTable* reads;
     GHashTable* writes;
     GByteArray* cached_blocks;
-    guint8 serial[4];
     guint sector_count;
     NfcTagType2Sector* sectors;
     guint init_id;
@@ -902,22 +902,17 @@ nfc_tag_t2_control_area_read_resp(
     priv->init_id = 0;
     if (status == NFC_TRANSMIT_STATUS_OK && len == 16) {
         const guint8* bytes = data;
-        const guint8* serial = bytes + 4;
         const guint8* cc = bytes + 12;
 
         /*
          * Layout of the first 4 blocks accorting to NFCForum-TS-Type-2-Tag:
          *
-         * Bytes 0..3   - UID / Internal
-         * Bytes 4..7   - Serial Number
-         * Bytes 8..11  - Internal / Lock
+         * Bytes 0..9   - UID / Internal
+         * Bytes 10..11  - Lock
          * Bytes 12..15 - Capability Container (CC)
          */
-        memcpy(priv->serial, serial, 4);
-        self->serial.bytes = priv->serial;
-        self->serial.size = 4;
-        GDEBUG("Serial: %02x %02x %02x %02x", priv->serial[0],
-            priv->serial[1], priv->serial[2], priv->serial[3]);
+        GDEBUG("Internal data:");
+        nfc_hexdump(bytes, 10);
 
         if (cc[0] == NFC_TAG_T2_CC_NFC_FORUM_MAGIC &&
             cc[1] >= NFC_TAG_T2_CC_MIN_VERSION) {
@@ -970,6 +965,8 @@ nfc_tag_t2_init2(
         nfc_tag_init_base(tag, target, &poll);
         /* nfc_tag_init_base has copied nfcid1 to the internal storage */
         self->nfcid1 = nfc_tag_param(tag)->a.nfcid1;
+        /* serial is same as nfcid1 */
+        self->serial = nfc_tag_param(tag)->a.nfcid1;
         self->sel_res = poll_a->sel_res;
     } else {
         nfc_tag_init_base(tag, target, NULL);
