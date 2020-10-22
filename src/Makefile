@@ -146,21 +146,21 @@ debug: $(DEBUG_DEPS) $(DEBUG_EXE)
 release: $(RELEASE_DEPS) $(RELEASE_EXE)
 
 clean:
-	make -C $(NFC_CORE_DIR) clean
-	make -C $(NFC_PLUGINS_DIR) clean
+	$(MAKE) -C $(NFC_CORE_DIR) clean
+	$(MAKE) -C $(NFC_PLUGINS_DIR) clean
 	rm -fr $(BUILD_DIR) $(SRC_DIR)/*~
 
 nfc_core_debug_lib:
-	make -C $(NFC_CORE_DIR) debug
+	$(MAKE) -C $(NFC_CORE_DIR) debug
 
 nfc_core_release_lib:
-	make -C $(NFC_CORE_DIR) release
+	$(MAKE) -C $(NFC_CORE_DIR) release
 
 nfc_plugins_debug_lib:
-	make -C $(NFC_PLUGINS_DIR) debug
+	$(MAKE) -C $(NFC_PLUGINS_DIR) debug
 
 nfc_plugins_release_lib:
-	make -C $(NFC_PLUGINS_DIR) release
+	$(MAKE) -C $(NFC_PLUGINS_DIR) release
 
 $(DEBUG_BUILD_DIR):
 	mkdir -p $@

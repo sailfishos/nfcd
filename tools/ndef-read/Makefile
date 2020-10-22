@@ -138,10 +138,10 @@ clean:
 	rm -fr $(BUILD_DIR) $(SRC_DIR)/*~
 
 nfc_core_debug_lib:
-	make -C $(NFC_CORE_DIR) debug
+	$(MAKE) -C $(NFC_CORE_DIR) debug
 
 nfc_core_release_lib:
-	make -C $(NFC_CORE_DIR) release
+	$(MAKE) -C $(NFC_CORE_DIR) release
 
 $(GEN_DIR)/%.c: $(SPEC_DIR)/%.xml
 	gdbus-codegen --generate-c-code $(@:%.c=%) $<

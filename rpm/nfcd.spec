@@ -46,7 +46,7 @@ This package contains command line NFC tools.
 %setup -q
 
 %build
-make LIBDIR=%{_libdir} KEEP_SYMBOLS=1 release pkgconfig
+make %{_smp_mflags} LIBDIR=%{_libdir} KEEP_SYMBOLS=1 release pkgconfig
 
 %install
 %define target_wants_dir %{_unitdir}/network.target.wants
