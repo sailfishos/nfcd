@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2018-2020 Jolla Ltd.
  * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -233,7 +234,7 @@ static const guint8 test_data_jolla[] = { /* "https://www.jolla.com" */
 };
 
 /*
- * Serial: 9a 85 5c 80
+ * UID: 04 ea 3d 9a 85 5c 80
  * Data size: 872 bytes
  */
 static const guint8 test_data_ntag216[] = { /* "https://www.merproject.org" */
@@ -684,11 +685,8 @@ test_basic_exit(
     void* user_data)
 {
     NfcTagType2* t2 = NFC_TAG_T2(tag);
-    GUtilData serial;
 
-    serial.bytes = test_data_empty + 4;
-    serial.size = 4;
-    g_assert(gutil_data_equal(&t2->serial, &serial));
+    g_assert(gutil_data_equal(&t2->serial, &t2->nfcid1));
     g_main_loop_quit((GMainLoop*)user_data);
 }
 
@@ -747,15 +745,10 @@ test_unsup_done(
     void* user_data)
 {
     NfcTagType2* t2 = NFC_TAG_T2(tag);
-    TestTarget* test = TEST_TARGET(tag->target);
-    GUtilData serial;
 
     g_assert(tag->flags & NFC_TAG_FLAG_INITIALIZED);
 
-    /* Serial should be there */
-    serial.bytes = test->storage + 4;
-    serial.size = 4;
-    g_assert(gutil_data_equal(&t2->serial, &serial));
+    g_assert(gutil_data_equal(&t2->serial, &t2->nfcid1));
 
     /* But no NDEF and no size */
     g_assert(!tag->ndef);
@@ -796,7 +789,7 @@ test_init_err1_done(
     NfcTagType2* t2 = NFC_TAG_T2(tag);
 
     g_assert(tag->flags & NFC_TAG_FLAG_INITIALIZED);
-    g_assert(!t2->serial.size);
+    g_assert(gutil_data_equal(&t2->serial, &t2->nfcid1));
     g_assert(!t2->data_size);
     g_assert(!tag->ndef);
     g_main_loop_quit((GMainLoop*)user_data);
@@ -838,16 +831,11 @@ test_init_err2_done(
     void* user_data)
 {
     NfcTagType2* t2 = NFC_TAG_T2(tag);
-    TestTarget* test = TEST_TARGET(tag->target);
-    GUtilData serial;
 
     g_assert(tag->flags & NFC_TAG_FLAG_INITIALIZED);
     g_assert(t2->data_size);
 
-    /* Serial should be there */
-    serial.bytes = test->storage + 4;
-    serial.size = 4;
-    g_assert(gutil_data_equal(&t2->serial, &serial));
+    g_assert(gutil_data_equal(&t2->serial, &t2->nfcid1));
 
     /* But no NDEF */
     g_assert(!tag->ndef);
@@ -909,12 +897,9 @@ test_read_data_start(
     TestTarget* test = TEST_TARGET(tag->target);
     NfcTagType2* t2 = NFC_TAG_T2(tag);
     NfcNdefRec* rec = tag->ndef;
-    GUtilData serial;
     guint8* buf;
 
-    serial.bytes = test_data_google + 4;
-    serial.size = 4;
-    g_assert(gutil_data_equal(&t2->serial, &serial));
+    g_assert(gutil_data_equal(&t2->serial, &t2->nfcid1));
     g_assert(t2->data_size == test->data.size - TEST_DATA_OFFSET);
 
     g_assert(rec);

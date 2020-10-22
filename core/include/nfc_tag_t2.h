@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2018-2019 Jolla Ltd.
  * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -54,7 +55,7 @@ struct nfc_tag_t2 {
     NFC_TAG_T2_FLAGS t2flags;
     guint block_size;   /* Valid only when initialized */
     guint data_size;    /* Valid only when initialized */
-    GUtilData serial;   /* Valid only when initialized */
+    GUtilData serial;   /* Same as UID (nfcid1) */
 };
 
 GType nfc_tag_t2_get_type();
