@@ -33,7 +33,6 @@
 #include "internal/nfc_manager_i.h"
 
 #include "dbus_handlers/plugin.h"
-#include "dbus_log/plugin.h"
 #include "dbus_neard/plugin.h"
 #include "dbus_service/plugin.h"
 #include "settings/plugin.h"
@@ -47,7 +46,6 @@
 #include <locale.h>
 
 static const NfcPluginDesc* const nfcd_builtin_plugins[] = {
-    &NFC_PLUGIN_DESC(dbus_log),
     &NFC_PLUGIN_DESC(dbus_handlers),
     &NFC_PLUGIN_DESC(dbus_neard),
     &NFC_PLUGIN_DESC(dbus_service),
