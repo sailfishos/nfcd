@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2018-2021 Jolla Ltd.
  * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
- * Copyright (C) 2020 Open Mobile Platform LLC.
+ * Copyright (C) 2020-2021 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -91,6 +91,7 @@ struct nfc_target_sequence {
     NfcTargetSequence* next;
     gint refcount;
     NfcTarget* target;
+    NFC_SEQUENCE_FLAGS flags;
 };
 
 typedef struct nfc_target_sequence_queue {
@@ -524,8 +525,9 @@ nfc_target_set_sequence(
 }
 
 NfcTargetSequence*
-nfc_target_sequence_new(
-    NfcTarget* target)
+nfc_target_sequence_new2(
+    NfcTarget* target,
+    NFC_SEQUENCE_FLAGS flags) /* Since 1.1.4 */
 {
     if (G_LIKELY(target)) {
         NfcTargetSequence* self = g_slice_new0(NfcTargetSequence);
@@ -543,6 +545,7 @@ nfc_target_sequence_new(
             queue->first = self;
         }
         queue->last = self;
+        self->flags = flags;
 
         /* If there's no active sequence yet, this one automatically
          * becomes active even though it doesn't yet have any requests
@@ -555,11 +558,28 @@ nfc_target_sequence_new(
     return NULL;
 }
 
+NfcTargetSequence*
+nfc_target_sequence_new(
+    NfcTarget* target)
+{
+    return nfc_target_sequence_new2(target, NFC_SEQUENCE_FLAGS_NONE);
+}
+
 void
 nfc_target_sequence_free(
     NfcTargetSequence* self)
 {
     nfc_target_sequence_unref(self);
+}
+
+void
+nfc_target_sequence_set_flags(
+    NfcTargetSequence* seq,
+    NFC_SEQUENCE_FLAGS flags)
+{
+    if (G_LIKELY(seq)) {
+        seq->flags = flags;
+    }
 }
 
 /*==========================================================================*
@@ -1007,6 +1027,13 @@ nfc_target_remove_handlers(
     guint count)
 {
     gutil_disconnect_handlers(self, ids, count);
+}
+
+NFC_SEQUENCE_FLAGS
+nfc_target_sequence_get_flags(
+    NfcTargetSequence* seq) /* Since 1.1.4 */
+{
+    return G_LIKELY(seq) ? seq->flags : NFC_SEQUENCE_FLAGS_NONE;
 }
 
 /*==========================================================================*

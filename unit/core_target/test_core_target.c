@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2018-2020 Jolla Ltd.
  * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
- * Copyright (C) 2020 Open Mobile Platform LLC.
+ * Copyright (C) 2020-2021 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -388,6 +388,9 @@ test_null(
     nfc_target_gone(NULL);
     nfc_target_unref(NULL);
     g_assert(!nfc_target_sequence_new(NULL));
+    g_assert(!nfc_target_sequence_new2(NULL, NFC_SEQUENCE_FLAGS_NONE));
+    g_assert(!nfc_target_sequence_new2(NULL,
+        NFC_SEQUENCE_FLAG_ALLOW_PRESENCE_CHECK));
     nfc_target_sequence_free(NULL);
 }
 
@@ -718,20 +721,35 @@ test_sequence_basic(
     NfcTargetSequence* seq3 = nfc_target_sequence_new(target);
     NfcTargetSequence* seq4 = nfc_target_sequence_new(target);
     NfcTargetSequence* seq5 = nfc_target_sequence_new(target);
+    NfcTargetSequence* seq6 = nfc_target_sequence_new2(target,
+        NFC_SEQUENCE_FLAGS_NONE);
+    NfcTargetSequence* seq7 = nfc_target_sequence_new2(target,
+        NFC_SEQUENCE_FLAG_ALLOW_PRESENCE_CHECK);
+    NfcTargetSequence* seq8 = nfc_target_sequence_new(target);
 
     g_assert(seq1);
     g_assert(seq2);
     g_assert(seq3);
     g_assert(seq4);
     g_assert(seq5);
+    g_assert(seq6);
+    g_assert(nfc_target_sequence_get_flags(seq6) == NFC_SEQUENCE_FLAGS_NONE);
+    g_assert(seq7);
+    g_assert(nfc_target_sequence_get_flags(seq7) ==
+        NFC_SEQUENCE_FLAG_ALLOW_PRESENCE_CHECK);
+    g_assert(seq8);
+    g_assert(nfc_target_sequence_get_flags(seq8) == NFC_SEQUENCE_FLAGS_NONE);
 
-    /* Deallocate two sequences before the target and one after */
+    /* Deallocate few sequences before the target and few after */
     nfc_target_sequence_free(seq4);
     nfc_target_sequence_free(seq5);
     nfc_target_sequence_free(seq3);
     nfc_target_sequence_free(seq1);
+    nfc_target_sequence_free(seq6);
+    nfc_target_sequence_free(seq8);
     nfc_target_unref(target);
     nfc_target_sequence_free(seq2);
+    nfc_target_sequence_free(seq7);
 }
 
 /*==========================================================================*
@@ -786,6 +804,83 @@ test_sequence_ok(
         test_transmit_ok_resp, test_clear_bytes, &resp2);
     id3 = nfc_target_transmit(target, data3, sizeof(data3), seq,
         test_transmit_ok_resp, test_clear_bytes, &resp3);
+    nfc_target_sequence_free(seq);
+    g_assert(id1);
+    g_assert(id2);
+    g_assert(id3);
+    g_assert(id4);
+
+    test_run(&test_opt, loop);
+
+    g_assert(sequence_started == 1);
+    g_assert(sequence_finished == 1);
+    g_assert(test->succeeded == 3);
+    g_assert(!resp1.bytes);
+    g_assert(!resp2.bytes);
+
+    nfc_target_remove_handlers(target, id, G_N_ELEMENTS(id));
+    nfc_target_unref(target);
+    g_main_loop_unref(loop);
+}
+
+/*==========================================================================*
+ * sequence_ok2
+ *==========================================================================*/
+
+static
+void
+test_sequence_ok2(
+    void)
+{
+    static const guint8 data1[] = { 0x01 };
+    static const guint8 data2[] = { 0x01, 0x02 };
+    static const guint8 data3[] = { 0x01, 0x02, 0x03 };
+    GUtilData resp1, resp2, resp3;
+    TestTarget* test = test_target_new();
+    NfcTarget* target = &test->target;
+    guint id1, id2, id3, id4;
+    GMainLoop* loop = g_main_loop_new(NULL, TRUE);
+    NfcTargetSequence* seq;
+    int sequence_started = 0, sequence_finished = 0;
+    gulong id[2];
+
+    nfc_target_set_transmit_timeout(target, 0);
+    id[0] = nfc_target_add_sequence_handler(target,
+        test_sequence_started, &sequence_started);
+    id[1] = nfc_target_add_sequence_handler(target,
+        test_sequence_finished, &sequence_finished);
+
+    seq = nfc_target_sequence_new2(target,
+        NFC_SEQUENCE_FLAG_ALLOW_PRESENCE_CHECK);
+
+    TEST_BYTES_SET(resp1, data1);
+    TEST_BYTES_SET(resp2, data2);
+    TEST_BYTES_SET(resp3, data3);
+    test->transmit_responses = g_slist_append(g_slist_append(g_slist_append(
+        test->transmit_responses,
+        test_transmit_response_new_from_bytes(&resp1)),
+        test_transmit_response_new_from_bytes(&resp2)),
+        test_transmit_response_new_from_bytes(&resp3));
+
+    g_assert(sequence_started == 1);
+    g_assert(sequence_finished == 0);
+
+    g_assert(nfc_target_sequence_get_flags(seq) ==
+        NFC_SEQUENCE_FLAG_ALLOW_PRESENCE_CHECK);
+
+    /* This one will wait until the next one completes */
+    id4 = nfc_target_transmit(target, NULL, 0, NULL, NULL,
+        test_quit_loop, loop);
+
+    /* Note: reusing test_sequence_ok_resp() */
+    id1 = nfc_target_transmit(target, data1, sizeof(data1), seq,
+        test_transmit_ok_resp, test_clear_bytes, &resp1);
+    id2 = nfc_target_transmit(target, data2, sizeof(data2), seq,
+        test_transmit_ok_resp, test_clear_bytes, &resp2);
+    id3 = nfc_target_transmit(target, data3, sizeof(data3), seq,
+        test_transmit_ok_resp, test_clear_bytes, &resp3);
+    g_assert(nfc_target_sequence_get_flags(seq) ==
+        NFC_SEQUENCE_FLAG_ALLOW_PRESENCE_CHECK);
     nfc_target_sequence_free(seq);
     g_assert(id1);
     g_assert(id2);
@@ -1010,6 +1105,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("transmit_destroy"), test_transmit_destroy);
     g_test_add_func(TEST_("sequence_basic"), test_sequence_basic);
     g_test_add_func(TEST_("sequence_ok"), test_sequence_ok);
+    g_test_add_func(TEST_("sequence_ok2"), test_sequence_ok2);
     g_test_add_func(TEST_("sequence2"), test_sequence2);
     g_test_add_func(TEST_("reactivate"), test_reactivate);
     g_test_add_func(TEST_("reactivate_ok"), test_reactivate_ok);

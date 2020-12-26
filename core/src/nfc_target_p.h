@@ -98,6 +98,11 @@ nfc_target_sequence_unref(
     NfcTargetSequence* seq)
     NFCD_INTERNAL;
 
+void nfc_target_sequence_set_flags(
+    NfcTargetSequence* seq,
+    NFC_SEQUENCE_FLAGS flags)
+    NFCD_INTERNAL;
+
 #endif /* NFC_TARGET_PRIVATE_H */
 
 /*

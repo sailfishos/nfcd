@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2018-2021 Jolla Ltd.
  * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020-2021 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -163,6 +164,20 @@ nfc_target_cancel_transmit(
     NfcTarget* target,
     guint id)
     NFCD_EXPORT;
+
+typedef enum nfc_sequence_flags {
+    NFC_SEQUENCE_FLAGS_NONE = 0x00,
+    NFC_SEQUENCE_FLAG_ALLOW_PRESENCE_CHECK = 0x01
+} NFC_SEQUENCE_FLAGS; /* Since 1.1.4 */
+
+NfcTargetSequence*
+nfc_target_sequence_new2(
+    NfcTarget* target,
+    NFC_SEQUENCE_FLAGS flags); /* Since 1.1.4 */
+
+NFC_SEQUENCE_FLAGS
+nfc_target_sequence_get_flags(
+    NfcTargetSequence* seq); /* Since 1.1.4 */
 
 G_END_DECLS
 

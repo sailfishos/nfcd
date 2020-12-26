@@ -81,5 +81,10 @@
         <annotation name="org.gtk.GDBus.C.ForceGVariant" value="true"/>
       </arg>
     </method>
+    <!-- Interface version 5 -->
+    <method name="Acquire2">
+      <arg name="wait" type="b" direction="in"/>
+      <arg name="force_presence_check" type="b" direction="in"/>
+    </method>
   </interface>
 </node>

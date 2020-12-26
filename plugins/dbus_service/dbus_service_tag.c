@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2018-2021 Jolla Ltd.
  * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
- * Copyright (C) 2020 Open Mobile Platform LLC.
+ * Copyright (C) 2020-2021 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -70,6 +70,7 @@ enum {
     CALL_GET_ALL3,
     CALL_GET_POLL_PARAMETERS,
     CALL_TRANSCEIVE,
+    CALL_ACQUIRE2,
     CALL_COUNT
 };
 
@@ -81,6 +82,12 @@ void
 (*DBusServiceTagCallFunc)(
     GDBusMethodInvocation* call,
     DBusServiceTagPriv* self);
+
+typedef
+void
+(*DBusAcquireTagCompleteFunc)(
+    OrgSailfishosNfcTag* iface,
+    GDBusMethodInvocation* call);
 
 struct dbus_service_tag_call {
     DBusServiceTagCall* next;
@@ -129,7 +136,7 @@ struct dbus_service_tag_priv {
 };
 
 #define NFC_DBUS_TAG_INTERFACE "org.sailfishos.nfc.Tag"
-#define NFC_DBUS_TAG_INTERFACE_VERSION  (4)
+#define NFC_DBUS_TAG_INTERFACE_VERSION  (5)
 
 static const char* const dbus_service_tag_default_interfaces[] = {
     NFC_DBUS_TAG_INTERFACE, NULL
@@ -528,6 +535,79 @@ dbus_service_tag_complete_pending_calls(
     }
 }
 
+static
+gboolean
+dbus_service_tag_acquire(
+    OrgSailfishosNfcTag* iface,
+    GDBusMethodInvocation* call,
+    gboolean wait,
+    gboolean force_presence_check,
+    DBusServiceTagPriv* self,
+    DBusAcquireTagCompleteFunc complete)
+{
+    DBusServiceTag* pub = &self->pub;
+    NfcTarget* target = pub->tag->target;
+    DBusServiceTagLock* current_lock = self->lock;
+    const char* name = g_dbus_method_invocation_get_sender(call);
+
+    if (current_lock && !g_strcmp0(current_lock->name, name)) {
+        /* This client already has the lock */
+        current_lock->count++;
+        GDEBUG("Lock request from %s (%u)", name, current_lock->count);
+        nfc_target_sequence_set_flags(current_lock->seq,force_presence_check ?
+            NFC_SEQUENCE_FLAG_ALLOW_PRESENCE_CHECK : NFC_SEQUENCE_FLAGS_NONE);
+        complete(iface, call);
+    } else if (current_lock && !wait) {
+        /* Another client already has the lock but we can't wait */
+        GDEBUG("Lock request from %s (non-waitable, failed)", name);
+        g_dbus_method_invocation_return_error_literal(call, DBUS_SERVICE_ERROR,
+            DBUS_SERVICE_ERROR_FAILED, "Already locked");
+    } else {
+        DBusServiceTagLockWaiter* waiter =
+            dbus_service_tag_find_waiter(self, name);
+
+        GDEBUG("Lock request from %s (waiting)", name);
+        if (waiter) {
+            /* Another waiter for the same lock */
+            waiter->pending_calls = g_slist_append(waiter->pending_calls,
+                g_object_ref(call));
+            nfc_target_sequence_set_flags(waiter->lock->seq,
+                force_presence_check ? NFC_SEQUENCE_FLAG_ALLOW_PRESENCE_CHECK :
+                NFC_SEQUENCE_FLAGS_NONE);
+        } else {
+            DBusServiceTagLock* lock = g_slice_new0(DBusServiceTagLock);
+
+            lock->name = g_strdup(name);
+            lock->seq = nfc_target_sequence_new2(target, force_presence_check ?
+                NFC_SEQUENCE_FLAG_ALLOW_PRESENCE_CHECK :
+                NFC_SEQUENCE_FLAGS_NONE);
+            lock->tag = self;
+            lock->watch_id = g_bus_watch_name_on_connection(pub->connection,
+                name, G_BUS_NAME_WATCHER_FLAGS_NONE, NULL,
+                dbus_service_tag_lock_peer_vanished, lock, NULL);
+
+            GVERBOSE_("Created sequence %p for %s", target->sequence, name);
+            if (target->sequence == lock->seq) {
+                /* nfc_target_sequence_new2() has acquired the lock */
+                GASSERT(!self->lock);
+                lock->count = 1;
+                self->lock = lock;
+                GDEBUG("%s owns %s", name, self->path);
+                complete(iface, call);
+            } else {
+                /* We actually have to wait */
+                GASSERT(wait);
+                waiter = g_slice_new0(DBusServiceTagLockWaiter);
+                waiter->lock = lock;
+                waiter->pending_calls = g_slist_append(waiter->pending_calls,
+                    g_object_ref(call));
+                self->lock_waiters = g_slist_append(self->lock_waiters, waiter);
+            }
+        }
+    }
+    return TRUE;
+}
+
 /*==========================================================================*
  * NfcTag events
  *==========================================================================*/
@@ -721,60 +801,8 @@ dbus_service_tag_handle_acquire(
     gboolean wait,
     DBusServiceTagPriv* self)
 {
-    DBusServiceTag* pub = &self->pub;
-    NfcTarget* target = pub->tag->target;
-    DBusServiceTagLock* current_lock = self->lock;
-    const char* name = g_dbus_method_invocation_get_sender(call);
-
-    if (current_lock && !g_strcmp0(current_lock->name, name)) {
-        /* This client already has the lock */
-        current_lock->count++;
-        GDEBUG("Lock request from %s (%u)", name, current_lock->count);
-        org_sailfishos_nfc_tag_complete_acquire(iface, call);
-    } else if (current_lock && !wait) {
-        /* Another client already has the lock but we can't wait */
-        GDEBUG("Lock request from %s (non-waitable, failed)", name);
-        g_dbus_method_invocation_return_error_literal(call, DBUS_SERVICE_ERROR,
-            DBUS_SERVICE_ERROR_FAILED, "Already locked");
-    } else {
-        DBusServiceTagLockWaiter* waiter =
-            dbus_service_tag_find_waiter(self, name);
-
-        GDEBUG("Lock request from %s (waiting)", name);
-        if (waiter) {
-            /* Another waiter for the same lock */
-            waiter->pending_calls = g_slist_append(waiter->pending_calls,
-                g_object_ref(call));
-        } else {
-            DBusServiceTagLock* lock = g_slice_new0(DBusServiceTagLock);
-
-            lock->name = g_strdup(name);
-            lock->seq = nfc_target_sequence_new(target);
-            lock->tag = self;
-            lock->watch_id = g_bus_watch_name_on_connection(pub->connection,
-                name, G_BUS_NAME_WATCHER_FLAGS_NONE, NULL,
-                dbus_service_tag_lock_peer_vanished, lock, NULL);
-
-            GVERBOSE_("Created sequence %p for %s", target->sequence, name);
-            if (target->sequence == lock->seq) {
-                /* nfc_target_sequence_new() has acquired the lock */
-                GASSERT(!self->lock);
-                lock->count = 1;
-                self->lock = lock;
-                GDEBUG("%s owns %s", name, self->path);
-                org_sailfishos_nfc_tag_complete_acquire(iface, call);
-            } else {
-                /* We actually have to wait */
-                GASSERT(wait);
-                waiter = g_slice_new0(DBusServiceTagLockWaiter);
-                waiter->lock = lock;
-                waiter->pending_calls = g_slist_append(waiter->pending_calls,
-                    g_object_ref(call));
-                self->lock_waiters = g_slist_append(self->lock_waiters, waiter);
-            }
-        }
-    }
-    return TRUE;
+    return dbus_service_tag_acquire(iface, call, wait, FALSE, self,
+        org_sailfishos_nfc_tag_complete_acquire);
 }
 
 /* Release */
@@ -951,6 +979,21 @@ dbus_service_tag_handle_transceive(
     return TRUE;
 }
 
+/* Interface Version 5 */
+
+static
+gboolean
+dbus_service_tag_handle_acquire2(
+    OrgSailfishosNfcTag* iface,
+    GDBusMethodInvocation* call,
+    gboolean wait,
+    gboolean force_presence_check,
+    DBusServiceTagPriv* self)
+{
+        return dbus_service_tag_acquire(iface, call, wait, force_presence_check,
+        self, org_sailfishos_nfc_tag_complete_acquire2);
+}
+
 /*==========================================================================*
  * Interface
  *==========================================================================*/
@@ -1058,6 +1101,9 @@ dbus_service_tag_new(
     self->call_id[CALL_TRANSCEIVE] =
         g_signal_connect(self->iface, "handle-transceive",
         G_CALLBACK(dbus_service_tag_handle_transceive), self);
+    self->call_id[CALL_ACQUIRE2] =
+        g_signal_connect(self->iface, "handle-acquire2",
+        G_CALLBACK(dbus_service_tag_handle_acquire2), self);
 
     if (tag->flags & NFC_TAG_FLAG_INITIALIZED) {
         dbus_service_tag_export_all(self);

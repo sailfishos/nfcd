@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2019-2021 Jolla Ltd.
  * Copyright (C) 2019-2021 Slava Monich <slava.monich@jolla.com>
- * Copyright (C) 2020 Open Mobile Platform LLC.
+ * Copyright (C) 2020-2021 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -51,7 +51,7 @@
 
 #define NFC_SERVICE "org.sailfishos.nfc.daemon"
 #define NFC_TAG_INTERFACE "org.sailfishos.nfc.Tag"
-#define MIN_INTERFACE_VERSION (4)
+#define MIN_INTERFACE_VERSION (5)
 
 static TestOpt test_opt;
 static const char test_sender_1[] = ":1.1";
@@ -166,6 +166,21 @@ test_call_release(
         test_tag_path(test, test->adapter->tags[0]), NFC_TAG_INTERFACE,
         "Release", NULL, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,
         callback, test);
+}
+
+static
+void
+test_call_acquire2(
+    TestData* test,
+    gboolean wait,
+    gboolean force_presence_check,
+    GAsyncReadyCallback callback)
+{
+    g_assert(test->connection);
+    g_dbus_connection_call(test->connection, NULL,
+        test_tag_path(test, test->adapter->tags[0]), NFC_TAG_INTERFACE,
+        "Acquire2", g_variant_new("(bb)", wait, force_presence_check), NULL,
+        G_DBUS_CALL_FLAGS_NONE, -1, NULL, callback, test);
 }
 
 static
@@ -1684,6 +1699,393 @@ test_lock_fail(
 }
 
 /*==========================================================================*
+ * lock_acquire2
+ *==========================================================================*/
+
+static
+void
+test_lock_acquire2_acquired_2(
+    GObject* connection,
+    GAsyncResult* result,
+    gpointer test)
+{
+    test_complete_ok(connection, result);
+    GDEBUG("Lock acquired (2)");
+    test_call_release(test, test_lock_released_1);
+}
+
+static
+void
+test_lock_acquire2_acquired_1(
+    GObject* connection,
+    GAsyncResult* result,
+    gpointer test)
+{
+    test_complete_ok(connection, result);
+    GDEBUG("Lock acquired (1)");
+    test_call_acquire2(test, TRUE, TRUE, test_lock_acquire2_acquired_2);
+}
+
+static
+void
+test_lock_acquire2_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+
+    test->service = dbus_service_adapter_new(test->adapter, server);
+    g_assert(test->service);
+    g_object_ref(test->connection = client);
+    test_call_acquire2(test, TRUE, FALSE, test_lock_acquire2_acquired_1);
+}
+
+static
+void
+test_lock_acquire2(
+    void)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_data_init(&test);
+    dbus = test_dbus_new(test_lock_acquire2_start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+/*==========================================================================*
+ * lock_wait_acquire2
+ *==========================================================================*/
+
+static
+void
+test_lock_wait_acquire2_locked_again(
+    GObject* connection,
+    GAsyncResult* result,
+    gpointer test)
+{
+    test_complete_ok(connection, result);
+    GDEBUG("Lock acquired (2)");
+    test_call_release(test, test_lock_wait_released);
+}
+
+static
+void
+test_lock_wait_acquire2_continue(
+    GObject* connection,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    GDEBUG("Dropping lock 1");
+    test_get_interface_version_complete_ok(connection, result);
+    test_name_watch_vanish(test_sender_1);
+}
+
+static
+void
+test_lock_wait_acquire2_locked(
+    GObject* connection,
+    GAsyncResult* result,
+    gpointer test)
+{
+    test_complete_ok(connection, result);
+    GDEBUG("Lock acquired (1)");
+    /* Change the sender */
+    test_sender = test_sender_2;
+    /* This one is going to be placed to the queue */
+    test_call_acquire2(test, TRUE, TRUE, test_lock_wait_acquire2_locked_again);
+    /* Wait for GetInterfaceVersion to complete before continuing */
+    test_call_get(test, "GetInterfaceVersion",
+        test_lock_wait_acquire2_continue);
+}
+
+static
+void
+test_lock_wait_acquire2_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+
+    test_sender = test_sender_1;
+    test->service = dbus_service_adapter_new(test->adapter, server);
+    g_assert(test->service);
+    g_object_ref(test->connection = client);
+    test_call_acquire2(test, TRUE, FALSE, test_lock_wait_acquire2_locked);
+}
+
+static
+void
+test_lock_wait_acquire2(
+    void)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_data_init(&test);
+    dbus = test_dbus_new(test_lock_wait_acquire2_start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+/*==========================================================================*
+ * lock_acquire2_wait2
+ *==========================================================================*/
+
+static
+void
+test_lock_wait2_acquire2_locked_again2(
+    GObject* connection,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+
+    test_complete_ok(connection, result);
+    GDEBUG("Lock 2 acquired (2)");
+    test_quit_later(test->loop);
+}
+
+static
+void
+test_lock_wait2_acquire2_locked_again1(
+    GObject* connection,
+    GAsyncResult* result,
+    gpointer test)
+{
+    test_complete_ok(connection, result);
+    GDEBUG("Lock 2 acquired (1) ");
+}
+
+
+static
+void
+test_lock_wait2_acquire2_continue(
+    GObject* connection,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+
+    GDEBUG("Releasing lock 1");
+    test_get_interface_version_complete_ok(connection, result);
+    test_sender = test_sender_1;
+    test_call_release(test, test_lock_wait_released);
+}
+
+static
+void
+test_lock_wait2_acquire2_locked(
+    GObject* connection,
+    GAsyncResult* result,
+    gpointer test)
+{
+    test_complete_ok(connection, result);
+    GDEBUG("Lock 1 acquired");
+    /* Change the sender */
+    test_sender = test_sender_2;
+    /* These two are going to be placed to the queue */
+    test_call_acquire2(test, TRUE, FALSE,
+        test_lock_wait2_acquire2_locked_again1);
+    test_call_acquire2(test, TRUE, FALSE,
+        test_lock_wait2_acquire2_locked_again2);
+    /* Wait for GetInterfaceVersion to complete before continuing */
+    test_call_get(test, "GetInterfaceVersion",
+        test_lock_wait2_acquire2_continue);
+}
+
+static
+void
+test_lock_wait2_acquire2_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+
+    test_sender = test_sender_1;
+    test->service = dbus_service_adapter_new(test->adapter, server);
+    g_assert(test->service);
+    g_object_ref(test->connection = client);
+    test_call_acquire2(test, TRUE, TRUE, test_lock_wait2_acquire2_locked);
+}
+
+static
+void
+test_lock_wait2_acquire2(
+    void)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_data_init(&test);
+    dbus = test_dbus_new(test_lock_wait2_acquire2_start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+/*==========================================================================*
+ * lock_drop_wait_acquire2
+ *==========================================================================*/
+
+static
+void
+test_lock_drop_wait_locked_acquire2(
+    GObject* connection,
+    GAsyncResult* result,
+    gpointer test)
+{
+    test_complete_ok(connection, result);
+    GDEBUG("Lock acquired (1)");
+    /* Change the sender */
+    test_sender = test_sender_2;
+    /* This one is going to be placed to the queue and then dropped */
+    test_call_acquire2(test, TRUE, FALSE, test_lock_drop_wait_dropped);
+    /* Wait for GetInterfaceVersion to complete before continuing */
+    test_call_get(test, "GetInterfaceVersion", test_lock_drop_wait_continue);
+}
+
+static
+void
+test_lock_drop_wait_start_acquire2(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+
+    test_sender = test_sender_1;
+    test->service = dbus_service_adapter_new(test->adapter, server);
+    g_object_ref(test->connection = client);
+    g_assert(test->service);
+    test_call_acquire2(test, TRUE, FALSE, test_lock_drop_wait_locked_acquire2);
+}
+
+static
+void
+test_lock_drop_wait_acquire2(
+    void)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_data_init(&test);
+    dbus = test_dbus_new(test_lock_drop_wait_start_acquire2, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+/*==========================================================================*
+ * lock_release_wait_acquire2
+ *==========================================================================*/
+
+static
+void
+test_lock_release_wait_locked_acquire2(
+    GObject* connection,
+    GAsyncResult* result,
+    gpointer test)
+{
+    test_complete_ok(connection, result);
+    GDEBUG("Lock acquired (1)");
+    /* Change the sender */
+    test_sender = test_sender_2;
+    /* This one is going to be placed to the queue and then cancelled */
+    test_call_acquire2(test, TRUE, FALSE, test_lock_release_wait_dropped);
+    /* Wait for GetInterfaceVersion to complete before continuing */
+    test_call_get(test, "GetInterfaceVersion",
+        test_lock_release_wait_continue);
+}
+
+static
+void
+test_lock_release_wait_start_acquire2(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+
+    test_sender = test_sender_1;
+    test->service = dbus_service_adapter_new(test->adapter, server);
+    g_object_ref(test->connection = client);
+    g_assert(test->service);
+    test_call_acquire2(test, TRUE, TRUE,
+        test_lock_release_wait_locked_acquire2);
+}
+
+static
+void
+test_lock_release_wait_acquire2(
+    void)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_data_init(&test);
+    dbus = test_dbus_new(test_lock_release_wait_start_acquire2, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+/*==========================================================================*
+ * lock_fail_acquire2
+ *==========================================================================*/
+
+static
+void
+test_lock_fail_locked_acquire2(
+    GObject* connection,
+    GAsyncResult* result,
+    gpointer test)
+{
+    test_complete_ok(connection, result);
+    GDEBUG("Lock acquired");
+    /* Change the sender */
+    test_sender = test_sender_2;
+    test_call_acquire2(test, FALSE, TRUE, test_lock_fail_done);
+}
+
+static
+void
+test_lock_fail_start_acquire2(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+
+    test_sender = test_sender_1;
+    test->service = dbus_service_adapter_new(test->adapter, server);
+    g_assert(test->service);
+    g_object_ref(test->connection = client);
+    test_call_acquire2(test, TRUE, FALSE, test_lock_fail_locked_acquire2);
+}
+
+static
+void
+test_lock_fail_acquire2(
+    void)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_data_init(&test);
+    dbus = test_dbus_new(test_lock_fail_start_acquire2, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+/*==========================================================================*
  * get_all3
  *==========================================================================*/
 
@@ -2261,6 +2663,13 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("lock_drop_wait"), test_lock_drop_wait);
     g_test_add_func(TEST_("lock_release_wait"), test_lock_release_wait);
     g_test_add_func(TEST_("lock_fail"), test_lock_fail);
+    g_test_add_func(TEST_("lock_acquire2"), test_lock_acquire2);
+    g_test_add_func(TEST_("lock_wait_acquire2"), test_lock_wait_acquire2);
+    g_test_add_func(TEST_("lock_wait2_acquire2"), test_lock_wait2_acquire2);
+    g_test_add_func(TEST_("drop_wait_acquire2"), test_lock_drop_wait_acquire2);
+    g_test_add_func(TEST_("lock_release_wait_acquire2"),
+        test_lock_release_wait_acquire2);
+    g_test_add_func(TEST_("lock_fail_acquire2"), test_lock_fail_acquire2);
     g_test_add_func(TEST_("get_all3"), test_get_all3);
     g_test_add_func(TEST_("get_poll_parameters"), test_get_poll_parameters);
     g_test_add_func(TEST_("get_all3_tag_b"), test_get_all3_tag_b);
