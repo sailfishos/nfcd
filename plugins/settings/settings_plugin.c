@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -34,7 +34,6 @@
 #include "settings/org.sailfishos.nfc.Settings.h"
 
 #include <nfc_manager.h>
-#include <nfc_adapter.h>
 #include <nfc_plugin_impl.h>
 
 #include <gio/gio.h>
@@ -60,11 +59,6 @@ enum {
     SETTINGS_DBUS_CALL_COUNT
 };
 
-enum {
-    NFC_ADAPTER_ADDED,
-    NFC_EVENT_COUNT
-};
-
 typedef NfcPluginClass SettingsPluginClass;
 typedef struct settings_plugin {
     NfcPlugin parent;
@@ -76,7 +70,6 @@ typedef struct settings_plugin {
     guint own_name_id;
     gulong dbus_call_id[SETTINGS_DBUS_CALL_COUNT];
     gboolean nfc_enabled;
-    NFC_MODE auto_mode;
 } SettingsPlugin;
 
 G_DEFINE_TYPE(SettingsPlugin, settings_plugin, NFC_TYPE_PLUGIN)
@@ -465,8 +458,6 @@ settings_plugin_init(
         SETTINGS_STORAGE_FILE, NULL);
     self->policy = da_policy_new_full(settings_default_policy,
         settings_policy_actions);
-    self->auto_mode = (NFC_MODE_P2P_INITIATOR | NFC_MODE_READER_WRITER |
-        NFC_MODE_P2P_TARGET | NFC_MODE_CARD_EMILATION);
 }
 
 static
