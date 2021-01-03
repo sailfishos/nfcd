@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -33,6 +33,7 @@
 #define GLIB_DISABLE_DEPRECATION_WARNINGS
 
 #include "internal/nfc_manager_i.h"
+#include "nfc_manager_p.h"
 #include "nfc_adapter_p.h"
 #include "nfc_plugins.h"
 #include "nfc_log.h"

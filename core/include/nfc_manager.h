@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -112,11 +112,6 @@ void
 nfc_manager_request_power(
     NfcManager* manager,
     gboolean on);
-
-void
-nfc_manager_request_mode(
-    NfcManager* manager,
-    NFC_MODE mode);
 
 gulong
 nfc_manager_add_adapter_added_handler(
