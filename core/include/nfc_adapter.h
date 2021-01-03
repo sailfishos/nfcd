@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -82,11 +82,6 @@ nfc_adapter_ref(
 void
 nfc_adapter_unref(
     NfcAdapter* adapter);
-
-void
-nfc_adapter_set_enabled(
-    NfcAdapter* adapter,
-    gboolean enabled);
 
 void
 nfc_adapter_request_power(
