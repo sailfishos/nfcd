@@ -57,7 +57,7 @@ struct nfc_adapter {
     gboolean target_present;
 };
 
-GType nfc_adapter_get_type(void);
+GType nfc_adapter_get_type(void) NFCD_EXPORT;
 #define NFC_TYPE_ADAPTER (nfc_adapter_get_type())
 #define NFC_ADAPTER(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
         NFC_TYPE_ADAPTER, NfcAdapter))
@@ -77,117 +77,137 @@ void
 
 NfcAdapter*
 nfc_adapter_ref(
-    NfcAdapter* adapter);
+    NfcAdapter* adapter)
+    NFCD_EXPORT;
 
 void
 nfc_adapter_unref(
-    NfcAdapter* adapter);
+    NfcAdapter* adapter)
+    NFCD_EXPORT;
 
 void
 nfc_adapter_request_power(
     NfcAdapter* adapter,
-    gboolean on);
+    gboolean on)
+    NFCD_EXPORT;
 
 gboolean
 nfc_adapter_request_mode(
     NfcAdapter* adapter,
-    NFC_MODE mode);
+    NFC_MODE mode)
+    NFCD_EXPORT;
 
 NfcTag*
 nfc_adapter_add_tag_t2(
     NfcAdapter* adapter,
     NfcTarget* target,
-    const NfcTagParamT2* params);
+    const NfcTagParamT2* params)
+    NFCD_EXPORT;
 
 NfcTag*
 nfc_adapter_add_tag_t4a(
     NfcAdapter* adapter,
     NfcTarget* target,
     const NfcParamPollA* poll_a,
-    const NfcParamIsoDepPollA* iso_dep_param); /* Since 1.0.20 */
+    const NfcParamIsoDepPollA* iso_dep_param) /* Since 1.0.20 */
+    NFCD_EXPORT;
 
 NfcTag*
 nfc_adapter_add_tag_t4b(
     NfcAdapter* adapter,
     NfcTarget* target,
     const NfcParamPollB* poll_b,
-    const NfcParamIsoDepPollB* iso_dep_param); /* Since 1.0.20 */
+    const NfcParamIsoDepPollB* iso_dep_param) /* Since 1.0.20 */
+    NFCD_EXPORT;
 
 NfcTag*
 nfc_adapter_add_other_tag(
     NfcAdapter* adapter,
     NfcTarget* target)
-    G_GNUC_DEPRECATED_FOR(nfc_adapter_add_other_tag2);
+    G_GNUC_DEPRECATED_FOR(nfc_adapter_add_other_tag2)
+    NFCD_EXPORT;
 
 NfcTag*
 nfc_adapter_add_other_tag2(
     NfcAdapter* adapter,
     NfcTarget* target,
-    const NfcParamPoll* poll); /* Since 1.0.33 */
+    const NfcParamPoll* poll) /* Since 1.0.33 */
+    NFCD_EXPORT;
 
 void
 nfc_adapter_remove_tag(
     NfcAdapter* adapter,
-    const char* name);
+    const char* name)
+    NFCD_EXPORT;
 
 gulong
 nfc_adapter_add_target_presence_handler(
     NfcAdapter* adapter,
     NfcAdapterFunc func,
-    void* user_data);
+    void* user_data)
+    NFCD_EXPORT;
 
 gulong
 nfc_adapter_add_tag_added_handler(
     NfcAdapter* adapter,
     NfcAdapterTagFunc func,
-    void* user_data);
+    void* user_data)
+    NFCD_EXPORT;
 
 gulong
 nfc_adapter_add_tag_removed_handler(
     NfcAdapter* adapter,
     NfcAdapterTagFunc func,
-    void* user_data);
+    void* user_data)
+    NFCD_EXPORT;
 
 gulong
 nfc_adapter_add_powered_changed_handler(
     NfcAdapter* adapter,
     NfcAdapterFunc func,
-    void* user_data);
+    void* user_data)
+    NFCD_EXPORT;
 
 gulong
 nfc_adapter_add_power_requested_handler(
     NfcAdapter* adapter,
     NfcAdapterFunc func,
-    void* user_data);
+    void* user_data)
+    NFCD_EXPORT;
 
 gulong
 nfc_adapter_add_mode_changed_handler(
     NfcAdapter* adapter,
     NfcAdapterFunc func,
-    void* user_data);
+    void* user_data)
+    NFCD_EXPORT;
 
 gulong
 nfc_adapter_add_mode_requested_handler(
     NfcAdapter* adapter,
     NfcAdapterFunc func,
-    void* user_data);
+    void* user_data)
+    NFCD_EXPORT;
 
 gulong
 nfc_adapter_add_enabled_changed_handler(
     NfcAdapter* adapter,
     NfcAdapterFunc func,
-    void* user_data);
+    void* user_data)
+    NFCD_EXPORT;
 
 void
 nfc_adapter_remove_handler(
     NfcAdapter* adapter,
-    gulong id);
+    gulong id)
+    NFCD_EXPORT;
 
 void
 nfc_adapter_remove_handlers(
     NfcAdapter* adapter,
     gulong* ids,
-    guint count);
+    guint count)
+    NFCD_EXPORT;
 
 #define nfc_adapter_remove_all_handlers(adapter,ids) \
     nfc_adapter_remove_handlers(adapter, ids, G_N_ELEMENTS(ids))

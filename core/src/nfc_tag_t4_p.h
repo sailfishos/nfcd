@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2019-2020 Jolla Ltd.
- * Copyright (C) 2019-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019-2021 Jolla Ltd.
+ * Copyright (C) 2019-2021 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
@@ -34,8 +34,8 @@
 #ifndef NFC_TAG_T4_PRIVATE_H
 #define NFC_TAG_T4_PRIVATE_H
 
-#include "nfc_tag_t4.h"
 #include "nfc_tag_p.h"
+#include "nfc_tag_t4.h"
 
 typedef struct nfc_tag_t4_class {
     NfcTagClass parent;

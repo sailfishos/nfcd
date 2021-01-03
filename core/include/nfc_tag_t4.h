@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2019 Jolla Ltd.
- * Copyright (C) 2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019-2021 Jolla Ltd.
+ * Copyright (C) 2019-2021 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
@@ -52,19 +52,19 @@ struct nfc_tag_t4 {
     const NfcParamIsoDep* iso_dep;
 };
 
-GType nfc_tag_t4_get_type();
+GType nfc_tag_t4_get_type() NFCD_EXPORT;
 #define NFC_TYPE_TAG_T4 (nfc_tag_t4_get_type())
 #define NFC_IS_TAG_T4(obj) G_TYPE_CHECK_INSTANCE_TYPE(obj, NFC_TYPE_TAG_T4)
 #define NFC_TAG_T4(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), NFC_TYPE_TAG_T4, \
         NfcTagType4))
 
-GType nfc_tag_t4a_get_type();
+GType nfc_tag_t4a_get_type() NFCD_EXPORT;
 #define NFC_TYPE_TAG_T4A (nfc_tag_t4a_get_type())
 #define NFC_IS_TAG_T4A(obj) G_TYPE_CHECK_INSTANCE_TYPE(obj, NFC_TYPE_TAG_T4A)
 #define NFC_TAG_T4A(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), NFC_TYPE_TAG_T4A, \
         NfcTagType4a))
 
-GType nfc_tag_t4b_get_type();
+GType nfc_tag_t4b_get_type() NFCD_EXPORT;
 #define NFC_TYPE_TAG_T4B (nfc_tag_t4b_get_type())
 #define NFC_IS_TAG_T4B(obj) G_TYPE_CHECK_INSTANCE_TYPE(obj, NFC_TYPE_TAG_T4B)
 #define NFC_TAG_T4B(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), NFC_TYPE_TAG_T4B, \
@@ -145,7 +145,8 @@ nfc_isodep_transmit(
     NfcTargetSequence* seq,
     NfcTagType4ResponseFunc resp,
     GDestroyNotify destroy,
-    void* user_data);
+    void* user_data)
+    NFCD_EXPORT;
 
 gboolean
 nfc_isodep_reset(
@@ -153,7 +154,8 @@ nfc_isodep_reset(
     NfcTargetSequence* seq,
     NfcTagType4ResetRespFunc resp,
     GDestroyNotify destroy,
-    void* user_data); /* Since 1.0.44 */
+    void* user_data) /* Since 1.0.44 */
+    NFCD_EXPORT;
 
 G_END_DECLS
 

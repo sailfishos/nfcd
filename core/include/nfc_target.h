@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -60,7 +60,7 @@ struct nfc_target {
     NfcTargetSequence* sequence;
 };
 
-GType nfc_target_get_type(void);
+GType nfc_target_get_type(void) NFCD_EXPORT;
 #define NFC_TYPE_TARGET (nfc_target_get_type())
 #define NFC_TARGET(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
         NFC_TYPE_TARGET, NfcTarget))
@@ -82,11 +82,13 @@ void
 
 NfcTarget*
 nfc_target_ref(
-    NfcTarget* target);
+    NfcTarget* target)
+    NFCD_EXPORT;
 
 void
 nfc_target_unref(
-    NfcTarget* target);
+    NfcTarget* target)
+    NFCD_EXPORT;
 
 /*
  * -1: Use default timeout
@@ -96,24 +98,28 @@ nfc_target_unref(
 void
 nfc_target_set_transmit_timeout(
     NfcTarget* target,
-    int ms); /* Since 1.0.37 */
+    int ms) /* Since 1.0.37 */
+    NFCD_EXPORT;
 
 gulong
 nfc_target_add_sequence_handler(
     NfcTarget* target,
     NfcTargetFunc func,
-    void* user_data); /* Since 1.0.17 */
+    void* user_data) /* Since 1.0.17 */
+    NFCD_EXPORT;
 
 void
 nfc_target_remove_handler(
     NfcTarget* target,
-    gulong id); /* Since 1.0.17 */
+    gulong id) /* Since 1.0.17 */
+    NFCD_EXPORT;
 
 void
 nfc_target_remove_handlers(
     NfcTarget* target,
     gulong* ids,
-    guint count); /* Since 1.0.17 */
+    guint count) /* Since 1.0.17 */
+    NFCD_EXPORT;
 
 #define nfc_target_remove_all_handlers(target,ids) \
     nfc_target_remove_handlers(target, ids, G_N_ELEMENTS(ids))
@@ -128,11 +134,13 @@ nfc_target_remove_handlers(
 
 NfcTargetSequence*
 nfc_target_sequence_new(
-    NfcTarget* target); /* Since 1.0.17 */
+    NfcTarget* target) /* Since 1.0.17 */
+    NFCD_EXPORT;
 
 void
 nfc_target_sequence_free(
-    NfcTargetSequence* seq); /* Since 1.0.17 */
+    NfcTargetSequence* seq) /* Since 1.0.17 */
+    NFCD_EXPORT;
 
 /*
  * These functions can be used for sending internal requests (e.g. presence
@@ -147,12 +155,14 @@ nfc_target_transmit(
     NfcTargetSequence* seq,
     NfcTargetTransmitFunc complete,
     GDestroyNotify destroy,
-    void* user_data);
+    void* user_data)
+    NFCD_EXPORT;
 
 gboolean
 nfc_target_cancel_transmit(
     NfcTarget* target,
-    guint id);
+    guint id)
+    NFCD_EXPORT;
 
 G_END_DECLS
 

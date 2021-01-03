@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2019 Jolla Ltd.
- * Copyright (C) 2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019-2021 Jolla Ltd.
+ * Copyright (C) 2019-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,6 +30,7 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "nfc_types_p.h"
 #include "nfc_core.h"
 #include "nfc_version.h"
 

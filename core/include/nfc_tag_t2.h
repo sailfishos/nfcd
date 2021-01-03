@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
@@ -58,7 +58,7 @@ struct nfc_tag_t2 {
     GUtilData serial;   /* Same as UID (nfcid1) */
 };
 
-GType nfc_tag_t2_get_type();
+GType nfc_tag_t2_get_type() NFCD_EXPORT;
 #define NFC_TYPE_TAG_T2 (nfc_tag_t2_get_type())
 #define NFC_TAG_T2(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
         NFC_TYPE_TAG_T2, NfcTagType2))
@@ -91,7 +91,8 @@ nfc_tag_t2_read(
     guint block,
     NfcTagType2ReadFunc resp,
     GDestroyNotify destroy,
-    void* user_data);
+    void* user_data)
+    NFCD_EXPORT;
 
 guint
 nfc_tag_t2_write(
@@ -101,7 +102,8 @@ nfc_tag_t2_write(
     GBytes* bytes,
     NfcTagType2WriteFunc complete,
     GDestroyNotify destroy,
-    void* user_data);
+    void* user_data)
+    NFCD_EXPORT;
 
 guint
 nfc_tag_t2_write_seq(
@@ -112,7 +114,8 @@ nfc_tag_t2_write_seq(
     NfcTargetSequence* seq,
     NfcTagType2WriteFunc complete,
     GDestroyNotify destroy,
-    void* user_data); /* Since 1.0.17 */
+    void* user_data) /* Since 1.0.17 */
+    NFCD_EXPORT;
 
 /*
  * The methods belows read only the data part of the chip's memory,
@@ -154,7 +157,8 @@ nfc_tag_t2_read_data(
     guint maxbytes,
     NfcTagType2ReadDataFunc resp,
     GDestroyNotify destroy,
-    void* user_data);
+    void* user_data)
+    NFCD_EXPORT;
 
 guint
 nfc_tag_t2_read_data_seq(
@@ -164,14 +168,16 @@ nfc_tag_t2_read_data_seq(
     NfcTargetSequence* seq,
     NfcTagType2ReadDataFunc resp,
     GDestroyNotify destroy,
-    void* user_data); /* Since 1.0.17 */
+    void* user_data) /* Since 1.0.17 */
+    NFCD_EXPORT;
 
 NFC_TAG_T2_IO_STATUS
 nfc_tag_t2_read_data_sync(
     NfcTagType2* tag,
     guint offset,
     guint nbytes,
-    void* buffer);
+    void* buffer)
+    NFCD_EXPORT;
 
 guint
 nfc_tag_t2_write_data(
@@ -180,7 +186,8 @@ nfc_tag_t2_write_data(
     GBytes* bytes,
     NfcTagType2WriteDataFunc complete,
     GDestroyNotify destroy,
-    void* user_data);
+    void* user_data)
+    NFCD_EXPORT;
 
 guint
 nfc_tag_t2_write_data_seq(
@@ -190,7 +197,8 @@ nfc_tag_t2_write_data_seq(
     NfcTargetSequence* seq,
     NfcTagType2WriteDataFunc complete,
     GDestroyNotify destroy,
-    void* user_data); /* Since 1.0.17 */
+    void* user_data) /* Since 1.0.17 */
+    NFCD_EXPORT;
 
 G_END_DECLS
 

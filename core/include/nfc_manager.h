@@ -50,7 +50,7 @@ struct nfc_manager {
     int error;
 };
 
-GType nfc_manager_get_type();
+GType nfc_manager_get_type() NFCD_EXPORT;
 #define NFC_TYPE_MANAGER (nfc_manager_get_type())
 #define NFC_MANAGER(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
         NFC_TYPE_MANAGER, NfcManager))
@@ -73,80 +73,95 @@ void
 
 NfcManager*
 nfc_manager_ref(
-    NfcManager* manager);
+    NfcManager* manager)
+    NFCD_EXPORT;
 
 void
 nfc_manager_unref(
-    NfcManager* manager);
+    NfcManager* manager)
+    NFCD_EXPORT;
 
 NfcPlugin* const*
 nfc_manager_plugins(
-    NfcManager* manager);
+    NfcManager* manager)
+    NFCD_EXPORT;
 
 NfcAdapter*
 nfc_manager_get_adapter(
     NfcManager* manager,
-    const char* name);
+    const char* name)
+    NFCD_EXPORT;
 
 const char*
 nfc_manager_add_adapter(
     NfcManager* manager,
-    NfcAdapter* adapter);
+    NfcAdapter* adapter)
+    NFCD_EXPORT;
 
 void
 nfc_manager_remove_adapter(
     NfcManager* manager,
-    const char* name);
+    const char* name)
+    NFCD_EXPORT;
 
 void
 nfc_manager_stop(
     NfcManager* manager,
-    int error);
+    int error)
+    NFCD_EXPORT;
 
 void
 nfc_manager_set_enabled(
     NfcManager* manager,
-    gboolean enabled);
+    gboolean enabled)
+    NFCD_EXPORT;
 
 void
 nfc_manager_request_power(
     NfcManager* manager,
-    gboolean on);
+    gboolean on)
+    NFCD_EXPORT;
 
 gulong
 nfc_manager_add_adapter_added_handler(
     NfcManager* manager,
     NfcManagerAdapterFunc func,
-    void* user_data);
+    void* user_data)
+    NFCD_EXPORT;
 
 gulong
 nfc_manager_add_adapter_removed_handler(
     NfcManager* manager,
     NfcManagerAdapterFunc func,
-    void* user_data);
+    void* user_data)
+    NFCD_EXPORT;
 
 gulong
 nfc_manager_add_enabled_changed_handler(
     NfcManager* manager,
     NfcManagerFunc func,
-    void* user_data);
+    void* user_data)
+    NFCD_EXPORT;
 
 gulong
 nfc_manager_add_stopped_handler(
     NfcManager* manager,
     NfcManagerFunc func,
-    void* user_data);
+    void* user_data)
+    NFCD_EXPORT;
 
 void
 nfc_manager_remove_handler(
     NfcManager* manager,
-    gulong id);
+    gulong id)
+    NFCD_EXPORT;
 
 void
 nfc_manager_remove_handlers(
     NfcManager* manager,
     gulong* ids,
-    guint count);
+    guint count)
+    NFCD_EXPORT;
 
 #define nfc_manager_remove_all_handlers(manager,ids) \
     nfc_manager_remove_handlers(manager, ids, G_N_ELEMENTS(ids))

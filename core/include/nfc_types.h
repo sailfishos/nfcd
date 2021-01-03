@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
@@ -126,9 +126,14 @@ typedef union nfc_param_poll {
     NfcParamPollB b;
 } NfcParamPoll; /* Since 1.0.33 */
 
+/* Mark functions exported to plugins as weak */
+#ifndef NFCD_EXPORT
+#  define NFCD_EXPORT __attribute__((weak))
+#endif
+
 /* Logging */
 #define NFC_CORE_LOG_MODULE nfc_core_log
-extern GLogModule NFC_CORE_LOG_MODULE;
+extern GLogModule NFC_CORE_LOG_MODULE NFCD_EXPORT;
 
 G_END_DECLS
 

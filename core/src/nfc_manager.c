@@ -32,8 +32,8 @@
 
 #define GLIB_DISABLE_DEPRECATION_WARNINGS
 
-#include "internal/nfc_manager_i.h"
 #include "nfc_manager_p.h"
+#include "internal/nfc_manager_i.h"
 #include "nfc_adapter_p.h"
 #include "nfc_plugins.h"
 #include "nfc_log.h"

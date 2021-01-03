@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2019-2020 Jolla Ltd.
- * Copyright (C) 2019-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019-2021 Jolla Ltd.
+ * Copyright (C) 2019-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,16 +30,17 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "test_common.h"
-#include "test_adapter.h"
-#include "test_dbus.h"
+#include "nfc_types_p.h"
+#include "internal/nfc_manager_i.h"
+#include "nfc_adapter.h"
+#include "nfc_version.h"
 
 #include "dbus_service/dbus_service.h"
 #include "dbus_service/plugin.h"
 
-#include "internal/nfc_manager_i.h"
-#include "nfc_adapter.h"
-#include "nfc_version.h"
+#include "test_common.h"
+#include "test_adapter.h"
+#include "test_dbus.h"
 
 #define NFC_DAEMON_INTERFACE "org.sailfishos.nfc.Daemon"
 

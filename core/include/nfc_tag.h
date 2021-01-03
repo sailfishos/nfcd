@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -57,7 +57,7 @@ struct nfc_tag {
     NfcNdefRec* ndef;  /* Valid only when initialized */
 };
 
-GType nfc_tag_get_type(void);
+GType nfc_tag_get_type(void) NFCD_EXPORT;
 #define NFC_TYPE_TAG (nfc_tag_get_type())
 #define NFC_TAG(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
         NFC_TYPE_TAG, NfcTag))
@@ -70,42 +70,50 @@ void
 
 NfcTag*
 nfc_tag_ref(
-    NfcTag* tag);
+    NfcTag* tag)
+    NFCD_EXPORT;
 
 void
 nfc_tag_unref(
-    NfcTag* tag);
+    NfcTag* tag)
+    NFCD_EXPORT;
 
 const NfcParamPoll*
 nfc_tag_param(
-    NfcTag* tag); /* Since 1.0.33 */
+    NfcTag* tag) /* Since 1.0.33 */
+    NFCD_EXPORT;
 
 void
 nfc_tag_deactivate(
-    NfcTag* tag);
+    NfcTag* tag)
+    NFCD_EXPORT;
 
 gulong
 nfc_tag_add_gone_handler(
     NfcTag* tag,
     NfcTagFunc func,
-    void* user_data);
+    void* user_data)
+    NFCD_EXPORT;
 
 gulong
 nfc_tag_add_initialized_handler(
     NfcTag* tag,
     NfcTagFunc func,
-    void* user_data);
+    void* user_data)
+    NFCD_EXPORT;
 
 void
 nfc_tag_remove_handler(
     NfcTag* tag,
-    gulong id);
+    gulong id)
+    NFCD_EXPORT;
 
 void
 nfc_tag_remove_handlers(
     NfcTag* tag,
     gulong* ids,
-    guint count);
+    guint count)
+    NFCD_EXPORT;
 
 #define nfc_tag_remove_all_handlers(tag,ids) \
     nfc_tag_remove_handlers(tag, ids, G_N_ELEMENTS(ids))

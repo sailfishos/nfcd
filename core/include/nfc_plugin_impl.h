@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -53,11 +53,6 @@ typedef struct nfc_plugin_class {
     void (*_reserved4)(void);
     void (*_reserved5)(void);
 } NfcPluginClass;
-
-GType nfc_plugin_get_type(void);
-#define NFC_TYPE_PLUGIN (nfc_plugin_get_type())
-#define NFC_PLUGIN(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
-        NFC_TYPE_PLUGIN, NfcPlugin))
 
 /*
  * NFC_PLUGIN_DEFINE - simple way to define NfcPluginDesc with a single

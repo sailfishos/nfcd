@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2019-2020 Jolla Ltd.
- * Copyright (C) 2019-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019-2021 Jolla Ltd.
+ * Copyright (C) 2019-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,19 +30,20 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "nfc_adapter_p.h"
+#include "nfc_plugins.h"
+#include "nfc_adapter_impl.h"
+#include "nfc_target_impl.h"
+#include "nfc_tag.h"
+
+#include "internal/nfc_manager_i.h"
+
+#include "dbus_service/dbus_service.h"
+
 #include "test_common.h"
 #include "test_adapter.h"
 #include "test_target.h"
 #include "test_dbus.h"
-
-#include "dbus_service/dbus_service.h"
-
-#include "internal/nfc_manager_i.h"
-#include "nfc_plugins.h"
-#include "nfc_adapter_p.h"
-#include "nfc_adapter_impl.h"
-#include "nfc_target_impl.h"
-#include "nfc_tag.h"
 
 #define NFC_ADAPTER_INTERFACE "org.sailfishos.nfc.Adapter"
 

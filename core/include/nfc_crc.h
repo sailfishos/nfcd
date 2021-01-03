@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -47,47 +47,55 @@ void
 nfc_crc_append_le16(
     NfcCrc16Func fn,
     guint8* data,
-    gsize size);
+    gsize size)
+    NFCD_EXPORT;
 
 gboolean
 nfc_crc_check_le16_tail(
     NfcCrc16Func fn,
     const guint8* data,
-    gsize len);
+    gsize len)
+    NFCD_EXPORT;
 
 /* CRC_A [ISO/IEC_13239] */
 
 guint16
 nfc_crc_a(
     const guint8* data,
-    gsize len);
+    gsize len)
+    NFCD_EXPORT;
 
 void
 nfc_crc_a_append(
     guint8* data,
-    gsize size);
+    gsize size)
+    NFCD_EXPORT;
 
 gboolean
 nfc_crc_a_check_tail(
     const guint8* data,
-    gsize len);
+    gsize len)
+    NFCD_EXPORT;
 
 /* CRC_B [ISO/IEC_13239] */
 
 guint16
 nfc_crc_b(
     const guint8* data,
-    gsize len);
+    gsize len)
+    NFCD_EXPORT;
 
 void
 nfc_crc_b_append(
     guint8* data,
-    gsize size);
+    gsize size)
+    NFCD_EXPORT;
 
 gboolean
 nfc_crc_b_check_tail(
     const guint8* data,
-    gsize len);
+    gsize len)
+    NFCD_EXPORT;
 
 G_END_DECLS
 

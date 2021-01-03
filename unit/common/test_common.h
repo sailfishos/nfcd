@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -33,7 +33,7 @@
 #ifndef TEST_COMMON_H
 #define TEST_COMMON_H
 
-#include <nfc_types.h>
+#include <gutil_types.h>
 
 /*
  * For whatever reason, g_assert() is a special case and can be disabled

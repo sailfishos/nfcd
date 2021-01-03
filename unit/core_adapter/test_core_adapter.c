@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,13 +30,13 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "test_common.h"
-#include "test_target.h"
-
 #include "nfc_adapter_p.h"
 #include "nfc_adapter_impl.h"
 #include "nfc_target_impl.h"
 #include "nfc_tag_t2.h"
+
+#include "test_common.h"
+#include "test_target.h"
 
 #include <gutil_log.h>
 

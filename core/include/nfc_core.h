@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2019 Jolla Ltd.
- * Copyright (C) 2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019-2021 Jolla Ltd.
+ * Copyright (C) 2019-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -41,7 +41,8 @@ G_BEGIN_DECLS
 
 guint
 nfc_core_version(
-    void); /* Since 1.0.26 */
+    void) /* Since 1.0.26 */
+    NFCD_EXPORT;
 
 G_END_DECLS
 

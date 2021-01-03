@@ -30,11 +30,11 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "test_common.h"
-
-#include "internal/nfc_manager_i.h"
 #include "nfc_manager_p.h"
+#include "internal/nfc_manager_i.h"
 #include "nfc_adapter_impl.h"
+
+#include "test_common.h"
 
 #include <gutil_log.h>
 

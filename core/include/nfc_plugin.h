@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -62,13 +62,20 @@ struct nfc_plugin {
     const NfcPluginDesc* desc;
 };
 
+GType nfc_plugin_get_type(void) NFCD_EXPORT;
+#define NFC_TYPE_PLUGIN (nfc_plugin_get_type())
+#define NFC_PLUGIN(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
+        NFC_TYPE_PLUGIN, NfcPlugin))
+
 NfcPlugin*
 nfc_plugin_ref(
-    NfcPlugin* plugin);
+    NfcPlugin* plugin)
+    NFCD_EXPORT;
 
 void
 nfc_plugin_unref(
-    NfcPlugin* plugin);
+    NfcPlugin* plugin)
+    NFCD_EXPORT;
 
 /*
  * NFC_PLUGIN_DECLARE - declares NfcPluginDesc in a way compatible with

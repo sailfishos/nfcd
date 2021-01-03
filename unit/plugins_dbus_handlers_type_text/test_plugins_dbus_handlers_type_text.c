@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2019 Jolla Ltd.
- * Copyright (C) 2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019-2021 Jolla Ltd.
+ * Copyright (C) 2019-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,12 +30,12 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "test_common.h"
-
-#include "nfc_system.h"
 #include "nfc_util.h"
+#include "nfc_system.h"
 
 #include "dbus_handlers/dbus_handlers.h"
+
+#include "test_common.h"
 
 #include <glib/gstdio.h>
 

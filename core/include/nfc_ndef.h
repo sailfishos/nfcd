@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -79,26 +79,30 @@ struct nfc_ndef_rec {
     GUtilData payload;
 };
 
-GType nfc_ndef_rec_get_type(void);
+GType nfc_ndef_rec_get_type(void) NFCD_EXPORT;
 #define NFC_TYPE_NDEF_REC (nfc_ndef_rec_get_type())
 #define NFC_NDEF_REC(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
         NFC_TYPE_NDEF_REC, NfcNdefRec))
 
 NfcNdefRec*
 nfc_ndef_rec_new(
-   const GUtilData* block);
+   const GUtilData* block)
+    NFCD_EXPORT;
 
 NfcNdefRec*
 nfc_ndef_rec_new_tlv(
-   const GUtilData* tlv);
+   const GUtilData* tlv)
+    NFCD_EXPORT;
 
 NfcNdefRec*
 nfc_ndef_rec_ref(
-    NfcNdefRec* rec);
+    NfcNdefRec* rec)
+    NFCD_EXPORT;
 
 void
 nfc_ndef_rec_unref(
-    NfcNdefRec* rec);
+    NfcNdefRec* rec)
+    NFCD_EXPORT;
 
 /* URI */
 
@@ -110,7 +114,7 @@ typedef struct nfc_ndef_rec_u {
     const char* uri;
 } NfcNdefRecU;
 
-GType nfc_ndef_rec_u_get_type(void);
+GType nfc_ndef_rec_u_get_type(void) NFCD_EXPORT;
 #define NFC_TYPE_NDEF_REC_U (nfc_ndef_rec_u_get_type())
 #define NFC_NDEF_REC_U(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
         NFC_TYPE_NDEF_REC_U, NfcNdefRecU))
@@ -119,7 +123,8 @@ GType nfc_ndef_rec_u_get_type(void);
 
 NfcNdefRecU*
 nfc_ndef_rec_u_new(
-    const char* uri);
+    const char* uri)
+    NFCD_EXPORT;
 
 /* Text */
 
@@ -132,7 +137,7 @@ typedef struct nfc_ndef_rec_t {
     const char* text;
 } NfcNdefRecT;
 
-GType nfc_ndef_rec_t_get_type(void);
+GType nfc_ndef_rec_t_get_type(void) NFCD_EXPORT;
 #define NFC_TYPE_NDEF_REC_T (nfc_ndef_rec_t_get_type())
 #define NFC_NDEF_REC_T(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
         NFC_TYPE_NDEF_REC_T, NfcNdefRecT))
@@ -156,7 +161,8 @@ NfcNdefRecT*
 nfc_ndef_rec_t_new_enc(
     const char* text,
     const char* lang,
-    NFC_NDEF_REC_T_ENC enc);
+    NFC_NDEF_REC_T_ENC enc)
+    NFCD_EXPORT;
 
 #define nfc_ndef_rec_t_new(text, lang) \
     nfc_ndef_rec_t_new_enc(text, lang, NFC_NDEF_REC_T_ENC_UTF8)
@@ -164,13 +170,15 @@ nfc_ndef_rec_t_new_enc(
 NFC_LANG_MATCH
 nfc_ndef_rec_t_lang_match(
     NfcNdefRecT* rec,
-    const NfcLanguage* lang); /* Since 1.0.15 */
+    const NfcLanguage* lang) /* Since 1.0.15 */
+    NFCD_EXPORT;
 
 gint
 nfc_ndef_rec_t_lang_compare(
     gconstpointer a,   /* NfcNdefRecT* */
     gconstpointer b,   /* NfcNdefRecT* */
-    gpointer user_data /* NfcLanguage* */); /* Since 1.0.18 */
+    gpointer user_data /* NfcLanguage* */) /* Since 1.0.18 */
+    NFCD_EXPORT;
 
 /* Smart poster */
 
@@ -200,7 +208,7 @@ typedef struct nfc_ndef_rec_sp {
     const NfcNdefMedia* icon;
 } NfcNdefRecSp;
 
-GType nfc_ndef_rec_sp_get_type(void);
+GType nfc_ndef_rec_sp_get_type(void) NFCD_EXPORT;
 #define NFC_TYPE_NDEF_REC_SP (nfc_ndef_rec_sp_get_type())
 #define NFC_NDEF_REC_SP(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
         NFC_TYPE_NDEF_REC_SP, NfcNdefRecSp))
@@ -215,14 +223,16 @@ nfc_ndef_rec_sp_new(
     const char* type,
     guint size,
     NFC_NDEF_SP_ACT act,
-    const NfcNdefMedia* icon); /* Since 1.0.18 */
+    const NfcNdefMedia* icon) /* Since 1.0.18 */
+    NFCD_EXPORT;
 
 /* Utilities */
 
 gboolean
 nfc_ndef_valid_mediatype(
     const GUtilData* type,
-    gboolean wildcard); /* Since 1.0.18 */
+    gboolean wildcard) /* Since 1.0.18 */
+    NFCD_EXPORT;
 
 /* These are not yet implemented: */
 
