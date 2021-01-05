@@ -400,16 +400,19 @@ void
 nfc_tag_t4_init_done(
     NfcTarget* target,
     NFC_REACTIVATE_STATUS status,
-    void* self)
+    void* tag)
 {
+    NfcTagType4* self = NFC_TAG_T4(tag);
+
     /*
      * It doesn't make sense to mark tag as initialized in case of
      * reactivation timeout, because the tag going to get deactivated
      * and dropped right after this function returns.
      */
     if (status != NFC_REACTIVATE_STATUS_TIMEOUT) {
-        nfc_tag_t4_initialized(NFC_TAG_T4(self));
+        nfc_tag_t4_initialized(self);
     }
+    nfc_tag_unref(&self->tag);
 }
 
 static
@@ -425,10 +428,12 @@ nfc_tag_t4_ndef_read_done(
      * times out.
      */
     GDEBUG("Reactivating Type 4 tag");
+    nfc_tag_ref(&self->tag);
     if (!nfc_target_reactivate(self->tag.target, priv->init_seq,
         nfc_tag_t4_init_done, NULL, self)) {
         GDEBUG("Oops. Failed to reactivate, leaving the tag as is");
         nfc_tag_t4_initialized(self);
+        nfc_tag_unref(&self->tag);
     }
 }
 
