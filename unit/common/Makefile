@@ -37,7 +37,7 @@ COVERAGE_BUILD_DIR = $(BUILD_DIR)/coverage
 # Required packages
 #
 
-PKGS += libglibutil glib-2.0 gobject-2.0
+PKGS += libglibutil glib-2.0 gobject-2.0 gio-2.0 gio-unix-2.0
 
 ifneq ($(GEN_SRC),)
 # Additional requirements for generated stubs
@@ -140,11 +140,11 @@ DEBUG_EXE = $(DEBUG_BUILD_DIR)/$(EXE)
 RELEASE_EXE = $(RELEASE_BUILD_DIR)/$(EXE)
 COVERAGE_EXE = $(COVERAGE_BUILD_DIR)/$(EXE)
 
-debug: $(DEBUG_EXE)
+debug: debug_core_lib $(DEBUG_EXE)
 
-release: $(RELEASE_EXE)
+release: release_core_lib $(RELEASE_EXE)
 
-coverage: $(COVERAGE_EXE)
+coverage: coverage_core_lib $(COVERAGE_EXE)
 
 unitclean:
 	rm -f *~

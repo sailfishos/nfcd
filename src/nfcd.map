@@ -3,8 +3,11 @@
         nfc_adapter_*;
         nfc_core_*;
         nfc_crc_*;
+        nfc_initiator_*;
+        nfc_llc_*;
         nfc_manager_*;
         nfc_ndef_rec_*;
+        nfc_peer_*;
         nfc_plugin_*;
         nfc_tag_*;
         nfc_target_*;

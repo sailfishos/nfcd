@@ -8,7 +8,7 @@
 # Required packages
 #
 
-PKGS = libglibutil glib-2.0 gobject-2.0
+PKGS = libglibutil glib-2.0 gobject-2.0 gio-2.0 gio-unix-2.0
 
 #
 # Default target
@@ -32,14 +32,28 @@ SRC = \
   nfc_adapter.c \
   nfc_crc.c \
   nfc_core.c \
+  nfc_initiator.c \
+  nfc_llc.c \
+  nfc_llc_io.c \
+  nfc_llc_io_initiator.c \
+  nfc_llc_io_target.c \
+  nfc_llc_param.c \
   nfc_locale.c \
   nfc_manager.c \
   nfc_ndef_rec.c \
   nfc_ndef_rec_sp.c \
   nfc_ndef_rec_u.c \
   nfc_ndef_rec_t.c \
+  nfc_peer.c \
+  nfc_peer_connection.c \
+  nfc_peer_initiator.c \
+  nfc_peer_service.c \
+  nfc_peer_services.c \
+  nfc_peer_socket.c \
+  nfc_peer_target.c \
   nfc_plugins.c \
   nfc_plugin.c \
+  nfc_snep_server.c \
   nfc_tag.c \
   nfc_tag_t2.c \
   nfc_tag_t4.c \

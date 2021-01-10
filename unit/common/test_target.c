@@ -35,6 +35,9 @@
 
 #include <gutil_log.h>
 
+#define THIS_TYPE TEST_TYPE_TARGET
+#define THIS(obj) TEST_TARGET(obj)
+#define PARENT_CLASS test_target_parent_class
 G_DEFINE_TYPE(TestTarget, test_target, NFC_TYPE_TARGET)
 
 static
@@ -124,13 +127,13 @@ test_target_deactivate(
 {
     nfc_target_gone(target);
 }
-
+ 
 static
 void
 test_target_init(
     TestTarget* self)
 {
-    self->fail_transmit = -1; /* Always fail everything by default */
+    self->fail_transmit = TEST_TARGET_FAIL_ALL;
     self->cmd_resp = g_ptr_array_new_with_free_func(g_free);
 }
 
@@ -161,18 +164,24 @@ test_target_class_init(
 
 NfcTarget*
 test_target_new(
-    void)
+    int fail)
 {
-     return g_object_new(TEST_TYPE_TARGET, NULL);
+    TestTarget* self = g_object_new(TEST_TYPE_TARGET, NULL);
+
+    self->fail_transmit = fail;
+    return NFC_TARGET(self);
 }
 
 NfcTarget*
 test_target_new_tech(
-    NFC_TECHNOLOGY tech)
+    NFC_TECHNOLOGY tech,
+    int fail)
 {
-    NfcTarget* target = test_target_new();
+    TestTarget* self = g_object_new(TEST_TYPE_TARGET, NULL);
+    NfcTarget* target = NFC_TARGET(self);
 
     target->technology = tech;
+    self->fail_transmit = fail;
     return target;
 }
 
@@ -187,7 +196,7 @@ test_target_new_tech_with_data(
     TestTarget* self = g_object_new(TEST_TYPE_TARGET, NULL);
 
     self->target.technology = tech;
-    self->fail_transmit = 0;
+    self->fail_transmit = TEST_TARGET_FAIL_NONE;
     g_ptr_array_add(self->cmd_resp, test_alloc_data(cmd_bytes, cmd_len));
     g_ptr_array_add(self->cmd_resp, test_alloc_data(resp_bytes, resp_len));
     return &self->target;
@@ -203,9 +212,33 @@ test_target_add_data(
 {
     TestTarget* self = TEST_TARGET(target);
 
-    self->fail_transmit = 0;
+    self->fail_transmit = TEST_TARGET_FAIL_NONE;
     g_ptr_array_add(self->cmd_resp, test_alloc_data(cmd_bytes, cmd_len));
     g_ptr_array_add(self->cmd_resp, test_alloc_data(resp_bytes, resp_len));
+}
+
+NfcTarget*
+test_target_new_with_tx(
+    const TestTx* tx_list,
+    gsize tx_count)
+{
+    gsize i;
+    TestTarget* self = g_object_new(THIS_TYPE, NULL);
+
+    self->fail_transmit = TEST_TARGET_FAIL_NONE;
+    for (i = 0; i < tx_count; i++) {
+        const TestTx* tx = tx_list + i;
+        const GUtilData* in = &tx->in;
+        const GUtilData* out = &tx->out;
+
+        if (in->bytes) {
+            g_ptr_array_add(self->cmd_resp, test_clone_data(in));
+            if (out->bytes) {
+                g_ptr_array_add(self->cmd_resp, test_clone_data(out));
+            }
+        }
+    }
+    return NFC_TARGET(self);
 }
 
 /*

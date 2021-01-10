@@ -49,6 +49,11 @@ typedef struct test_opt {
     int flags;
 } TestOpt;
 
+typedef struct test_tx {
+    GUtilData in;
+    GUtilData out;
+} TestTx;
+
 /* Should be invoked after g_test_init */
 void
 test_init(

@@ -527,8 +527,6 @@ dbus_service_tag_t2_new(
     NfcTagType2* t2,
     DBusServiceTag* owner)
 {
-    GDBusConnection* connection = dbus_service_tag_connection(owner);
-    const char* path = dbus_service_tag_path(owner);
     DBusServiceTagType2* self = g_new0(DBusServiceTagType2, 1);
     GError* error = NULL;
 
@@ -569,11 +567,11 @@ dbus_service_tag_t2_new(
         G_CALLBACK(dbus_service_tag_t2_handle_write_data), self);
 
     if (g_dbus_interface_skeleton_export(G_DBUS_INTERFACE_SKELETON
-        (self->iface), connection, path, &error)) {
-        GDEBUG("Created D-Bus object %s (Type2)", path);
+        (self->iface), owner->connection, owner->path, &error)) {
+        GDEBUG("Created D-Bus object %s (Type2)", owner->path);
         return self;
     } else {
-        GERR("%s: %s", path, GERRMSG(error));
+        GERR("%s: %s", owner->path, GERRMSG(error));
         g_error_free(error);
         dbus_service_tag_t2_free_unexported(self);
         return NULL;
@@ -585,8 +583,7 @@ dbus_service_tag_t2_free(
     DBusServiceTagType2* self)
 {
     if (self) {
-        GDEBUG("Removing D-Bus object %s (Type2)",
-            dbus_service_tag_path(self->owner));
+        GDEBUG("Removing D-Bus object %s (Type2)", self->owner->path);
         g_dbus_interface_skeleton_unexport(G_DBUS_INTERFACE_SKELETON
             (self->iface));
         dbus_service_tag_t2_free_unexported(self);

@@ -33,6 +33,8 @@
 #include "nfc_adapter_p.h"
 #include "nfc_plugins.h"
 #include "nfc_adapter_impl.h"
+#include "nfc_peer.h"
+#include "nfc_initiator_impl.h"
 #include "nfc_target_impl.h"
 #include "nfc_tag.h"
 
@@ -43,9 +45,11 @@
 #include "test_common.h"
 #include "test_adapter.h"
 #include "test_target.h"
+#include "test_initiator.h"
 #include "test_dbus.h"
 
 #define NFC_ADAPTER_INTERFACE "org.sailfishos.nfc.Adapter"
+#define NFC_ADAPTER_INTERFACE_VERSION  (2)
 
 static TestOpt test_opt;
 
@@ -53,6 +57,7 @@ typedef struct test_data {
     GMainLoop* loop;
     NfcManager* manager;
     NfcAdapter* adapter;
+    NfcInitiator* initiator;
     DBusServiceAdapter* service;
 } TestData;
 
@@ -78,6 +83,7 @@ test_data_cleanup(
 {
     nfc_adapter_unref(test->adapter);
     nfc_manager_unref(test->manager);
+    nfc_initiator_unref(test->initiator);
     dbus_service_adapter_free(test->service);
     g_main_loop_unref(test->loop);
 }
@@ -107,6 +113,7 @@ void
 test_null(
     void)
 {
+    g_assert(!dbus_service_adapter_find_peer(NULL, NULL));
     dbus_service_adapter_free(NULL);
 }
 
@@ -176,10 +183,11 @@ test_get_all_done(
     GDEBUG("version=%d, enabled=%d, powered=%d, modes=%0x04X, mode=0x%04X, "
         "target_present=%d, %u tags", version, enabled, powered, modes, mode,
          target_present, g_strv_length(tags));
-    g_assert(version >= 1);
+    g_assert(version >= NFC_ADAPTER_INTERFACE_VERSION);
     g_assert(enabled);
     g_assert(!powered);
     g_assert(!target_present);
+    g_assert(tags);
     g_variant_unref(var);
     g_strfreev(tags);
     test_quit_later(test->loop);
@@ -206,6 +214,71 @@ test_get_all(
 
     test_data_init(&test);
     dbus = test_dbus_new(test_get_all_start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+/*==========================================================================*
+ * get_all2
+ *==========================================================================*/
+
+static
+void
+test_get_all2_done(
+    GObject* object,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    gint version = 0;
+    gboolean enabled = FALSE, powered = TRUE, target_present = FALSE;
+    guint modes, mode;
+    gchar** tags = NULL;
+    gchar** peers = NULL;
+    GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
+        result, NULL);
+
+    g_assert(var);
+    g_variant_get(var, "(ibbuub^ao^ao)", &version, &enabled, &powered,
+        &modes, &mode, &target_present, &tags, &peers);
+    GDEBUG("version=%d, enabled=%d, powered=%d, modes=%0x04X, mode=0x%04X, "
+        "target_present=%d, %u tags, %u peers", version, enabled, powered,
+        modes, mode, target_present, g_strv_length(tags),
+        g_strv_length(peers));
+    g_assert(version >= NFC_ADAPTER_INTERFACE_VERSION);
+    g_assert(enabled);
+    g_assert(!powered);
+    g_assert(!target_present);
+    g_assert(tags);
+    g_assert(peers);
+    g_variant_unref(var);
+    g_strfreev(tags);
+    g_strfreev(peers);
+    test_quit_later(test->loop);
+}
+
+static
+void
+test_get_all2_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    test_start_and_get((TestData*)user_data, client, server,
+        "GetAll2", test_get_all2_done);
+}
+
+static
+void
+test_get_all2(
+    void)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_data_init(&test);
+    dbus = test_dbus_new(test_get_all2_start, &test);
     test_run(&test_opt, test.loop);
     test_data_cleanup(&test);
     test_dbus_free(dbus);
@@ -551,7 +624,7 @@ test_get_tags_start(
     g_assert(test->service);
 
     /* Add second tag after creating DBusServiceAdapter */
-    target = test_target_new();
+    target = test_target_new(FALSE);
     memset(&poll, 0, sizeof(poll));
     g_assert(nfc_adapter_add_other_tag2(test->adapter, target, &poll));
     nfc_target_unref(target);
@@ -575,12 +648,71 @@ test_get_tags(
     test_data_init(&test);
 
     /* Add one tag before creating DBusServiceAdapter */
-    target = test_target_new();
+    target = test_target_new(FALSE);
     memset(&poll, 0, sizeof(poll));
     g_assert(nfc_adapter_add_other_tag2(test.adapter, target, &poll));
     nfc_target_unref(target);
 
     dbus = test_dbus_new(test_get_tags_start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+/*==========================================================================*
+ * get_peers
+ *==========================================================================*/
+
+static
+void
+test_get_peers_done(
+    GObject* object,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    gchar** peers = NULL;
+    GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
+        result, NULL);
+
+    g_assert(var);
+    g_variant_get(var, "(^ao)", &peers);
+    g_assert(peers);
+    GDEBUG("%u peer(s)", g_strv_length(peers));
+    g_variant_unref(var);
+    g_strfreev(peers);
+    test_quit_later_n(test->loop, 100); /* Allow everything to complete */
+}
+
+static
+void
+test_get_peers_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+
+    test->service = dbus_service_adapter_new(test->adapter, server);
+    g_assert(!dbus_service_adapter_find_peer(test->service, NULL));
+    g_assert(test->service);
+
+    g_dbus_connection_call(client, NULL,
+        dbus_service_adapter_path(test->service), NFC_ADAPTER_INTERFACE,
+        "GetPeers", NULL, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+        test_get_peers_done, test);
+}
+
+static
+void
+test_get_peers(
+    void)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_data_init(&test);
+    dbus = test_dbus_new(test_get_peers_start, &test);
     test_run(&test_opt, test.loop);
     test_data_cleanup(&test);
     test_dbus_free(dbus);
@@ -818,7 +950,7 @@ test_tag_added_start(
         test, NULL));
 
     /* Add a tag */
-    target = test_target_new();
+    target = test_target_new(FALSE);
     memset(&poll, 0, sizeof(poll));
     g_assert(nfc_adapter_add_other_tag2(test->adapter, target, &poll));
     nfc_target_unref(target);
@@ -903,12 +1035,161 @@ test_tag_removed(
 
     test_data_init(&test);
 
-    target = test_target_new();
+    target = test_target_new(FALSE);
     memset(&poll, 0, sizeof(poll));
     g_assert(nfc_adapter_add_other_tag2(test.adapter, target, &poll));
     nfc_target_unref(target);
 
     dbus = test_dbus_new(test_tag_removed_start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+/*==========================================================================*
+ * peer_added
+ *==========================================================================*/
+
+static const guint8 atr_req_general_bytes [] = {
+    0x46, 0x66, 0x6d, 0x01, 0x01, 0x11, 0x02, 0x02,
+    0x07, 0xff, 0x03, 0x02, 0x00, 0x13, 0x04, 0x01,
+    0xff
+};
+static const NfcParamNfcDepTarget peer_target_param = {
+    { TEST_ARRAY_AND_SIZE(atr_req_general_bytes) }
+};
+
+static
+void
+test_peer_added_handler(
+    GDBusConnection* connection,
+    const char* sender,
+    const char* path,
+    const char* iface,
+    const char* name,
+    GVariant* args,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    gchar** peers = NULL;
+
+    g_variant_get(args, "(^ao)", &peers);
+    g_assert(peers);
+    GDEBUG("%u peer(s)", g_strv_length(peers));
+    g_assert(g_strv_length(peers) == 1);
+    g_strfreev(peers);
+    test_quit_later(test->loop);
+}
+
+static
+void
+test_peer_added_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+    NfcInitiator* initiator;
+
+    test->service = dbus_service_adapter_new(test->adapter, server);
+    g_assert(test->service);
+
+    g_assert(g_dbus_connection_signal_subscribe(client, NULL,
+        NFC_ADAPTER_INTERFACE, "PeersChanged",
+        dbus_service_adapter_path(test->service), NULL,
+        G_DBUS_SIGNAL_FLAGS_NO_MATCH_RULE, test_peer_added_handler,
+        test, NULL));
+
+    /* Add a peer */
+    initiator = test_initiator_new();
+    g_assert(nfc_adapter_add_peer_target_a(test->adapter, initiator, NULL,
+        &peer_target_param));
+    nfc_initiator_unref(initiator);
+}
+
+static
+void
+test_peer_added(
+    void)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_data_init(&test);
+    dbus = test_dbus_new(test_peer_added_start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+/*==========================================================================*
+ * peer_removed
+ *==========================================================================*/
+
+static
+void
+test_peer_removed_handler(
+    GDBusConnection* connection,
+    const char* sender,
+    const char* path,
+    const char* iface,
+    const char* name,
+    GVariant* args,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    gchar** peers = NULL;
+
+    g_variant_get(args, "(^ao)", &peers);
+    g_assert(peers);
+    GDEBUG("%u peer(s)", g_strv_length(peers));
+    g_assert(g_strv_length(peers) == 0);
+    g_strfreev(peers);
+    test_quit_later(test->loop);
+}
+
+static
+void
+test_peer_removed_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+    NfcPeer* peer = nfc_peer_ref(nfc_adapter_peers(test->adapter)[0]);
+
+    test->service = dbus_service_adapter_new(test->adapter, server);
+    g_assert(test->service);
+    g_assert(peer);
+    g_assert(dbus_service_adapter_find_peer(test->service, peer));
+
+    g_assert(g_dbus_connection_signal_subscribe(client, NULL,
+        NFC_ADAPTER_INTERFACE, "PeersChanged",
+        dbus_service_adapter_path(test->service), NULL,
+        G_DBUS_SIGNAL_FLAGS_NO_MATCH_RULE, test_peer_removed_handler,
+        test, NULL));
+
+    /* Remove the peer */
+    nfc_initiator_gone(test->initiator);
+    g_assert(!dbus_service_adapter_find_peer(test->service, peer));
+    nfc_peer_unref(peer);
+}
+
+static
+void
+test_peer_removed(
+    void)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_data_init(&test);
+
+    test.initiator = test_initiator_new();
+    g_assert(nfc_adapter_add_peer_target_a(test.adapter, test.initiator, NULL,
+        &peer_target_param));
+
+    dbus = test_dbus_new(test_peer_removed_start, &test);
     test_run(&test_opt, test.loop);
     test_data_cleanup(&test);
     test_dbus_free(dbus);
@@ -929,6 +1210,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("null"), test_null);
     g_test_add_func(TEST_("basic"), test_basic);
     g_test_add_func(TEST_("get_all"), test_get_all);
+    g_test_add_func(TEST_("get_all2"), test_get_all2);
     g_test_add_func(TEST_("get_interface_version"), test_get_interface_version);
     g_test_add_func(TEST_("get_enabled"), test_get_enabled);
     g_test_add_func(TEST_("get_powered"), test_get_powered);
@@ -936,11 +1218,14 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("get_mode"), test_get_mode);
     g_test_add_func(TEST_("get_target_present"), test_get_target_present);
     g_test_add_func(TEST_("get_tags"), test_get_tags);
+    g_test_add_func(TEST_("get_peers"), test_get_peers);
     g_test_add_func(TEST_("enabled_changed"), test_enabled_changed);
     g_test_add_func(TEST_("powered_changed"), test_powered_changed);
     g_test_add_func(TEST_("mode_changed"), test_mode_changed);
     g_test_add_func(TEST_("tag_added"), test_tag_added);
     g_test_add_func(TEST_("tag_removed"), test_tag_removed);
+    g_test_add_func(TEST_("peer_added"), test_peer_added);
+    g_test_add_func(TEST_("peer_removed"), test_peer_removed);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

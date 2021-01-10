@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -38,7 +38,7 @@
 #define GLOG_MODULE_NAME dbus_service_log
 #include <gutil_log.h>
 
-#include <nfc_types.h>
+#include <nfc_peer_service.h>
 
 #include <gio/gio.h>
 
@@ -48,6 +48,7 @@ typedef struct dbus_service_plugin DBusServicePlugin;
 typedef struct dbus_service_tag DBusServiceTag;
 typedef struct dbus_service_tag_t2 DBusServiceTagType2;
 typedef struct dbus_service_isodep DBusServiceIsoDep;
+typedef struct dbus_service_peer DBusServicePeer;
 
 #define DBUS_SERVICE_ERROR (dbus_service_error_quark())
 GQuark dbus_service_error_quark(void);
@@ -60,6 +61,10 @@ typedef enum dbus_service_error {
     DBUS_SERVICE_ERROR_NOT_SUPPORTED,   /* NotSupported */
     DBUS_SERVICE_ERROR_ABORTED,         /* Aborted */
     DBUS_SERVICE_ERROR_NACK,            /* NACK */
+    DBUS_SERVICE_ERROR_CANCELLED,       /* Cancelled */
+    DBUS_SERVICE_ERROR_NO_SERVICE,      /* NoService */
+    DBUS_SERVICE_ERROR_REJECTED,        /* Rejected */
+    DBUS_SERVICE_ERROR_ALREADY_EXISTS,  /* AlreadyExists */
     DBUS_SERVICE_NUM_ERRORS
 } DBusServiceError;
 
@@ -78,6 +83,27 @@ void
 dbus_service_name_unown(
     guint id);
 
+DBusServicePeer*
+dbus_service_plugin_find_peer(
+    DBusServicePlugin* plugin,
+    NfcPeer* peer);
+
+/* org.sailfishos.nfc.LocalService */
+
+typedef struct dbus_service_local {
+    NfcPeerService service;
+    DBusServicePlugin* plugin;
+    const char* dbus_name;
+    const char* obj_path;
+} DBusServiceLocal;
+
+DBusServiceLocal*
+dbus_service_local_new(
+    GDBusConnection* connection,
+    const char* obj_path,
+    const char* llc_name,
+    const char* dbus_name);
+
 /* org.sailfishos.nfc.Adapter */
 
 DBusServiceAdapter*
@@ -89,25 +115,28 @@ const char*
 dbus_service_adapter_path(
     DBusServiceAdapter* adapter);
 
+DBusServicePeer*
+dbus_service_adapter_find_peer(
+    DBusServiceAdapter* self,
+    NfcPeer* peer);
+
 void
 dbus_service_adapter_free(
     DBusServiceAdapter* adapter);
 
 /* org.sailfishos.nfc.Tag */
 
+struct dbus_service_tag {
+    GDBusConnection* connection;
+    const char* path;
+    NfcTag* tag;
+};
+
 DBusServiceTag*
 dbus_service_tag_new(
     NfcTag* tag,
     const char* parent_path,
     GDBusConnection* connection);
-
-GDBusConnection*
-dbus_service_tag_connection(
-    DBusServiceTag* tag);
-
-const char*
-dbus_service_tag_path(
-    DBusServiceTag* tag);
 
 NfcTargetSequence*
 dbus_service_tag_sequence(
@@ -154,7 +183,25 @@ dbus_service_isodep_new(
 
 void
 dbus_service_isodep_free(
-    DBusServiceIsoDep* t2);
+    DBusServiceIsoDep* isodep);
+
+/* org.sailfishos.nfc.Peer */
+
+struct dbus_service_peer {
+    GDBusConnection* connection;
+    const char* path;
+    NfcPeer* peer;
+};
+
+DBusServicePeer*
+dbus_service_peer_new(
+    NfcPeer* peer,
+    const char* parent_path,
+    GDBusConnection* connection);
+
+void
+dbus_service_peer_free(
+    DBusServicePeer* peer);
 
 #endif /* DBUS_SERVICE_H */
 

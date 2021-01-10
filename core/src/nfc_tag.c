@@ -48,6 +48,8 @@ struct nfc_tag_priv {
 };
 
 G_DEFINE_TYPE(NfcTag, nfc_tag, G_TYPE_OBJECT)
+#define NFC_TAG_GET_CLASS(obj) G_TYPE_INSTANCE_GET_CLASS((obj), \
+        NFC_TYPE_TAG, NfcTagClass)
 
 enum nfc_tag_signal {
     SIGNAL_INITIALIZED,
@@ -69,9 +71,7 @@ nfc_tag_gone(
     NfcTag* self = NFC_TAG(user_data);
 
     /* NfcTarget makes sure that this signal is only issued once */
-    GASSERT(self->present);
-    self->present = FALSE;
-    g_signal_emit(self, nfc_tag_signals[SIGNAL_GONE], 0);
+    NFC_TAG_GET_CLASS(self)->gone(self);
 }
 
 /*==========================================================================*
@@ -258,6 +258,21 @@ nfc_tag_set_initialized(
 }
 
 /*==========================================================================*
+ * Methods
+ *==========================================================================*/
+
+static
+void
+nfc_tag_default_gone(
+    NfcTag* self)
+{
+    /* Must only be invoked once per lifetime */
+    GASSERT(self->present);
+    self->present = FALSE;
+    g_signal_emit(self, nfc_tag_signals[SIGNAL_GONE], 0);
+}
+
+/*==========================================================================*
  * Internals
  *==========================================================================*/
 
@@ -291,6 +306,7 @@ nfc_tag_class_init(
     NfcTagClass* klass)
 {
     g_type_class_add_private(klass, sizeof(NfcTagPriv));
+    klass->gone = nfc_tag_default_gone;
     G_OBJECT_CLASS(klass)->finalize = nfc_tag_finalize;
     nfc_tag_signals[SIGNAL_INITIALIZED] =
         g_signal_new(SIGNAL_INITIALIZED_NAME, G_OBJECT_CLASS_TYPE(klass),

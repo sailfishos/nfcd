@@ -48,6 +48,12 @@ nfc_adapter_set_name(
     const char* name)
     NFCD_INTERNAL;
 
+void
+nfc_adapter_set_services(
+    NfcAdapter* adapter,
+    NfcPeerServices* services)
+    NFCD_INTERNAL;
+
 #endif /* NFC_ADAPTER_PRIVATE_H */
 
 /*

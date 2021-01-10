@@ -41,8 +41,6 @@
 
 static TestOpt test_opt;
 
-#define TEST_TIMEOUT (10) /* seconds */
-
 static
 void
 test_quit_loop(

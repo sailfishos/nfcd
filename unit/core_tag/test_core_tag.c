@@ -81,7 +81,7 @@ test_basic(
     void)
 {
     NfcTag* tag = g_object_new(NFC_TYPE_TAG, NULL);
-    NfcTarget* target = test_target_new();
+    NfcTarget* target = test_target_new(FALSE);
     NfcParamPoll poll;
     const char* name = "test";
     int init_count = 0;
@@ -146,7 +146,7 @@ test_basic_a(
     static const GUtilData nfcid1_data = { TEST_ARRAY_AND_SIZE(nfcid1) };
 
     NfcTag* tag = g_object_new(NFC_TYPE_TAG, NULL);
-    NfcTarget* target = test_target_new_tech(NFC_TECHNOLOGY_A);
+    NfcTarget* target = test_target_new_tech(NFC_TECHNOLOGY_A, FALSE);
     NfcParamPoll poll;
     const NfcParamPollA* poll_a;
 
@@ -191,7 +191,7 @@ test_basic_b(
     static const guint8 app_data_empty[] = {0x00, 0x00, 0x00, 0x00};
 
     NfcTag* tag = g_object_new(NFC_TYPE_TAG, NULL);
-    NfcTarget* target = test_target_new_tech(NFC_TECHNOLOGY_B);
+    NfcTarget* target = test_target_new_tech(NFC_TECHNOLOGY_B, FALSE);
     NfcParamPoll poll;
     const NfcParamPollB* poll_b;
 

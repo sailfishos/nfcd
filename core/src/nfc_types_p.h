@@ -39,6 +39,27 @@
 /* Now pull in the public types */
 #include <nfc_types.h>
 
+/* Types */
+typedef struct nfc_llc NfcLlc;
+typedef struct nfc_llc_io NfcLlcIo;
+typedef struct nfc_llc_param NfcLlcParam;
+typedef struct nfc_peer_services NfcPeerServices;
+
+/*
+ * SAP:
+ *
+ * 00h..0Fh  Well-Known Service access points
+ * 10h..1Fh  Named services advertised by SDP
+ * 20h..3Fh  Unnamed services that are NOT advertised by SDP
+ */
+
+#define NFC_LLC_SAP_MASK (0x3f)     /* 6 bit */
+#define NFC_LLC_SAP_COUNT (NFC_LLC_SAP_MASK + 1)
+#define NFC_LLC_SAP_WKS_MASK (0x0f) /* Well-Known Services */
+#define NFC_LLC_SAP_NAMED (0x10)    /* First named service */
+#define NFC_LLC_SAP_UNNAMED (0x20)  /* First unnamed service */
+#define NFC_LLC_SAP_MAX NFC_LLC_SAP_MASK /* Maximum SAP value */
+
 /* Macros */
 #define NFCD_INTERNAL G_GNUC_INTERNAL
 

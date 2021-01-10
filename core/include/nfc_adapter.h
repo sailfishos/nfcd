@@ -54,7 +54,7 @@ struct nfc_adapter {
     NFC_MODE supported_modes;
     NFC_MODE mode_requested;
     NFC_MODE mode;
-    gboolean target_present;
+    gboolean target_present; /* Presence of anything, actually */
 };
 
 GType nfc_adapter_get_type(void) NFCD_EXPORT;
@@ -74,6 +74,13 @@ void
     NfcAdapter* adapter,
     NfcTag* tag,
     void* user_data);
+
+typedef
+void
+(*NfcAdapterPeerFunc)(
+    NfcAdapter* adapter,
+    NfcPeer* peer,
+    void* user_data); /* Since 1.1.0 */
 
 NfcAdapter*
 nfc_adapter_ref(
@@ -95,6 +102,11 @@ gboolean
 nfc_adapter_request_mode(
     NfcAdapter* adapter,
     NFC_MODE mode)
+    NFCD_EXPORT;
+
+NfcPeer**
+nfc_adapter_peers(
+    NfcAdapter* adapter) /* Since 1.1.0 */
     NFCD_EXPORT;
 
 NfcTag*
@@ -140,6 +152,44 @@ nfc_adapter_remove_tag(
     const char* name)
     NFCD_EXPORT;
 
+NfcPeer*
+nfc_adapter_add_peer_initiator_a(
+    NfcAdapter* adapter,
+    NfcTarget* target,
+    const NfcParamPollA* tech_param,
+    const NfcParamNfcDepInitiator* nfc_dep_param) /* Since 1.1.0 */
+    NFCD_EXPORT;
+
+NfcPeer*
+nfc_adapter_add_peer_initiator_f(
+    NfcAdapter* adapter,
+    NfcTarget* target,
+    const NfcParamPollF* tech_param,
+    const NfcParamNfcDepInitiator* nfc_dep_param) /* Since 1.1.0 */
+    NFCD_EXPORT;
+
+NfcPeer*
+nfc_adapter_add_peer_target_a(
+    NfcAdapter* adapter,
+    NfcInitiator* initiator,
+    const NfcParamListenA* tech_param,
+    const NfcParamNfcDepTarget* nfc_dep_param) /* Since 1.1.0 */
+    NFCD_EXPORT;
+
+NfcPeer*
+nfc_adapter_add_peer_target_f(
+    NfcAdapter* adapter,
+    NfcInitiator* initiator,
+    const NfcParamListenF* tech_param,
+    const NfcParamNfcDepTarget* nfc_dep_param) /* Since 1.1.0 */
+    NFCD_EXPORT;
+
+void
+nfc_adapter_remove_peer(
+    NfcAdapter* adapter,
+    const char* name) /* Since 1.1.0 */
+    NFCD_EXPORT;
+
 gulong
 nfc_adapter_add_target_presence_handler(
     NfcAdapter* adapter,
@@ -159,6 +209,20 @@ nfc_adapter_add_tag_removed_handler(
     NfcAdapter* adapter,
     NfcAdapterTagFunc func,
     void* user_data)
+    NFCD_EXPORT;
+
+gulong
+nfc_adapter_add_peer_added_handler(
+    NfcAdapter* adapter,
+    NfcAdapterPeerFunc func,
+    void* user_data) /* Since 1.1.0 */
+    NFCD_EXPORT;
+
+gulong
+nfc_adapter_add_peer_removed_handler(
+    NfcAdapter* adapter,
+    NfcAdapterPeerFunc func,
+    void* user_data) /* Since 1.1.0 */
     NFCD_EXPORT;
 
 gulong
