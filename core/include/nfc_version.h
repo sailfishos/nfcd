@@ -34,8 +34,8 @@
 #define NFC_VERSION_H
 
 #define NFC_VERSION_MAJOR 1
-#define NFC_VERSION_MINOR 0
-#define NFC_VERSION_NANO  48
+#define NFC_VERSION_MINOR 1
+#define NFC_VERSION_NANO  0
 
 #define NFC_VERSION_WORD(v1,v2,v3) \
     ((((v1) & 0x7f) << 24) | \
