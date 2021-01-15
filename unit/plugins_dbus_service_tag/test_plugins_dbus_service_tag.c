@@ -84,7 +84,7 @@ test_data_init(
     g_assert((test->manager = nfc_manager_new(&pi)) != NULL);
     g_assert((test->adapter = test_adapter_new()) != NULL);
 
-    target = test_target_new();
+    target = test_target_new(FALSE);
     memset(&poll, 0, sizeof(poll));
     g_assert(nfc_adapter_add_other_tag2(test->adapter, target, &poll));
     nfc_target_unref(target);
@@ -1848,7 +1848,7 @@ test_data_init_tag_b(
     g_assert((test->manager = nfc_manager_new(&pi)) != NULL);
     g_assert((test->adapter = test_adapter_new()) != NULL);
 
-    target = test_target_new_tech(NFC_TECHNOLOGY_B);
+    target = test_target_new_tech(NFC_TECHNOLOGY_B, FALSE);
     memset(&poll, 0, sizeof(poll));
     poll.b.nfcid0 = nfcid0_data;
     poll.b.prot_info = prot_info_data;
@@ -1982,7 +1982,7 @@ test_data_init_tag_a(
     g_assert((test->manager = nfc_manager_new(&pi)) != NULL);
     g_assert((test->adapter = test_adapter_new()) != NULL);
 
-    target = test_target_new_tech(NFC_TECHNOLOGY_A);
+    target = test_target_new_tech(NFC_TECHNOLOGY_A, FALSE);
     memset(&poll, 0, sizeof(poll));
     poll.a.sel_res = 1;
     poll.a.nfcid1 = nfcid1_data;

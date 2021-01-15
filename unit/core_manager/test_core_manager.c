@@ -183,12 +183,17 @@ test_null(
     g_assert(!nfc_manager_add_adapter_added_handler(NULL, NULL, NULL));
     g_assert(!nfc_manager_add_adapter_removed_handler(NULL, NULL, NULL));
     g_assert(!nfc_manager_add_enabled_changed_handler(NULL, NULL, NULL));
+    g_assert(!nfc_manager_add_mode_changed_handler(NULL, NULL, NULL));
     g_assert(!nfc_manager_add_stopped_handler(NULL, NULL, NULL));
+    g_assert(!nfc_manager_mode_request_new(NULL, 0, 0));
 
+    nfc_manager_mode_request_free(NULL);
     nfc_manager_stop(NULL, 0);
     nfc_manager_set_enabled(NULL, FALSE);
     nfc_manager_request_power(NULL, FALSE);
     nfc_manager_request_mode(NULL, NFC_MODE_NONE);
+    nfc_manager_register_service(NULL, NULL);
+    nfc_manager_unregister_service(NULL, NULL);
     nfc_manager_remove_adapter(NULL, NULL);
     nfc_manager_remove_handler(NULL, 0);
     nfc_manager_remove_handlers(NULL, NULL, 0);
@@ -217,6 +222,10 @@ test_basic(
     plugins = nfc_manager_plugins(manager);
     g_assert(plugins);
     g_assert(!plugins[0]);
+
+    /* NULL services are ignored */
+    g_assert(!nfc_manager_register_service(manager, NULL));
+    nfc_manager_unregister_service(manager, NULL);
 
     /* No adapters */
     g_assert(!nfc_manager_get_adapter(manager, "foo"));
@@ -349,6 +358,87 @@ test_adapter(
 }
 
 /*==========================================================================*
+ * mode
+ *==========================================================================*/
+
+static
+void
+test_mode(
+    void)
+{
+    NfcPluginsInfo pi;
+    NfcManager* manager;
+    int count = 0;
+    gulong id;
+    NfcModeRequest* enable_p2p;
+    NfcModeRequest* enable_all;
+    NfcModeRequest* enable_all2;
+    NfcModeRequest* disable_p2p;
+
+    memset(&pi, 0, sizeof(pi));
+    manager = nfc_manager_new(&pi);
+    nfc_manager_request_mode(manager, NFC_MODE_READER_WRITER);
+
+    /* Add the listener */
+    g_assert(!nfc_manager_add_mode_changed_handler(manager, NULL, NULL));
+    id = nfc_manager_add_mode_changed_handler(manager,
+        test_manager_inc, &count);
+
+    /* Core is refusing to create mode requests with no mode */
+    g_assert(!nfc_manager_mode_request_new(manager, 0, 0));
+
+    /* Enable P2P modes (NFC_MODE_P2P_INITIATOR disable bit gets ignored) */
+    enable_p2p = nfc_manager_mode_request_new(manager, NFC_MODES_P2P,
+        NFC_MODE_P2P_INITIATOR);
+    g_assert_cmpint(manager->mode, == ,NFC_MODES_P2P | NFC_MODE_READER_WRITER);
+    g_assert_cmpint(count, == ,1);
+    count = 0;
+
+    /* Try to disable those but they stay enabled */
+    disable_p2p = nfc_manager_mode_request_new(manager, 0, NFC_MODES_P2P);
+    g_assert_cmpint(manager->mode, == ,NFC_MODES_P2P | NFC_MODE_READER_WRITER);
+    g_assert_cmpint(count, == ,0);
+
+    /* Add another enable request on top of that */
+    enable_all = nfc_manager_mode_request_new(manager, NFC_MODES_ALL, 0);
+    g_assert_cmpint(manager->mode, == , NFC_MODES_ALL);
+    g_assert_cmpint(count, == ,1);
+    count = 0;
+
+    /* And the same request (no changes are signaled this time) */
+    enable_all2 = nfc_manager_mode_request_new(manager, NFC_MODES_ALL, 0);
+    g_assert_cmpint(manager->mode, == , NFC_MODES_ALL);
+    g_assert_cmpint(count, == ,0);
+
+    /* P2P modes get disabled when we release enable_p2p request */
+    nfc_manager_mode_request_free(enable_p2p);
+    g_assert_cmpint(manager->mode, == ,NFC_MODE_READER_WRITER |
+        NFC_MODE_CARD_EMILATION);
+    g_assert_cmpint(count, == ,1);
+    count = 0;
+
+    /* And re-enabled when we release disable_p2p */
+    nfc_manager_mode_request_free(disable_p2p);
+    g_assert_cmpint(manager->mode, == , NFC_MODES_ALL);
+    g_assert_cmpint(count, == ,1);
+    count = 0;
+
+    /* enable_all2 remains active after we release enable_all */
+    nfc_manager_mode_request_free(enable_all);
+    g_assert_cmpint(manager->mode, == , NFC_MODES_ALL);
+    g_assert_cmpint(count, == ,0);
+
+    /* We are back to the default when all requests are released */
+    nfc_manager_mode_request_free(enable_all2);
+    g_assert_cmpint(manager->mode, == , NFC_MODE_READER_WRITER);
+    g_assert_cmpint(count, == ,1);
+    count = 0;
+
+    nfc_manager_remove_handler(manager, id);
+    nfc_manager_unref(manager);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -363,6 +453,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("null"), test_null);
     g_test_add_func(TEST_("basic"), test_basic);
     g_test_add_func(TEST_("adapter"), test_adapter);
+    g_test_add_func(TEST_("mode"), test_mode);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

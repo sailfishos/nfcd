@@ -18,7 +18,6 @@
         4 - Type 3 Tag
         8 - Type 4A Tag (ISO-DEP, ISO 14443)
         16 - Type 4B Tag,(ISO-DEP, ISO 14443)
-        32 - NFC-DEP Protocol (ISO 18092)
 
       The above codes are bitmasks elsewhere, but here used as enum values.
     -->

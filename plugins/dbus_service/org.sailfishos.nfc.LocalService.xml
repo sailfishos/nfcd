@@ -1,0 +1,22 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.sailfishos.nfc.LocalService">
+    <method name="Accept">
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="1"/>
+      <arg name="rsap" type="u" direction="in"/>
+      <arg name="fd" type="h" direction="in"/>
+      <arg name="accepted" type="b" direction="out"/>
+    </method>
+    <method name="DatagramReceived">
+      <arg name="rsap" type="u"/>
+      <arg name="data" type="ay"/>
+    </method>
+    <method name="PeerArrived">
+      <arg name="path" type="o"/>
+    </method>
+    <method name="PeerLeft">
+      <arg name="path" type="o"/>
+    </method>
+  </interface>
+</node>

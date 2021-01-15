@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2020 Jolla Ltd.
+ * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -35,13 +35,17 @@
 #define DBUS_SERVICE_ERROR_(error) "org.sailfishos.nfc.Error." error
 
 static const GDBusErrorEntry dbus_service_errors[] = {
-    { DBUS_SERVICE_ERROR_FAILED,        DBUS_SERVICE_ERROR_("Failed") },
-    { DBUS_SERVICE_ERROR_ACCESS_DENIED, DBUS_SERVICE_ERROR_("AccessDenied") },
-    { DBUS_SERVICE_ERROR_INVALID_ARGS,  DBUS_SERVICE_ERROR_("InvalidArgs") },
-    { DBUS_SERVICE_ERROR_NOT_FOUND,     DBUS_SERVICE_ERROR_("NotFound") },
-    { DBUS_SERVICE_ERROR_NOT_SUPPORTED, DBUS_SERVICE_ERROR_("NotSupported") },
-    { DBUS_SERVICE_ERROR_ABORTED,       DBUS_SERVICE_ERROR_("Aborted") },
-    { DBUS_SERVICE_ERROR_NACK,          DBUS_SERVICE_ERROR_("NACK") }
+    { DBUS_SERVICE_ERROR_FAILED,         DBUS_SERVICE_ERROR_("Failed") },
+    { DBUS_SERVICE_ERROR_ACCESS_DENIED,  DBUS_SERVICE_ERROR_("AccessDenied") },
+    { DBUS_SERVICE_ERROR_INVALID_ARGS,   DBUS_SERVICE_ERROR_("InvalidArgs") },
+    { DBUS_SERVICE_ERROR_NOT_FOUND,      DBUS_SERVICE_ERROR_("NotFound") },
+    { DBUS_SERVICE_ERROR_NOT_SUPPORTED,  DBUS_SERVICE_ERROR_("NotSupported") },
+    { DBUS_SERVICE_ERROR_ABORTED,        DBUS_SERVICE_ERROR_("Aborted") },
+    { DBUS_SERVICE_ERROR_NACK,           DBUS_SERVICE_ERROR_("NACK") },
+    { DBUS_SERVICE_ERROR_CANCELLED,      DBUS_SERVICE_ERROR_("Cancelled") },
+    { DBUS_SERVICE_ERROR_NO_SERVICE,     DBUS_SERVICE_ERROR_("NoService") },
+    { DBUS_SERVICE_ERROR_REJECTED,       DBUS_SERVICE_ERROR_("Rejected") },
+    { DBUS_SERVICE_ERROR_ALREADY_EXISTS, DBUS_SERVICE_ERROR_("AlreadyExists") }
 };
 
 G_STATIC_ASSERT(G_N_ELEMENTS(dbus_service_errors) == DBUS_SERVICE_NUM_ERRORS);

@@ -6,13 +6,21 @@
 TESTS="\
 core_adapter \
 core_crc \
+core_initiator \
+core_llc \
+core_llc_param \
 core_manager \
 core_ndef_rec \
 core_ndef_rec_sp \
 core_ndef_rec_t \
 core_ndef_rec_u \
+core_peer \
+core_peer_service \
+core_peer_services \
+core_peer_socket \
 core_plugin \
 core_plugins \
+core_snep \
 core_tag \
 core_tag_t2 \
 core_tag_t4 \
@@ -27,6 +35,7 @@ plugins_dbus_handlers_type_sp \
 plugins_dbus_handlers_type_text \
 plugins_dbus_handlers_type_uri \
 plugins_dbus_service_adapter \
+plugins_dbus_service_peer \
 plugins_dbus_service_plugin \
 plugins_dbus_service_tag \
 plugins_dbus_service_util"

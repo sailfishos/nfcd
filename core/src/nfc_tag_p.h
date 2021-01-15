@@ -39,7 +39,11 @@
 
 typedef struct nfc_tag_class {
     GObjectClass parent;
+    void (*gone)(NfcTag* tag);
 } NfcTagClass;
+
+#define NFC_TAG_CLASS(klass) G_TYPE_CHECK_CLASS_CAST((klass), \
+        NFC_TYPE_TAG, NfcTagClass)
 
 NfcTag*
 nfc_tag_new(

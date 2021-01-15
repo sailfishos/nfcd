@@ -6,7 +6,7 @@ License: BSD
 URL: https://git.sailfishos.org/mer-core/nfcd
 Source: %{name}-%{version}.tar.bz2
 
-%define libglibutil_version 1.0.40
+%define libglibutil_version 1.0.49
 %define glib_version 2.32
 
 BuildRequires: pkgconfig(glib-2.0) >= %{glib_version}

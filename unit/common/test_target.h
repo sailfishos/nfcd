@@ -48,13 +48,17 @@ GType test_target_get_type(void);
 #define TEST_TARGET(obj) (G_TYPE_CHECK_INSTANCE_CAST(obj, \
         TEST_TYPE_TARGET, TestTarget))
 
+#define TEST_TARGET_FAIL_ALL (-1)
+#define TEST_TARGET_FAIL_NONE (FALSE)
+
 NfcTarget*
 test_target_new(
-    void);
+    int fail);
 
 NfcTarget*
 test_target_new_tech(
-    NFC_TECHNOLOGY tech);
+    NFC_TECHNOLOGY tech,
+    int fail);
 
 NfcTarget*
 test_target_new_tech_with_data(
@@ -74,6 +78,14 @@ test_target_add_data(
     guint cmd_len,
     const void* resp_bytes,
     guint resp_len);
+
+NfcTarget*
+test_target_new_with_tx(
+    const TestTx* tx_list,
+    gsize tx_count);
+
+#define test_target_tx_remaining(target) \
+    (TEST_TARGET(target)->cmd_resp->len)
 
 #endif /* TEST_TARGET_H */
 

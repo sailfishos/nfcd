@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
@@ -42,6 +42,7 @@
 #include <nfc_ndef.h>
 
 #include <gutil_idlepool.h>
+#include <gutil_macros.h>
 #include <gutil_misc.h>
 
 enum {
@@ -72,13 +73,15 @@ enum {
     CALL_COUNT
 };
 
+typedef struct dbus_service_tag_priv DBusServiceTagPriv;
+typedef struct dbus_service_tag_call DBusServiceTagCall;
+
 typedef
 void
 (*DBusServiceTagCallFunc)(
     GDBusMethodInvocation* call,
-    DBusServiceTag* self);
+    DBusServiceTagPriv* self);
 
-typedef struct dbus_service_tag_call DBusServiceTagCall;
 struct dbus_service_tag_call {
     DBusServiceTagCall* next;
     GDBusMethodInvocation* invocation;
@@ -95,7 +98,7 @@ typedef struct dbus_service_tag_lock {
     guint watch_id;
     guint count;
     NfcTargetSequence* seq;
-    DBusServiceTag* tag;
+    DBusServiceTagPriv* tag;
 } DBusServiceTagLock;
 
 typedef struct dbus_service_tag_lock_waiter {
@@ -108,16 +111,15 @@ typedef struct dbus_service_tag_async_call {
     GDBusMethodInvocation* call;
 } DBusServiceTagAsyncCall;
 
-struct dbus_service_tag {
+struct dbus_service_tag_priv {
+    DBusServiceTag pub;
     char* path;
-    GDBusConnection* connection;
     OrgSailfishosNfcTag* iface;
     GUtilIdlePool* pool;
-    GSList* lock_waters;
+    GSList* lock_waiters;
     DBusServiceTagLock* lock;
     DBusServiceTagCallQueue queue;
     GSList* ndefs;
-    NfcTag* tag;
     gulong target_event_id[TARGET_EVENT_COUNT];
     gulong tag_event_id[TAG_EVENT_COUNT];
     gulong call_id[CALL_COUNT];
@@ -133,15 +135,18 @@ static const char* const dbus_service_tag_default_interfaces[] = {
     NFC_DBUS_TAG_INTERFACE, NULL
 };
 
+static inline DBusServiceTagPriv* dbus_service_tag_cast(DBusServiceTag* pub)
+    { return G_LIKELY(pub) ? G_CAST(pub, DBusServiceTagPriv, pub) : NULL; }
+
 static
 DBusServiceTagLockWaiter*
 dbus_service_tag_find_waiter(
-    DBusServiceTag* self,
+    DBusServiceTagPriv* self,
     const char* name)
 {
     GSList* l;
 
-    for (l = self->lock_waters; l; l = l->next) {
+    for (l = self->lock_waiters; l; l = l->next) {
         DBusServiceTagLockWaiter* waiter = l->data;
 
         if (!g_strcmp0(waiter->lock->name, name)) {
@@ -153,12 +158,14 @@ dbus_service_tag_find_waiter(
 
 NfcTargetSequence*
 dbus_service_tag_sequence(
-    DBusServiceTag* self,
+    DBusServiceTag* pub,
     GDBusMethodInvocation* call)
 {
     const char* sender = g_dbus_method_invocation_get_sender(call);
 
-    if (G_LIKELY(sender)) {
+    if (G_LIKELY(pub) && G_LIKELY(sender)) {
+        DBusServiceTagPriv* self = dbus_service_tag_cast(pub);
+
         if (self->lock && !g_strcmp0(self->lock->name, sender)) {
             return self->lock->seq;
         } else {
@@ -171,6 +178,53 @@ dbus_service_tag_sequence(
         }
     }
     return NULL;
+}
+
+static
+GVariant*
+dbus_service_tag_get_poll_parameters(
+    NfcTag* tag,
+    const NfcParamPoll* poll)
+{
+    GVariantBuilder builder;
+    g_variant_builder_init(&builder, G_VARIANT_TYPE_VARDICT);
+
+    if (G_LIKELY(tag) && G_UNLIKELY(poll)) {
+        const NfcTarget* target = tag->target;
+        const NfcParamPollA* poll_a = NULL;
+        const NfcParamPollB* poll_b = NULL;
+
+        if (G_LIKELY(target)) {
+            switch(tag->target->technology) {
+            case NFC_TECHNOLOGY_B:
+                poll_b = &poll->b;
+                dbus_service_dict_add_byte_array(&builder, "APPDATA",
+                    poll_b->app_data, sizeof(poll_b->app_data));
+                if (poll_b->prot_info.bytes) {
+                    dbus_service_dict_add_byte_array_data(&builder, "PROTINFO",
+                        &poll_b->prot_info);
+                }
+                if (poll_b->nfcid0.bytes) {
+                    dbus_service_dict_add_byte_array_data(&builder, "NFCID0",
+                        &poll_b->nfcid0);
+                }
+                break;
+            case NFC_TECHNOLOGY_A:
+                poll_a = &poll->a;
+                dbus_service_dict_add_byte(&builder, "SEL_RES",
+                    poll_a->sel_res);
+                if (poll_a->nfcid1.bytes) {
+                    dbus_service_dict_add_byte_array_data(&builder, "NFCID1",
+                        &poll_a->nfcid1);
+                }
+                break;
+            case NFC_TECHNOLOGY_F:
+            case NFC_TECHNOLOGY_UNKNOWN:
+                break;
+            }
+        }
+    }
+    return g_variant_builder_end(&builder);
 }
 
 static
@@ -192,7 +246,7 @@ dbus_service_tag_lock_complete_acquire(
     gpointer user_data)
 {
     GDBusMethodInvocation* acquire = data;
-    DBusServiceTag* dbus = user_data;
+    DBusServiceTagPriv* dbus = user_data;
 
     org_sailfishos_nfc_tag_complete_acquire(dbus->iface, acquire);
     g_object_unref(acquire);
@@ -239,7 +293,7 @@ dbus_service_tag_target_sequence_changed(
     NfcTarget* target,
     void* user_data)
 {
-    DBusServiceTag* self = user_data;
+    DBusServiceTagPriv* self = user_data;
 
     /*
      * Once the lock has been acquired, it remains acquired until we
@@ -251,12 +305,12 @@ dbus_service_tag_target_sequence_changed(
     if (target->sequence) {
         GSList* l;
 
-        for (l = self->lock_waters; l; l = l->next) {
+        for (l = self->lock_waiters; l; l = l->next) {
             DBusServiceTagLockWaiter* waiter = l->data;
             DBusServiceTagLock* lock = waiter->lock;
 
             if (lock->seq == target->sequence) {
-                self->lock_waters = g_slist_delete_link(self->lock_waters, l);
+                self->lock_waiters = g_slist_delete_link(self->lock_waiters, l);
                 GDEBUG("%s owns %s", lock->name, self->path);
 
                 /*
@@ -287,7 +341,7 @@ dbus_service_tag_lock_peer_vanished(
     gpointer data)
 {
     DBusServiceTagLock* lock = data;
-    DBusServiceTag* self = lock->tag;
+    DBusServiceTagPriv* self = lock->tag;
 
     if (self->lock == lock) {
         /* This owner of the current lock is gone */
@@ -297,12 +351,12 @@ dbus_service_tag_lock_peer_vanished(
         GSList* l;
 
         /* Dispose of the dead waiter */
-        for (l = self->lock_waters; l; l = l->next) {
+        for (l = self->lock_waiters; l; l = l->next) {
             DBusServiceTagLockWaiter* waiter = l->data;
 
             if (waiter->lock == lock) {
                 GDEBUG("Name '%s' has disappeared, dropping the waiter", name);
-                self->lock_waters = g_slist_delete_link(self->lock_waters, l);
+                self->lock_waiters = g_slist_delete_link(self->lock_waiters, l);
                 dbus_service_tag_lock_waiter_free(waiter);
                 break;
             }
@@ -322,9 +376,10 @@ dbus_service_tag_lock_peer_vanished(
 static
 void
 dbus_service_tag_export_all(
-    DBusServiceTag* self)
+    DBusServiceTagPriv* self)
 {
-    NfcTag* tag = self->tag;
+    DBusServiceTag* pub = &self->pub;
+    NfcTag* tag = pub->tag;
     NfcNdefRec* rec = tag->ndef;
     GPtrArray* interfaces = g_ptr_array_new();
 
@@ -341,7 +396,7 @@ dbus_service_tag_export_all(
 
             g_string_set_size(buf, base_len);
             g_string_append_printf(buf, "%u", i);
-            ndef = dbus_service_ndef_new(rec, buf->str, self->connection);
+            ndef = dbus_service_ndef_new(rec, buf->str, pub->connection);
             if (ndef) {
                 self->ndefs = g_slist_append(self->ndefs, ndef);
                 i++;
@@ -353,7 +408,7 @@ dbus_service_tag_export_all(
     /* Export sub-interfaces */
     g_ptr_array_add(interfaces, (gpointer)NFC_DBUS_TAG_INTERFACE);
     if (NFC_IS_TAG_T2(tag)) {
-        self->t2 = dbus_service_tag_t2_new(NFC_TAG_T2(tag), self);
+        self->t2 = dbus_service_tag_t2_new(NFC_TAG_T2(tag), pub);
         if (self->t2) {
             const char* iface = NFC_DBUS_TAG_T2_INTERFACE;
             GDEBUG("Adding %s", iface);
@@ -362,7 +417,7 @@ dbus_service_tag_export_all(
     }
 
     if (NFC_IS_TAG_T4(tag)) {
-        self->isodep = dbus_service_isodep_new(NFC_TAG_T4(tag), self);
+        self->isodep = dbus_service_isodep_new(NFC_TAG_T4(tag), pub);
         if (self->isodep) {
             const char* iface = NFC_DBUS_ISODEP_INTERFACE;
             GDEBUG("Adding %s", iface);
@@ -386,7 +441,7 @@ dbus_service_tag_free_ndef_rec(
 static
 const char**
 dbus_service_tag_get_ndef_rec_paths(
-    DBusServiceTag* self)
+    DBusServiceTagPriv* self)
 {
     const char** paths = g_new(const char*, g_slist_length(self->ndefs) + 1);
     GSList* l;
@@ -448,11 +503,11 @@ dbus_service_tag_dequeue_call(
 static
 gboolean
 dbus_service_tag_handle_call(
-    DBusServiceTag* self,
+    DBusServiceTagPriv* self,
     GDBusMethodInvocation* call,
     DBusServiceTagCallFunc func)
 {
-    if (self->tag->flags & NFC_TAG_FLAG_INITIALIZED) {
+    if (self->pub.tag->flags & NFC_TAG_FLAG_INITIALIZED) {
         func(call, self);
     } else {
         dbus_service_tag_queue_call(&self->queue, call, func);
@@ -463,7 +518,7 @@ dbus_service_tag_handle_call(
 static
 void
 dbus_service_tag_complete_pending_calls(
-    DBusServiceTag* self)
+    DBusServiceTagPriv* self)
 {
     DBusServiceTagCall* call;
 
@@ -483,7 +538,7 @@ dbus_service_tag_initialized(
     NfcTag* tag,
     void* user_data)
 {
-    DBusServiceTag* self = user_data;
+    DBusServiceTagPriv* self = user_data;
 
     dbus_service_tag_export_all(self);
     dbus_service_tag_complete_pending_calls(self);
@@ -499,9 +554,9 @@ static
 void
 dbus_service_tag_complete_get_all(
     GDBusMethodInvocation* call,
-    DBusServiceTag* self)
+    DBusServiceTagPriv* self)
 {
-    NfcTag* tag = self->tag;
+    NfcTag* tag = self->pub.tag;
     NfcTarget* target = tag->target;
 
     org_sailfishos_nfc_tag_complete_get_all(self->iface, call,
@@ -516,7 +571,7 @@ gboolean
 dbus_service_tag_handle_get_all(
     OrgSailfishosNfcTag* iface,
     GDBusMethodInvocation* call,
-    DBusServiceTag* self)
+    DBusServiceTagPriv* self)
 {
     /* Queue the call if the tag is not initialized yet */
     return dbus_service_tag_handle_call(self, call,
@@ -530,7 +585,7 @@ gboolean
 dbus_service_tag_handle_get_interface_version(
     OrgSailfishosNfcTag* iface,
     GDBusMethodInvocation* call,
-    DBusServiceTag* self)
+    DBusServiceTagPriv* self)
 {
     org_sailfishos_nfc_tag_complete_get_interface_version(iface, call,
         NFC_DBUS_TAG_INTERFACE_VERSION);
@@ -544,10 +599,10 @@ gboolean
 dbus_service_tag_handle_get_present(
     OrgSailfishosNfcTag* iface,
     GDBusMethodInvocation* call,
-    DBusServiceTag* self)
+    DBusServiceTagPriv* self)
 {
     org_sailfishos_nfc_tag_complete_get_present(iface, call,
-        self->tag->present);
+        self->pub.tag->present);
     return TRUE;
 }
 
@@ -558,10 +613,10 @@ gboolean
 dbus_service_tag_handle_get_technology(
     OrgSailfishosNfcTag* iface,
     GDBusMethodInvocation* call,
-    DBusServiceTag* self)
+    DBusServiceTagPriv* self)
 {
     org_sailfishos_nfc_tag_complete_get_technology(iface, call,
-        self->tag->target->technology);
+        self->pub.tag->target->technology);
     return TRUE;
 }
 
@@ -572,10 +627,10 @@ gboolean
 dbus_service_tag_handle_get_protocol(
     OrgSailfishosNfcTag* iface,
     GDBusMethodInvocation* call,
-    DBusServiceTag* self)
+    DBusServiceTagPriv* self)
 {
     org_sailfishos_nfc_tag_complete_get_protocol(iface, call,
-        self->tag->target->protocol);
+        self->pub.tag->target->protocol);
     return TRUE;
 }
 
@@ -586,10 +641,10 @@ gboolean
 dbus_service_tag_handle_get_type(
     OrgSailfishosNfcTag* iface,
     GDBusMethodInvocation* call,
-    DBusServiceTag* self)
+    DBusServiceTagPriv* self)
 {
     org_sailfishos_nfc_tag_complete_get_type(iface, call,
-        self->tag->type);
+        self->pub.tag->type);
     return TRUE;
 }
 
@@ -599,7 +654,7 @@ static
 void
 dbus_service_tag_complete_get_interfaces(
     GDBusMethodInvocation* call,
-    DBusServiceTag* self)
+    DBusServiceTagPriv* self)
 {
     org_sailfishos_nfc_tag_complete_get_interfaces(self->iface, call,
         self->interfaces ? self->interfaces :
@@ -611,7 +666,7 @@ gboolean
 dbus_service_tag_handle_get_interfaces(
     OrgSailfishosNfcTag* iface,
     GDBusMethodInvocation* call,
-    DBusServiceTag* self)
+    DBusServiceTagPriv* self)
 {
     return dbus_service_tag_handle_call(self, call,
         dbus_service_tag_complete_get_interfaces);
@@ -623,7 +678,7 @@ static
 void
 dbus_service_tag_complete_get_ndef_records(
     GDBusMethodInvocation* call,
-    DBusServiceTag* self)
+    DBusServiceTagPriv* self)
 {
     org_sailfishos_nfc_tag_complete_get_ndef_records(self->iface, call,
         dbus_service_tag_get_ndef_rec_paths(self));
@@ -634,7 +689,7 @@ gboolean
 dbus_service_tag_handle_get_ndef_records(
     OrgSailfishosNfcTag* iface,
     GDBusMethodInvocation* call,
-    DBusServiceTag* self)
+    DBusServiceTagPriv* self)
 {
     /* Queue the call if the tag is not initialized yet */
     dbus_service_tag_handle_call(self, call,
@@ -649,9 +704,9 @@ gboolean
 dbus_service_tag_handle_deactivate(
     OrgSailfishosNfcTag* iface,
     GDBusMethodInvocation* call,
-    DBusServiceTag* self)
+    DBusServiceTagPriv* self)
 {
-    nfc_tag_deactivate(self->tag);
+    nfc_tag_deactivate(self->pub.tag);
     org_sailfishos_nfc_tag_complete_deactivate(iface, call);
     return TRUE;
 }
@@ -664,9 +719,10 @@ dbus_service_tag_handle_acquire(
     OrgSailfishosNfcTag* iface,
     GDBusMethodInvocation* call,
     gboolean wait,
-    DBusServiceTag* self)
+    DBusServiceTagPriv* self)
 {
-    NfcTarget* target = self->tag->target;
+    DBusServiceTag* pub = &self->pub;
+    NfcTarget* target = pub->tag->target;
     DBusServiceTagLock* current_lock = self->lock;
     const char* name = g_dbus_method_invocation_get_sender(call);
 
@@ -695,7 +751,7 @@ dbus_service_tag_handle_acquire(
             lock->name = g_strdup(name);
             lock->seq = nfc_target_sequence_new(target);
             lock->tag = self;
-            lock->watch_id = g_bus_watch_name_on_connection(self->connection,
+            lock->watch_id = g_bus_watch_name_on_connection(pub->connection,
                 name, G_BUS_NAME_WATCHER_FLAGS_NONE, NULL,
                 dbus_service_tag_lock_peer_vanished, lock, NULL);
 
@@ -714,7 +770,7 @@ dbus_service_tag_handle_acquire(
                 waiter->lock = lock;
                 waiter->pending_calls = g_slist_append(waiter->pending_calls,
                     g_object_ref(call));
-                self->lock_waters = g_slist_append(self->lock_waters, waiter);
+                self->lock_waiters = g_slist_append(self->lock_waiters, waiter);
             }
         }
     }
@@ -728,7 +784,7 @@ gboolean
 dbus_service_tag_handle_release(
     OrgSailfishosNfcTag* iface,
     GDBusMethodInvocation* call,
-    DBusServiceTag* self)
+    DBusServiceTagPriv* self)
 {
     DBusServiceTagLock* current_lock = self->lock;
     const char* name = g_dbus_method_invocation_get_sender(call);
@@ -760,7 +816,7 @@ dbus_service_tag_handle_release(
 
             /* If no more requests is pending, delete the waiter */
             if (!waiter->pending_calls) {
-                self->lock_waters = g_slist_remove(self->lock_waters, waiter);
+                self->lock_waiters = g_slist_remove(self->lock_waiters, waiter);
                 dbus_service_tag_lock_free(waiter->lock);
                 dbus_service_tag_lock_waiter_free(waiter);
             }
@@ -775,62 +831,15 @@ dbus_service_tag_handle_release(
 
 /* Interface Version 3 */
 
-static
-GVariant*
-dbus_service_tag_get_poll_parameters(
-    NfcTag* tag,
-    const NfcParamPoll* poll)
-{
-    GVariantBuilder builder;
-    g_variant_builder_init(&builder, G_VARIANT_TYPE_VARDICT);
-
-    if (G_LIKELY(tag) && G_UNLIKELY(poll)) {
-        const NfcTarget* target = tag->target;
-        const NfcParamPollA* poll_a = NULL;
-        const NfcParamPollB* poll_b = NULL;
-
-        if (G_LIKELY(target)) {
-            switch(tag->target->technology) {
-            case NFC_TECHNOLOGY_B:
-                poll_b = &poll->b;
-                dbus_service_dict_add_byte_array(&builder, "APPDATA",
-                    poll_b->app_data, sizeof(poll_b->app_data));
-                if (poll_b->prot_info.bytes) {
-                    dbus_service_dict_add_byte_array_data(&builder, "PROTINFO",
-                        &poll_b->prot_info);
-                }
-                if (poll_b->nfcid0.bytes) {
-                    dbus_service_dict_add_byte_array_data(&builder, "NFCID0",
-                        &poll_b->nfcid0);
-                }
-                break;
-            case NFC_TECHNOLOGY_A:
-                poll_a = &poll->a;
-                dbus_service_dict_add_byte(&builder, "SEL_RES",
-                    poll_a->sel_res);
-                if (poll_a->nfcid1.bytes) {
-                    dbus_service_dict_add_byte_array_data(&builder, "NFCID1",
-                        &poll_a->nfcid1);
-                }
-                break;
-            case NFC_TECHNOLOGY_F:
-            case NFC_TECHNOLOGY_UNKNOWN:
-                break;
-            }
-        }
-    }
-    return g_variant_builder_end(&builder);
-}
-
 /* GetAll3 */
 
 static
 void
 dbus_service_tag_complete_get_all3(
     GDBusMethodInvocation* call,
-    DBusServiceTag* self)
+    DBusServiceTagPriv* self)
 {
-    NfcTag* tag = self->tag;
+    NfcTag* tag = self->pub.tag;
     NfcTarget* target = tag->target;
 
     org_sailfishos_nfc_tag_complete_get_all3(self->iface, call,
@@ -838,8 +847,7 @@ dbus_service_tag_complete_get_all3(
         target->protocol, tag->type, self->interfaces ? self->interfaces :
         dbus_service_tag_default_interfaces,
         dbus_service_tag_get_ndef_rec_paths(self),
-        dbus_service_tag_get_poll_parameters(self->tag,
-            nfc_tag_param(self->tag)));
+        dbus_service_tag_get_poll_parameters(tag, nfc_tag_param(tag)));
 }
 
 static
@@ -847,7 +855,7 @@ gboolean
 dbus_service_tag_handle_get_all3(
     OrgSailfishosNfcTag* iface,
     GDBusMethodInvocation* call,
-    DBusServiceTag* self)
+    DBusServiceTagPriv* self)
 {
     /* Queue the call if the tag is not initialized yet */
     return dbus_service_tag_handle_call(self, call,
@@ -861,9 +869,9 @@ gboolean
 dbus_service_tag_handle_get_poll_parameters(
     OrgSailfishosNfcTag* iface,
     GDBusMethodInvocation* call,
-    DBusServiceTag* self)
+    DBusServiceTagPriv* self)
 {
-    NfcTag* tag = self->tag;
+    NfcTag* tag = self->pub.tag;
 
     org_sailfishos_nfc_tag_complete_get_poll_parameters(iface, call,
         dbus_service_tag_get_poll_parameters(tag, nfc_tag_param(tag)));
@@ -950,20 +958,22 @@ dbus_service_tag_handle_transceive(
 static
 void
 dbus_service_tag_free_unexported(
-    DBusServiceTag* self)
+    DBusServiceTagPriv* self)
 {
+    DBusServiceTag* pub = &self->pub;
+    NfcTag* tag = pub->tag;
     DBusServiceTagCall* call;
 
-    nfc_target_remove_all_handlers(self->tag->target, self->target_event_id);
-    nfc_tag_remove_all_handlers(self->tag, self->tag_event_id);
+    nfc_target_remove_all_handlers(tag->target, self->target_event_id);
+    nfc_tag_remove_all_handlers(tag, self->tag_event_id);
 
     g_slist_free_full(self->ndefs, dbus_service_tag_free_ndef_rec);
-    g_slist_free_full(self->lock_waters, dbus_service_tag_lock_waiter_free1);
+    g_slist_free_full(self->lock_waiters, dbus_service_tag_lock_waiter_free1);
     dbus_service_isodep_free(self->isodep);
     dbus_service_tag_t2_free(self->t2);
     dbus_service_tag_lock_free(self->lock);
 
-    nfc_tag_unref(self->tag);
+    nfc_tag_unref(tag);
 
     gutil_disconnect_handlers(self->iface, self->call_id, CALL_COUNT);
 
@@ -975,28 +985,13 @@ dbus_service_tag_free_unexported(
     }
 
     g_object_unref(self->iface);
-    g_object_unref(self->connection);
+    g_object_unref(pub->connection);
 
-    gutil_idle_pool_drain(self->pool);
-    gutil_idle_pool_unref(self->pool);
+    gutil_idle_pool_destroy(self->pool);
 
     g_free(self->interfaces);
     g_free(self->path);
     g_free(self);
-}
-
-GDBusConnection*
-dbus_service_tag_connection(
-    DBusServiceTag* self)
-{
-    return self->connection;
-}
-
-const char*
-dbus_service_tag_path(
-    DBusServiceTag* self)
-{
-    return self->path;
 }
 
 DBusServiceTag*
@@ -1005,12 +1000,13 @@ dbus_service_tag_new(
     const char* parent_path,
     GDBusConnection* connection)
 {
-    DBusServiceTag* self = g_new0(DBusServiceTag, 1);
+    DBusServiceTagPriv* self = g_new0(DBusServiceTagPriv, 1);
+    DBusServiceTag* pub = &self->pub;
     GError* error = NULL;
 
-    g_object_ref(self->connection = connection);
-    self->path = g_strconcat(parent_path, "/", tag->name, NULL);
-    self->tag = nfc_tag_ref(tag);
+    g_object_ref(pub->connection = connection);
+    pub->path = self->path = g_strconcat(parent_path, "/", tag->name, NULL);
+    pub->tag = nfc_tag_ref(tag);
     self->pool = gutil_idle_pool_new();
     self->iface = org_sailfishos_nfc_tag_skeleton_new();
 
@@ -1074,7 +1070,7 @@ dbus_service_tag_new(
     if (g_dbus_interface_skeleton_export(G_DBUS_INTERFACE_SKELETON
         (self->iface), connection, self->path, &error)) {
         GDEBUG("Created D-Bus object %s", self->path);
-        return self;
+        return pub;
     } else {
         GERR("%s: %s", self->path, GERRMSG(error));
         g_error_free(error);
@@ -1085,9 +1081,11 @@ dbus_service_tag_new(
 
 void
 dbus_service_tag_free(
-    DBusServiceTag* self)
+    DBusServiceTag* pub)
 {
-    if (self) {
+    if (pub) {
+        DBusServiceTagPriv* self = dbus_service_tag_cast(pub);
+
         GDEBUG("Removing D-Bus object %s", self->path);
         org_sailfishos_nfc_tag_emit_removed(self->iface);
         g_dbus_interface_skeleton_unexport(G_DBUS_INTERFACE_SKELETON

@@ -41,8 +41,10 @@ DBUS_SERVICE_PLUGIN_SRC = \
   dbus_service_adapter.c \
   dbus_service_error.c \
   dbus_service_isodep.c \
+  dbus_service_local.c \
   dbus_service_name.c \
   dbus_service_ndef.c \
+  dbus_service_peer.c \
   dbus_service_plugin.c \
   dbus_service_util.c \
   dbus_service_tag.c \
@@ -52,7 +54,9 @@ DBUS_SERVICE_GEN_SRC = \
   org.sailfishos.nfc.Adapter.c \
   org.sailfishos.nfc.Daemon.c \
   org.sailfishos.nfc.IsoDep.c \
+  org.sailfishos.nfc.LocalService.c \
   org.sailfishos.nfc.NDEF.c \
+  org.sailfishos.nfc.Peer.c \
   org.sailfishos.nfc.Tag.c \
   org.sailfishos.nfc.TagType2.c
 

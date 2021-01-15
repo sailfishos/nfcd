@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -48,6 +48,8 @@ struct nfc_manager {
     gboolean enabled;
     gboolean stopped;
     int error;
+    /* Since 1.1.0 */
+    NFC_MODE mode;
 };
 
 GType nfc_manager_get_type() NFCD_EXPORT;
@@ -122,6 +124,18 @@ nfc_manager_request_power(
     gboolean on)
     NFCD_EXPORT;
 
+gboolean
+nfc_manager_register_service(
+    NfcManager* manager,
+    NfcPeerService* service) /* Since 1.1.0 */
+    NFCD_EXPORT;
+
+void
+nfc_manager_unregister_service(
+    NfcManager* manager,
+    NfcPeerService* service) /* Since 1.1.0 */
+    NFCD_EXPORT;
+
 gulong
 nfc_manager_add_adapter_added_handler(
     NfcManager* manager,
@@ -141,6 +155,13 @@ nfc_manager_add_enabled_changed_handler(
     NfcManager* manager,
     NfcManagerFunc func,
     void* user_data)
+    NFCD_EXPORT;
+
+gulong
+nfc_manager_add_mode_changed_handler(
+    NfcManager* manager,
+    NfcManagerFunc func,
+    void* user_data) /* Since 1.1.0 */
     NFCD_EXPORT;
 
 gulong
@@ -165,6 +186,35 @@ nfc_manager_remove_handlers(
 
 #define nfc_manager_remove_all_handlers(manager,ids) \
     nfc_manager_remove_handlers(manager, ids, G_N_ELEMENTS(ids))
+
+/*
+ * Plugins can ask NfcManager to enable and/or disable certain NFC modes.
+ * The last submitted request takes precedence, i.e. if first a request
+ * is submitted to enable certain mode and then another another request
+ * to disable the same mode, the mode remains enabled until the first
+ * request is dropped.
+ *
+ * If the same bits are set in both enable and disable masks, the enabling
+ * bits take precedence. If both are zero, nfc_manager_mode_request_new()
+ * returns NULL which is tolerated by nfc_manager_mode_request_free()
+ *
+ * Note that each NfcModeRequest carries an implicit reference to NfcManager.
+ */
+
+typedef struct nfc_mode_request NfcModeRequest; /* Since 1.1.0 */
+
+NfcModeRequest*
+nfc_manager_mode_request_new(
+    NfcManager* manager,
+    NFC_MODE enable,
+    NFC_MODE disable) /* Since 1.1.0 */
+    G_GNUC_WARN_UNUSED_RESULT
+    NFCD_EXPORT;
+
+void
+nfc_manager_mode_request_free(
+    NfcModeRequest* req) /* Since 1.1.0 */
+    NFCD_EXPORT;
 
 G_END_DECLS
 

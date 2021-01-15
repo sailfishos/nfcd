@@ -32,15 +32,22 @@
 
 #include "nfc_adapter_p.h"
 #include "nfc_adapter_impl.h"
+#include "nfc_peer_services.h"
+#include "nfc_initiator_impl.h"
+#include "nfc_initiator_p.h"
 #include "nfc_target_impl.h"
 #include "nfc_tag_t2.h"
+#include "nfc_peer.h"
 
 #include "test_common.h"
 #include "test_target.h"
+#include "test_initiator.h"
 
 #include <gutil_log.h>
 
 static TestOpt test_opt;
+
+static const guint8 symm_data[] = { 0x00, 0x00 };
 
 static
 void
@@ -56,6 +63,16 @@ void
 test_adapter_tag_inc(
     NfcAdapter* adapter,
     NfcTag* tag,
+    void* user_data)
+{
+    (*(int*)user_data)++;
+}
+
+static
+void
+test_adapter_peer_inc(
+    NfcAdapter* adapter,
+    NfcPeer* peer,
     void* user_data)
 {
     (*(int*)user_data)++;
@@ -220,29 +237,38 @@ test_null(
 {
     /* Public interfaces are NULL tolerant */
     g_assert(!nfc_adapter_ref(NULL));
+    g_assert(!nfc_adapter_peers(NULL));
     g_assert(!nfc_adapter_request_mode(NULL, 0));
     g_assert(!nfc_adapter_add_tag_t2(NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_tag_t4a(NULL, NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_tag_t4b(NULL, NULL, NULL, NULL));
-    G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-    g_assert(!nfc_adapter_add_other_tag(NULL, NULL));
-    G_GNUC_END_IGNORE_DEPRECATIONS
+    g_assert(!nfc_adapter_add_peer_initiator_a(NULL, NULL, NULL, NULL));
+    g_assert(!nfc_adapter_add_peer_initiator_f(NULL, NULL, NULL, NULL));
+    g_assert(!nfc_adapter_add_peer_target_a(NULL, NULL, NULL, NULL));
+    g_assert(!nfc_adapter_add_peer_target_f(NULL, NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_target_presence_handler(NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_tag_added_handler(NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_tag_removed_handler(NULL, NULL, NULL));
+    g_assert(!nfc_adapter_add_peer_added_handler(NULL, NULL, NULL));
+    g_assert(!nfc_adapter_add_peer_removed_handler(NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_powered_changed_handler(NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_power_requested_handler(NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_mode_changed_handler(NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_mode_requested_handler(NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_enabled_changed_handler(NULL, NULL, NULL));
+    G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+    g_assert(!nfc_adapter_add_other_tag(NULL, NULL));
+    G_GNUC_END_IGNORE_DEPRECATIONS
 
     nfc_adapter_set_name(NULL, NULL);
+    nfc_adapter_set_services(NULL, NULL);
     nfc_adapter_mode_notify(NULL, 0, FALSE);
     nfc_adapter_target_notify(NULL, FALSE);
     nfc_adapter_power_notify(NULL, FALSE, FALSE);
     nfc_adapter_set_enabled(NULL, TRUE);
     nfc_adapter_request_power(NULL, TRUE);
     nfc_adapter_remove_tag(NULL, NULL);
+    nfc_adapter_remove_peer(NULL, NULL);
     nfc_adapter_remove_handler(NULL, 0);
     nfc_adapter_remove_handlers(NULL, NULL, 0);
     nfc_adapter_unref(NULL);
@@ -259,6 +285,7 @@ test_basic(
 {
     TestAdapter* test = test_adapter_new();
     NfcAdapter* adapter = &test->adapter;
+    NfcPeerServices* services = nfc_peer_services_new();
     const char* name = "test";
 
     g_assert(!nfc_adapter_add_target_presence_handler(adapter, NULL, NULL));
@@ -269,21 +296,29 @@ test_basic(
     g_assert(!nfc_adapter_add_mode_changed_handler(adapter, NULL, NULL));
     g_assert(!nfc_adapter_add_mode_requested_handler(adapter, NULL, NULL));
     g_assert(!nfc_adapter_add_enabled_changed_handler(adapter, NULL, NULL));
+    g_assert(!nfc_adapter_add_peer_added_handler(adapter, NULL, NULL));
+    g_assert(!nfc_adapter_add_peer_removed_handler(adapter, NULL, NULL));
     g_assert(!nfc_adapter_add_tag_t2(adapter, NULL, NULL));
     g_assert(!nfc_adapter_add_tag_t4a(adapter, NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_tag_t4b(adapter, NULL, NULL, NULL));
+    g_assert(!nfc_adapter_add_peer_initiator_a(adapter, NULL, NULL, NULL));
+    g_assert(!nfc_adapter_add_peer_initiator_f(adapter, NULL, NULL, NULL));
+    g_assert(!nfc_adapter_add_peer_target_a(adapter, NULL, NULL, NULL));
+    g_assert(!nfc_adapter_add_peer_target_f(adapter, NULL, NULL, NULL));
+    g_assert(!nfc_adapter_add_other_tag2(adapter, NULL, NULL));
     G_GNUC_BEGIN_IGNORE_DEPRECATIONS
     g_assert(!nfc_adapter_add_other_tag(adapter, NULL));
     G_GNUC_END_IGNORE_DEPRECATIONS
-    g_assert(!nfc_adapter_add_other_tag2(adapter, NULL, NULL));
     nfc_adapter_remove_handler(adapter, 0);
 
     nfc_adapter_set_name(adapter, name);
+    nfc_adapter_set_services(adapter, services);
     g_assert(!g_strcmp0(adapter->name, name));
 
     g_assert(nfc_adapter_ref(adapter) == adapter);
     nfc_adapter_unref(adapter);
     nfc_adapter_unref(adapter);
+    nfc_peer_services_unref(services);
 }
 
 /*==========================================================================*
@@ -581,8 +616,8 @@ test_tags(
     void)
 {
     TestAdapter* test = test_adapter_new();
-    NfcTarget* target0 = test_target_new_tech(NFC_TECHNOLOGY_A);
-    NfcTarget* target1 = test_target_new();
+    NfcTarget* target0 = test_target_new_tech(NFC_TECHNOLOGY_A, FALSE);
+    NfcTarget* target1 = test_target_new(FALSE);
     NfcAdapter* adapter = &test->adapter;
     NfcTag* tag0;
     NfcTag* tag1;
@@ -608,12 +643,17 @@ test_tags(
     
     /* Test "presence_changed" signal */
     nfc_adapter_target_notify(adapter, TRUE);
-    nfc_adapter_target_notify(adapter, TRUE);
-    g_assert(adapter->target_present);
-    g_assert(presence_changed_count == 1);
+    g_assert(!adapter->target_present);
+    g_assert_cmpint(presence_changed_count, == ,0);
 
     memset(&poll, 0, sizeof(poll));
     tag0 = nfc_adapter_add_tag_t2(adapter, target0, &poll.a);
+    g_assert(adapter->target_present);
+    g_assert_cmpint(presence_changed_count, == ,1);
+
+    nfc_adapter_target_notify(adapter, TRUE); /* Has no effect */
+    g_assert_cmpint(presence_changed_count, == ,1);
+
     tag1 = nfc_adapter_add_other_tag2(adapter, target1, NULL);
     g_assert(tag0);
     g_assert(tag1);
@@ -626,15 +666,15 @@ test_tags(
     nfc_adapter_target_notify(adapter, FALSE);
     g_assert(nfc_adapter_request_mode(adapter, NFC_MODE_NONE));
     g_assert(adapter->target_present);
-    g_assert(presence_changed_count == 1);
+    g_assert_cmpint(presence_changed_count, == ,1);
 
     /* Remove the tags */
     nfc_target_gone(target0);
     nfc_adapter_remove_tag(adapter, tag1->name);
     g_assert(!adapter->target_present);
-    g_assert(presence_changed_count == 2);
-    g_assert(tag_added == 2);
-    g_assert(tag_removed == 2);
+    g_assert_cmpint(presence_changed_count, == ,2);
+    g_assert_cmpint(tag_added, == ,2);
+    g_assert_cmpint(tag_removed, == ,2);
 
     /* These have no effect */
     nfc_adapter_remove_tag(adapter, NULL);
@@ -648,6 +688,164 @@ test_tags(
     nfc_adapter_unref(adapter);
     nfc_target_unref(target0);
     nfc_target_unref(target1);
+}
+
+/*==========================================================================*
+ * peer
+ *==========================================================================*/
+
+static
+void
+test_peer(
+    void)
+{
+    static const TestTx tx[] = {
+        {
+            { TEST_ARRAY_AND_SIZE(symm_data) },
+            { TEST_ARRAY_AND_SIZE(symm_data) }
+        },{
+            { TEST_ARRAY_AND_SIZE(symm_data) },
+            { TEST_ARRAY_AND_SIZE(symm_data) }
+        }
+    };
+    static const guint8 general_bytes [] = {
+        0x46, 0x66, 0x6d, 0x01, 0x01, 0x11, 0x02, 0x02,
+        0x07, 0xff, 0x03, 0x02, 0x00, 0x13, 0x04, 0x01,
+        0xff
+    };
+    static const NfcParamNfcDepInitiator initiator_param = {
+        { TEST_ARRAY_AND_SIZE(general_bytes) }
+    };
+
+    TestAdapter* test = test_adapter_new();
+    NfcTarget* target0 = test_target_new_with_tx(TEST_ARRAY_AND_COUNT(tx));
+    NfcTarget* target1 = test_target_new_with_tx(TEST_ARRAY_AND_COUNT(tx));
+    NfcAdapter* adapter = &test->adapter;
+    NfcPeer* peer0;
+    NfcPeer* peer1;
+    int peer_added = 0, peer_removed = 0, presence_changed_count = 0;
+    gulong id[3];
+
+    /* Set up the adapter */
+    nfc_adapter_set_name(adapter, "test");
+    adapter->supported_modes = NFC_MODE_P2P_TARGET;
+    nfc_adapter_power_notify(adapter, TRUE, FALSE);
+    nfc_adapter_mode_notify(adapter, NFC_MODE_P2P_TARGET, FALSE);
+    g_assert(!adapter->target_present);
+
+    id[0] = nfc_adapter_add_peer_added_handler(adapter,
+        test_adapter_peer_inc, &peer_added);
+    id[1] = nfc_adapter_add_peer_removed_handler(adapter,
+        test_adapter_peer_inc, &peer_removed);
+    id[2] = nfc_adapter_add_target_presence_handler(adapter,
+        test_adapter_inc, &presence_changed_count);
+    g_assert(id[0]);
+    g_assert(id[1]);
+    g_assert(id[2]);
+
+    /* Two peers are unlikely in real life but API allows it  */
+    peer0 = nfc_adapter_add_peer_initiator_a(adapter, target0, NULL,
+        &initiator_param);
+    g_assert(peer0);
+    g_assert(adapter->target_present);
+    g_assert_cmpint(presence_changed_count, == ,1);
+    g_assert_cmpint(peer_added, == ,1);
+    g_assert_cmpint(peer_removed, == ,0);
+
+    peer1 = nfc_adapter_add_peer_initiator_a(adapter, target1, NULL,
+        &initiator_param);
+    g_assert(peer1);
+    g_assert(adapter->target_present);
+    g_assert_cmpint(presence_changed_count, == ,1);
+    g_assert_cmpint(peer_added, == ,2);
+    g_assert_cmpint(peer_removed, == ,0);
+
+    /* These two have no effect */
+    nfc_adapter_remove_peer(adapter, NULL);
+    nfc_adapter_remove_peer(adapter, "");
+    g_assert(adapter->target_present);
+    g_assert_cmpint(presence_changed_count, == ,1);
+    g_assert_cmpint(peer_added, == ,2);
+    g_assert_cmpint(peer_removed, == ,0);
+
+    /* This one does */
+    nfc_peer_ref(peer0);
+    nfc_adapter_remove_peer(adapter, peer0->name);
+    g_assert(adapter->target_present); /* One is still present */
+    g_assert_cmpint(presence_changed_count, == ,1);
+    g_assert_cmpint(peer_added, == ,2);
+    g_assert_cmpint(peer_removed, == ,1);
+    nfc_peer_unref(peer0);
+
+    /* The second one goes away by itself */
+    nfc_target_gone(target1);
+    g_assert(!adapter->target_present); /* Both are gone now */
+    g_assert_cmpint(presence_changed_count, == ,2);
+    g_assert_cmpint(peer_added, == ,2);
+    g_assert_cmpint(peer_removed, == ,2);
+
+    /* Fail to add a non-present peer */
+    g_assert(!nfc_adapter_add_peer_initiator_a(adapter, target1, NULL,
+        &initiator_param));
+
+    nfc_adapter_remove_all_handlers(adapter, id);
+    nfc_adapter_unref(adapter);
+    nfc_target_unref(target0);
+    nfc_target_unref(target1);
+}
+
+/*==========================================================================*
+ * no_peer
+ *==========================================================================*/
+
+static
+void
+test_no_peer(
+    void)
+{
+    TestAdapter* test = test_adapter_new();
+    NfcTarget* target = test_target_new(FALSE);
+    NfcInitiator* initiator = test_initiator_new();
+    NfcAdapter* adapter = &test->adapter;
+    int peer_added = 0, peer_removed = 0, presence_changed_count = 0;
+    gulong id[3];
+
+    /* Set up the adapter */
+    nfc_adapter_set_name(adapter, "test");
+    adapter->supported_modes = NFC_MODE_P2P_TARGET;
+    nfc_adapter_power_notify(adapter, TRUE, FALSE);
+    nfc_adapter_mode_notify(adapter, NFC_MODE_P2P_TARGET, FALSE);
+    g_assert(!adapter->target_present);
+
+    id[0] = nfc_adapter_add_peer_added_handler(adapter,
+        test_adapter_peer_inc, &peer_added);
+    id[1] = nfc_adapter_add_peer_removed_handler(adapter,
+        test_adapter_peer_inc, &peer_removed);
+    id[2] = nfc_adapter_add_target_presence_handler(adapter,
+        test_adapter_inc, &presence_changed_count);
+    g_assert(id[0]);
+    g_assert(id[1]);
+    g_assert(id[2]);
+
+    /* Try to add a peer (and fail) */
+    g_assert(!nfc_adapter_add_peer_initiator_a(adapter, target, NULL, NULL));
+    g_assert(!nfc_adapter_add_peer_initiator_f(adapter, target, NULL, NULL));
+    g_assert(!adapter->target_present);
+    g_assert_cmpint(presence_changed_count, == ,0);
+    g_assert_cmpint(peer_added, == ,0);
+    g_assert_cmpint(peer_removed, == ,0);
+
+    g_assert(!nfc_adapter_add_peer_target_a(adapter, initiator, NULL, NULL));
+    g_assert(!nfc_adapter_add_peer_target_f(adapter, initiator, NULL, NULL));
+    g_assert(!adapter->target_present);
+    g_assert_cmpint(presence_changed_count, == ,0);
+    g_assert_cmpint(peer_added, == ,0);
+    g_assert_cmpint(peer_removed, == ,0);
+
+    nfc_adapter_remove_all_handlers(adapter, id);
+    nfc_adapter_unref(adapter);
+    g_object_unref(initiator);
+    nfc_target_unref(target);
 }
 
 /*==========================================================================*
@@ -668,6 +866,8 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("power"), test_power);
     g_test_add_func(TEST_("mode"), test_mode);
     g_test_add_func(TEST_("tags"), test_tags);
+    g_test_add_func(TEST_("peer"), test_peer);
+    g_test_add_func(TEST_("no_peer"), test_no_peer);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }
