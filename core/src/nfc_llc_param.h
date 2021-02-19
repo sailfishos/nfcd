@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2020 Jolla Ltd.
- * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020-2021 Jolla Ltd.
+ * Copyright (C) 2020-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -41,9 +41,6 @@
 #define NFC_LLC_LTO_DEFAULT (100) /* milliseconds */
 #define NFC_LLC_RW_DEFAULT  (1)
 #define NFC_LLC_RW_MAX      (0xf)
-
-#define NFC_LLCP_VERSION_1_0 (0x10) /* LLCP 1.0 */
-#define NFC_LLCP_VERSION_1_1 (0x11) /* LLCP 1.1 */
 
 typedef enum nfc_llc_param_type {
     NFC_LLC_PARAM_VERSION = 1,

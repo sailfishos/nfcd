@@ -50,6 +50,9 @@ struct nfc_manager {
     int error;
     /* Since 1.1.0 */
     NFC_MODE mode;
+    /* Since 1.1.1 */
+    NFC_LLCP_VERSION llcp_version;
+    NfcPeerService* const* services;
 };
 
 GType nfc_manager_get_type() NFCD_EXPORT;
@@ -71,6 +74,13 @@ void
 (*NfcManagerAdapterFunc)(
     NfcManager* manager,
     NfcAdapter* adapter,
+    void* user_data);
+
+typedef
+void
+(*NfcManagerServiceFunc)(
+    NfcManager* manager,
+    NfcPeerService* service,
     void* user_data);
 
 NfcManager*
@@ -158,6 +168,13 @@ nfc_manager_add_enabled_changed_handler(
     NFCD_EXPORT;
 
 gulong
+nfc_manager_add_stopped_handler(
+    NfcManager* manager,
+    NfcManagerFunc func,
+    void* user_data)
+    NFCD_EXPORT;
+
+gulong
 nfc_manager_add_mode_changed_handler(
     NfcManager* manager,
     NfcManagerFunc func,
@@ -165,10 +182,17 @@ nfc_manager_add_mode_changed_handler(
     NFCD_EXPORT;
 
 gulong
-nfc_manager_add_stopped_handler(
+nfc_manager_add_service_registered_handler(
     NfcManager* manager,
-    NfcManagerFunc func,
-    void* user_data)
+    NfcManagerServiceFunc func,
+    void* user_data) /* Since 1.1.1 */
+    NFCD_EXPORT;
+
+gulong
+nfc_manager_add_service_unregistered_handler(
+    NfcManager* manager,
+    NfcManagerServiceFunc func,
+    void* user_data) /* Since 1.1.1 */
     NFCD_EXPORT;
 
 void

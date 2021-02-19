@@ -35,6 +35,7 @@
 #include "nfc_manager_p.h"
 #include "internal/nfc_manager_i.h"
 #include "nfc_adapter_p.h"
+#include "nfc_peer_service.h"
 #include "nfc_peer_services.h"
 #include "nfc_plugins.h"
 #include "nfc_log.h"
@@ -72,17 +73,21 @@ G_DEFINE_TYPE(NfcManager, nfc_manager, G_TYPE_OBJECT)
 enum nfc_manager_signal {
     SIGNAL_ADAPTER_ADDED,
     SIGNAL_ADAPTER_REMOVED,
+    SIGNAL_SERVICE_REGISTERED,
+    SIGNAL_SERVICE_UNREGISTERED,
     SIGNAL_ENABLED_CHANGED,
     SIGNAL_MODE_CHANGED,
     SIGNAL_STOPPED,
     SIGNAL_COUNT
 };
 
-#define SIGNAL_ADAPTER_ADDED_NAME       "nfc-manager-adapter-added"
-#define SIGNAL_ADAPTER_REMOVED_NAME     "nfc-manager-adapter-removed"
-#define SIGNAL_ENABLED_CHANGED_NAME     "nfc-manager-enabled-changed"
-#define SIGNAL_MODE_CHANGED_NAME        "nfc-manager-mode-changed"
-#define SIGNAL_STOPPED_NAME             "nfc-manager-stopped"
+#define SIGNAL_ADAPTER_ADDED_NAME         "nfc-manager-adapter-added"
+#define SIGNAL_ADAPTER_REMOVED_NAME       "nfc-manager-adapter-removed"
+#define SIGNAL_SERVICE_REGISTERED_NAME    "nfc-manager-service-registered"
+#define SIGNAL_SERVICE_UNREGISTERED_NAME  "nfc-manager-service-unregistered"
+#define SIGNAL_ENABLED_CHANGED_NAME       "nfc-manager-enabled-changed"
+#define SIGNAL_MODE_CHANGED_NAME          "nfc-manager-mode-changed"
+#define SIGNAL_STOPPED_NAME               "nfc-manager-stopped"
 
 static guint nfc_manager_signals[SIGNAL_COUNT] = { 0 };
 
@@ -468,10 +473,15 @@ nfc_manager_register_service(
         NfcManagerPriv* priv = self->priv;
 
         if (nfc_peer_services_add(priv->services, service)) {
+            nfc_peer_service_ref(service);
+            self->services = priv->services->list;
             if (!priv->p2p_request) {
                 priv->p2p_request = nfc_manager_mode_request_new_internal(self,
                     TRUE, NFC_MODES_P2P, NFC_MODE_NONE);
             }
+            g_signal_emit(self, nfc_manager_signals
+                [SIGNAL_SERVICE_REGISTERED], 0, service);
+            nfc_peer_service_unref(service);
             return TRUE;
         }
     }
@@ -486,10 +496,16 @@ nfc_manager_unregister_service(
     if (G_LIKELY(self)) {
         NfcManagerPriv* priv = self->priv;
 
-        nfc_peer_services_remove(priv->services, service);
-        if (!priv->services->list[0]) {
-            nfc_manager_release_p2p_mode_request(self);
+        nfc_peer_service_ref(service);
+        if (nfc_peer_services_remove(priv->services, service)) {
+            self->services = priv->services->list;
+            if (!priv->services->list[0]) {
+                nfc_manager_release_p2p_mode_request(self);
+            }
+            g_signal_emit(self, nfc_manager_signals
+                [SIGNAL_SERVICE_UNREGISTERED], 0, service);
         }
+        nfc_peer_service_unref(service);
     }
 }
 
@@ -531,6 +547,26 @@ nfc_manager_add_mode_changed_handler(
 {
     return (G_LIKELY(self) && G_LIKELY(func)) ? g_signal_connect(self,
         SIGNAL_MODE_CHANGED_NAME, G_CALLBACK(func), user_data) : 0;
+}
+
+gulong
+nfc_manager_add_service_registered_handler(
+    NfcManager* self,
+    NfcManagerServiceFunc func,
+    void* user_data) /* Since 1.1.1 */
+{
+    return (G_LIKELY(self) && G_LIKELY(func)) ? g_signal_connect(self,
+        SIGNAL_SERVICE_REGISTERED_NAME, G_CALLBACK(func), user_data) : 0;
+}
+
+gulong
+nfc_manager_add_service_unregistered_handler(
+    NfcManager* self,
+    NfcManagerServiceFunc func,
+    void* user_data) /* Since 1.1.1 */
+{
+    return (G_LIKELY(self) && G_LIKELY(func)) ? g_signal_connect(self,
+        SIGNAL_SERVICE_UNREGISTERED_NAME, G_CALLBACK(func), user_data) : 0;
 }
 
 gulong
@@ -621,13 +657,15 @@ nfc_manager_init(
     NfcManagerPriv* priv = G_TYPE_INSTANCE_GET_PRIVATE(self, NFC_TYPE_MANAGER,
         NfcManagerPriv);
 
+    priv->services = nfc_peer_services_new();
+    priv->adapters = g_hash_table_new_full(g_str_hash, g_str_equal,
+        g_free, g_object_unref);
     self->priv = priv;
     self->adapters = g_new0(NfcAdapter*, 1);
     self->enabled = TRUE;
     self->mode = priv->default_mode = NFC_MODE_READER_WRITER;
-    priv->services = nfc_peer_services_new();
-    priv->adapters = g_hash_table_new_full(g_str_hash, g_str_equal,
-        g_free, g_object_unref);
+    self->llcp_version = NFC_LLCP_VERSION_1_1;
+    self->services = priv->services->list;
 }
 
 static
@@ -662,6 +700,12 @@ nfc_manager_class_init(
             0, NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_OBJECT);
     nfc_manager_signals[SIGNAL_ADAPTER_REMOVED] =
         g_signal_new(SIGNAL_ADAPTER_REMOVED_NAME, type, G_SIGNAL_RUN_FIRST,
+            0, NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_OBJECT);
+    nfc_manager_signals[SIGNAL_SERVICE_REGISTERED] =
+        g_signal_new(SIGNAL_SERVICE_REGISTERED_NAME, type, G_SIGNAL_RUN_FIRST,
+            0, NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_OBJECT);
+    nfc_manager_signals[SIGNAL_SERVICE_UNREGISTERED] =
+        g_signal_new(SIGNAL_SERVICE_UNREGISTERED_NAME, type, G_SIGNAL_RUN_FIRST,
             0, NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_OBJECT);
     nfc_manager_signals[SIGNAL_ENABLED_CHANGED] =
         g_signal_new(SIGNAL_ENABLED_CHANGED_NAME, type, G_SIGNAL_RUN_FIRST,

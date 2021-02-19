@@ -123,6 +123,12 @@ typedef enum nfc_peer_connect_result {
     NFC_PEER_CONNECT_FAILED        /* I/O or protocol error */
 } NFC_PEER_CONNECT_RESULT;
 
+typedef enum nfc_llcp_version {
+    NFC_LLCP_VERSION_1_0 = 0x10,
+    NFC_LLCP_VERSION_1_1 = 0x11,
+    NFC_LLCP_VERSION_1_2 = 0x12
+} NFC_LLCP_VERSION; /* Since 1.1.1 */
+
 /* RF technology specific parameters */
 
 typedef struct nfc_param_poll_a {
