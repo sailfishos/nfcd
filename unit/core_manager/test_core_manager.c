@@ -30,11 +30,12 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "test_service.h"
+#include "test_common.h"
+
 #include "nfc_manager_p.h"
 #include "internal/nfc_manager_i.h"
 #include "nfc_adapter_impl.h"
-
-#include "test_common.h"
 
 #include <gutil_log.h>
 
@@ -182,6 +183,8 @@ test_null(
     g_assert(!nfc_manager_add_adapter(NULL, NULL));
     g_assert(!nfc_manager_add_adapter_added_handler(NULL, NULL, NULL));
     g_assert(!nfc_manager_add_adapter_removed_handler(NULL, NULL, NULL));
+    g_assert(!nfc_manager_add_service_registered_handler(NULL, NULL, NULL));
+    g_assert(!nfc_manager_add_service_unregistered_handler(NULL, NULL, NULL));
     g_assert(!nfc_manager_add_enabled_changed_handler(NULL, NULL, NULL));
     g_assert(!nfc_manager_add_mode_changed_handler(NULL, NULL, NULL));
     g_assert(!nfc_manager_add_stopped_handler(NULL, NULL, NULL));
@@ -269,6 +272,8 @@ test_basic(
     g_assert(!nfc_manager_add_adapter(manager, NULL));
     g_assert(!nfc_manager_add_adapter_added_handler(manager, NULL, NULL));
     g_assert(!nfc_manager_add_adapter_removed_handler(manager, NULL, NULL));
+    g_assert(!nfc_manager_add_service_registered_handler(manager, NULL, NULL));
+    g_assert(!nfc_manager_add_service_unregistered_handler(manager, NULL,NULL));
     g_assert(!nfc_manager_add_enabled_changed_handler(manager, NULL, NULL));
     g_assert(!nfc_manager_add_stopped_handler(manager, NULL, NULL));
     nfc_manager_remove_handler(manager, 0);
@@ -439,6 +444,74 @@ test_mode(
 }
 
 /*==========================================================================*
+ * service
+ *==========================================================================*/
+
+static
+void
+test_service_cb(
+    NfcManager* manager,
+    NfcPeerService* service,
+    void* user_data)
+{
+    (*(int*)user_data)++;
+}
+
+static
+void
+test_service(
+    void)
+{
+    NfcPluginsInfo pi;
+    NfcManager* manager;
+    NfcPeerService* service = NFC_PEER_SERVICE(test_service_new("foo"));
+    int registered = 0, unregistered = 0;
+
+    memset(&pi, 0, sizeof(pi));
+    manager = nfc_manager_new(&pi);
+
+    /* Empty list by default */
+    g_assert(manager->services);
+    g_assert(!manager->services[0]);
+
+    /* Some (non-zero) LLCP version must be there */
+    g_assert(manager->llcp_version);
+
+    /* Register the handlers */
+    g_assert(nfc_manager_add_service_registered_handler(manager,
+        test_service_cb, &registered));
+    g_assert(nfc_manager_add_service_unregistered_handler(manager,
+        test_service_cb, &unregistered));
+
+    /* Register the service */
+    g_assert(nfc_manager_register_service(manager, service));
+    g_assert_cmpint(registered, == ,1);
+    g_assert_cmpint(unregistered, == ,0);
+    g_assert(manager->services[0] == service);
+    g_assert(!manager->services[1]);
+
+    /* Service can only be registered once */
+    g_assert(!nfc_manager_register_service(manager, service));
+    g_assert_cmpint(registered, == ,1);
+    g_assert_cmpint(unregistered, == ,0);
+
+    /* Then unregister it */
+    nfc_manager_unregister_service(manager, service);
+    g_assert_cmpint(registered, == ,1);
+    g_assert_cmpint(unregistered, == ,1);
+    g_assert(!manager->services[0]);
+
+    /* Then again, it won't have any effect */
+    nfc_manager_unregister_service(manager, service);
+    g_assert_cmpint(registered, == ,1);
+    g_assert_cmpint(unregistered, == ,1);
+    g_assert(!manager->services[0]);
+
+    nfc_peer_service_unref(service);
+    nfc_manager_unref(manager);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -454,6 +527,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("basic"), test_basic);
     g_test_add_func(TEST_("adapter"), test_adapter);
     g_test_add_func(TEST_("mode"), test_mode);
+    g_test_add_func(TEST_("service"), test_service);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

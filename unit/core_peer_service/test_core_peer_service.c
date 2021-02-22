@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2020 Jolla Ltd.
- * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020-2021 Jolla Ltd.
+ * Copyright (C) 2020-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -31,53 +31,16 @@
  */
 
 #include "test_common.h"
+#include "test_service.h"
 
-#include "nfc_llc.h"
-#include "nfc_peer_service_impl.h"
 #include "nfc_peer_service_p.h"
+#include "nfc_llc.h"
 
 #include <gutil_log.h>
 
 static TestOpt test_opt;
 
 #define TEST_(name) "/core/peer_service/" name
-
-/*==========================================================================*
- * Test service
- *==========================================================================*/
-
-typedef NfcPeerServiceClass TestServiceClass;
-typedef NfcPeerService TestService;
-
-G_DEFINE_TYPE(TestService, test_service, NFC_TYPE_PEER_SERVICE)
-#define TEST_TYPE_SERVICE (test_service_get_type())
-#define TEST_SERVICE(obj) (G_TYPE_CHECK_INSTANCE_CAST(obj, \
-        TEST_TYPE_SERVICE, TestService))
-
-static
-void
-test_service_init(
-    TestService* self)
-{
-}
-
-static
-void
-test_service_class_init(
-    TestServiceClass* klass)
-{
-}
-
-static
-TestService*
-test_service_new(
-    const char* name)
-{
-    TestService* service = g_object_new(TEST_TYPE_SERVICE, NULL);
-
-    nfc_peer_service_init_base(service, name);
-    return service;
-}
 
 /*==========================================================================*
  * null

@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2020 Jolla Ltd.
- * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020-2021 Jolla Ltd.
+ * Copyright (C) 2020-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,6 +30,7 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "test_service.h"
 #include "test_common.h"
 
 #include "nfc_peer_services.h"
@@ -54,71 +55,6 @@ test_services_count(
         while (*ptr++) n++;
     }
     return n;
-}
-
-/*==========================================================================*
- * Test service
- *==========================================================================*/
-
-typedef NfcPeerServiceClass TestServiceClass;
-typedef struct test_service {
-    NfcPeerService service;
-    int peer_arrived;
-    int peer_left;
-} TestService;
-
-G_DEFINE_TYPE(TestService, test_service, NFC_TYPE_PEER_SERVICE)
-#define TEST_TYPE_SERVICE (test_service_get_type())
-#define TEST_SERVICE(obj) (G_TYPE_CHECK_INSTANCE_CAST(obj, \
-        TEST_TYPE_SERVICE, TestService))
-
-static
-void
-test_service_peer_arrived(
-    NfcPeerService* service,
-    NfcPeer* peer)
-{
-    TEST_SERVICE(service)->peer_arrived++;
-    NFC_PEER_SERVICE_CLASS(test_service_parent_class)->
-        peer_arrived(service, peer);
-}
-
-static
-void
-test_service_peer_left(
-    NfcPeerService* service,
-    NfcPeer* peer)
-{
-    TEST_SERVICE(service)->peer_left++;
-    NFC_PEER_SERVICE_CLASS(test_service_parent_class)->
-        peer_left(service, peer);
-}
-
-static
-void
-test_service_init(
-    TestService* self)
-{
-}
-
-static
-void
-test_service_class_init(
-    TestServiceClass* klass)
-{
-    klass->peer_arrived = test_service_peer_arrived;
-    klass->peer_left = test_service_peer_left;
-}
-
-static
-TestService*
-test_service_new(
-    const char* name)
-{
-    TestService* service = g_object_new(TEST_TYPE_SERVICE, NULL);
-
-    nfc_peer_service_init_base(&service->service, name);
-    return service;
 }
 
 /*==========================================================================*
