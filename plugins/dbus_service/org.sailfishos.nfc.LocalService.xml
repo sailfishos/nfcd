@@ -9,14 +9,14 @@
       <arg name="accepted" type="b" direction="out"/>
     </method>
     <method name="DatagramReceived">
-      <arg name="rsap" type="u"/>
-      <arg name="data" type="ay"/>
+      <arg name="rsap" type="u" direction="in"/>
+      <arg name="data" type="ay" direction="in"/>
     </method>
     <method name="PeerArrived">
-      <arg name="path" type="o"/>
+      <arg name="path" type="o" direction="in"/>
     </method>
     <method name="PeerLeft">
-      <arg name="path" type="o"/>
+      <arg name="path" type="o" direction="in"/>
     </method>
   </interface>
 </node>
