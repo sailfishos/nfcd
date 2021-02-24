@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2020 Jolla Ltd.
- * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020-2021 Jolla Ltd.
+ * Copyright (C) 2020-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -181,7 +181,7 @@ nfc_peer_service_connection_dead(
 {
     NfcPeerServicePriv* priv = self->priv;
     int pos = -1;
-    uint n = 0;
+    guint n = 0;
 
     if (priv->conns) {
         NfcPeerConnection** ptr = priv->conns;
