@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -335,6 +335,7 @@ int main(int argc, char* argv[])
     NfcdOpt opt;
 
     gutil_log_default.name = "nfcd";
+    gutil_log_timestamp = TRUE;
     setlocale(LC_ALL, "");
     nfcd_opt_init(&opt);
     if (nfcd_opt_parse(&opt, argc, argv)) {
