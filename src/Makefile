@@ -12,6 +12,16 @@ PKGS = gio-unix-2.0 gio-2.0 libglibutil
 LIB_PKGS = $(PKGS) libdbusaccess
 
 #
+# libdbusaccess is optional
+#
+
+HAVE_DBUSACCESS ?= 1
+
+ifneq ($(HAVE_DBUSACCESS),0)
+LIB_PKGS += libdbusaccess
+endif
+
+#
 # Default target
 #
 

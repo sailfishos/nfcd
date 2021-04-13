@@ -27,3 +27,6 @@ clean:
 .DEFAULT:
 	@$(MAKE) -C src $@
 	@$(MAKE) -C tools $@
+
+debian/%.install: debian/%.install.in
+	sed 's|@LIBDIR@|$(LIBDIR)|g' $< > $@

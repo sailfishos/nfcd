@@ -6,7 +6,18 @@
 # Required packages
 #
 
-PKGS = libdbusaccess libglibutil glib-2.0 gobject-2.0 gio-2.0 gio-unix-2.0
+PKGS = libglibutil glib-2.0 gobject-2.0 gio-2.0 gio-unix-2.0
+
+#
+# libdbusaccess is optional
+#
+
+HAVE_DBUSACCESS ?= 1
+
+ifneq ($(HAVE_DBUSACCESS),0)
+PKGS += libdbusaccess
+DEFINES += -DHAVE_DBUSACCESS
+endif
 
 #
 # Default target
