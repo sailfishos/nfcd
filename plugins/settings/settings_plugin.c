@@ -38,8 +38,10 @@
 
 #include <gio/gio.h>
 
+#ifdef HAVE_DBUSACCESS
 #include <dbusaccess_policy.h>
 #include <dbusaccess_peer.h>
+#endif
 
 #include <gutil_misc.h>
 
@@ -64,7 +66,9 @@ typedef struct settings_plugin {
     NfcPlugin parent;
     NfcManager* manager;
     OrgSailfishosNfcSettings* iface;
+#ifdef HAVE_DBUSACCESS
     DAPolicy* policy;
+#endif
     char* storage_dir;
     char* storage_file;
     guint own_name_id;
@@ -91,6 +95,8 @@ G_DEFINE_TYPE(SettingsPlugin, settings_plugin, NFC_TYPE_PLUGIN)
 #define SETTINGS_GROUP                   "Settings"
 #define SETTINGS_KEY_ENABLED             "Enabled"
 #define SETTINGS_KEY_ALWAYS_ON           "AlwaysOn"
+
+#ifdef HAVE_DBUSACCESS
 
 typedef enum settings_error {
     SETTINGS_ERROR_ACCESS_DENIED,        /* AccessDenied */
@@ -121,6 +127,8 @@ static const DA_ACTION settings_policy_actions[] = {
 
 static const char settings_default_policy[] =
     DA_POLICY_VERSION ";group(privileged)=allow";
+
+#endif /* HAVE_DBUSACCESS */
 
 static
 GKeyFile*
@@ -218,6 +226,8 @@ settings_plugin_update_config(
     g_key_file_unref(config);
 }
 
+#ifdef HAVE_DBUSACCESS
+
 static
 GQuark
 settings_plugin_error_quark()
@@ -232,6 +242,10 @@ settings_plugin_error_quark()
     return (GQuark)settings_error_quark_value;
 }
 
+/*
+ * Note: if settings_plugin_access_allowed() returns FALSE, it completes
+ * the call with error.
+ */
 static
 gboolean
 settings_plugin_access_allowed(
@@ -254,6 +268,14 @@ settings_plugin_access_allowed(
         SETTINGS_ERROR_ACCESS_DENIED, "D-Bus access denied");
     return FALSE;
 }
+
+#else
+
+/* No access control (other than the one provided by dbus-daemon) */
+#define settings_plugin_access_allowed(self,call,action,def) (TRUE)
+
+#endif /* HAVE_DBUSACCESS */
+
 
 static
 void
@@ -294,9 +316,7 @@ settings_plugin_dbus_handle_get_interface_version(
     GDBusMethodInvocation* call,
     gpointer user_data)
 {
-    SettingsPlugin* self = SETTINGS_PLUGIN(user_data);
-
-    if (settings_plugin_access_allowed(self, call,
+    if (settings_plugin_access_allowed(SETTINGS_PLUGIN(user_data), call,
         SETTINGS_ACTION_GET_INTERFACE_VERSION,
         SETTINGS_DEFAULT_ACCESS_GET_INTERFACE_VERSION)) {
         org_sailfishos_nfc_settings_complete_get_interface_version(iface, call,
@@ -456,8 +476,10 @@ settings_plugin_init(
     self->storage_dir = g_strdup(SETTINGS_STORAGE_DIR);
     self->storage_file = g_build_filename(self->storage_dir,
         SETTINGS_STORAGE_FILE, NULL);
+#ifdef HAVE_DBUSACCESS
     self->policy = da_policy_new_full(settings_default_policy,
         settings_policy_actions);
+#endif
 }
 
 static
@@ -467,7 +489,9 @@ settings_plugin_finalize(
 {
     SettingsPlugin* self = SETTINGS_PLUGIN(plugin);
 
+#ifdef HAVE_DBUSACCESS
     da_policy_unref(self->policy);
+#endif
     g_free(self->storage_dir);
     g_free(self->storage_file);
     G_OBJECT_CLASS(settings_plugin_parent_class)->finalize(plugin);
