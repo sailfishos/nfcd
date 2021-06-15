@@ -91,6 +91,7 @@ struct nfc_target_sequence {
     NfcTargetSequence* next;
     gint refcount;
     NfcTarget* target;
+    NFC_SEQUENCE_FLAGS flags;
 };
 
 typedef struct nfc_target_sequence_queue {
@@ -527,6 +528,14 @@ NfcTargetSequence*
 nfc_target_sequence_new(
     NfcTarget* target)
 {
+    return nfc_target_sequence_new2(target, NFC_SEQUENCE_FLAGS_NONE);
+}
+
+NfcTargetSequence*
+nfc_target_sequence_new2(
+    NfcTarget* target,
+    NFC_SEQUENCE_FLAGS flags) /* Since 1.1.4 */
+{
     if (G_LIKELY(target)) {
         NfcTargetSequence* self = g_slice_new0(NfcTargetSequence);
         NfcTargetPriv* priv = target->priv;
@@ -534,6 +543,7 @@ nfc_target_sequence_new(
 
         g_atomic_int_set(&self->refcount, 1);
         self->target = target;
+        self->flags = flags;
 
         /* Insert it to the queue */
         if (queue->last) {
@@ -560,6 +570,13 @@ nfc_target_sequence_free(
     NfcTargetSequence* self)
 {
     nfc_target_sequence_unref(self);
+}
+
+NFC_SEQUENCE_FLAGS
+nfc_target_sequence_flags(
+    NfcTargetSequence* self) /* Since 1.1.4 */
+{
+    return G_LIKELY(self) ? self->flags : NFC_SEQUENCE_FLAGS_NONE;
 }
 
 /*==========================================================================*

@@ -132,14 +132,30 @@ nfc_target_remove_handlers(
  * perform transmissions associated with this sequence.
  */
 
+typedef enum nfc_sequence_flags {
+    NFC_SEQUENCE_FLAGS_NONE = 0x00,
+    NFC_SEQUENCE_FLAG_ALLOW_PRESENCE_CHECK = 0x01
+} NFC_SEQUENCE_FLAGS; /* Since 1.1.4 */
+
 NfcTargetSequence*
 nfc_target_sequence_new(
     NfcTarget* target) /* Since 1.0.17 */
     NFCD_EXPORT;
 
+NfcTargetSequence*
+nfc_target_sequence_new2(
+    NfcTarget* target,
+    NFC_SEQUENCE_FLAGS flags) /* Since 1.1.4 */
+    NFCD_EXPORT;
+
 void
 nfc_target_sequence_free(
     NfcTargetSequence* seq) /* Since 1.0.17 */
+    NFCD_EXPORT;
+
+NFC_SEQUENCE_FLAGS
+nfc_target_sequence_flags(
+    NfcTargetSequence* seq) /* Since 1.1.4 */
     NFCD_EXPORT;
 
 /*
