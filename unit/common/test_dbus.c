@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2019-2020 Jolla Ltd.
- * Copyright (C) 2019-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019-2021 Jolla Ltd.
+ * Copyright (C) 2019-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -183,17 +183,20 @@ test_dbus_free(
     TestDBus* self)
 {
     if (self) {
+        g_dbus_server_stop(self->server);
         if (self->start2_id) {
             g_source_remove(self->start2_id);
         }
         if (self->client_connection) {
+            g_dbus_connection_close_sync(self->client_connection, NULL, NULL);
             g_object_unref(self->client_connection);
         }
         if (self->server_connection) {
+            g_dbus_connection_close_sync(self->server_connection, NULL, NULL);
             g_object_unref(self->server_connection);
         }
         g_object_unref(self->observer);
-        g_dbus_server_stop(self->server);
+        g_object_unref(self->server);
         g_rmdir(self->tmpdir);
         g_free(self->tmpdir);
         g_free(self);
