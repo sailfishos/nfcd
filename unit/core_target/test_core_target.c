@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
@@ -388,6 +388,8 @@ test_null(
     nfc_target_gone(NULL);
     nfc_target_unref(NULL);
     g_assert(!nfc_target_sequence_new(NULL));
+    g_assert(!nfc_target_sequence_new2(NULL, NFC_SEQUENCE_FLAGS_NONE));
+    g_assert(!nfc_target_sequence_flags(NULL));
     nfc_target_sequence_free(NULL);
 }
 

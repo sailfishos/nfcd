@@ -51,7 +51,7 @@
 
 #define NFC_SERVICE "org.sailfishos.nfc.daemon"
 #define NFC_TAG_INTERFACE "org.sailfishos.nfc.Tag"
-#define MIN_INTERFACE_VERSION (4)
+#define MIN_INTERFACE_VERSION (5)
 
 static TestOpt test_opt;
 static const char test_sender_1[] = ":1.1";
@@ -157,6 +157,20 @@ test_call_acquire(
 
 static
 void
+test_call_acquire2(
+    TestData* test,
+    gboolean wait,
+    GAsyncReadyCallback callback)
+{
+    g_assert(test->connection);
+    g_dbus_connection_call(test->connection, NULL,
+        test_tag_path(test, test->adapter->tags[0]), NFC_TAG_INTERFACE,
+        "Acquire2", g_variant_new("(b)", wait), NULL, G_DBUS_CALL_FLAGS_NONE,
+        -1, NULL, callback, test);
+}
+
+static
+void
 test_call_release(
     TestData* test,
     GAsyncReadyCallback callback)
@@ -165,6 +179,19 @@ test_call_release(
     g_dbus_connection_call(test->connection, NULL,
         test_tag_path(test, test->adapter->tags[0]), NFC_TAG_INTERFACE,
         "Release", NULL, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+        callback, test);
+}
+
+static
+void
+test_call_release2(
+    TestData* test,
+    GAsyncReadyCallback callback)
+{
+    g_assert(test->connection);
+    g_dbus_connection_call(test->connection, NULL,
+        test_tag_path(test, test->adapter->tags[0]), NFC_TAG_INTERFACE,
+        "Release2", NULL, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,
         callback, test);
 }
 
@@ -213,6 +240,28 @@ test_complete_error(
         result, &error));
     g_assert_error(error, DBUS_SERVICE_ERROR, code);
     g_error_free(error);
+}
+
+static
+void
+test_released_lock_1(
+    GObject* connection,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    test_complete_ok(connection, result);
+    GDEBUG("Released lock 1");
+}
+
+static
+void
+test_dropped_lock_2(
+    GObject* connection,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    test_complete_ok(connection, result);
+    GDEBUG("Dropped lock 2");
 }
 
 static
@@ -1540,19 +1589,9 @@ test_lock_wait2_locked_again1(
     gpointer test)
 {
     test_complete_ok(connection, result);
-    GDEBUG("Lock 2 acquired (1) ");
+    GDEBUG("Lock 2 acquired (1)");
 }
 
-static
-void
-test_lock_wait2_released(
-    GObject* connection,
-    GAsyncResult* result,
-    gpointer user_data)
-{
-    test_complete_ok(connection, result);
-    GDEBUG("Released lock 1");
-}
 static
 void
 test_lock_wait2_continue(
@@ -1565,7 +1604,7 @@ test_lock_wait2_continue(
     GDEBUG("Releasing lock 1");
     test_get_interface_version_complete_ok(connection, result);
     test_sender = test_sender_1;
-    test_call_release(test, test_lock_wait2_released);
+    test_call_release(test, test_released_lock_1);
 }
 
 static
@@ -1612,6 +1651,125 @@ test_lock_wait2(
 
     test_data_init(&test);
     dbus = test_dbus_new(test_lock_wait2_start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+/*==========================================================================*
+ * lock_wait3
+ *==========================================================================*/
+
+static
+void
+test_lock_wait3_release_error(
+    GObject* connection,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+
+    test_complete_error(connection, result, DBUS_SERVICE_ERROR_NOT_FOUND);
+    GDEBUG("Lock 2 release error (expected)");
+    test_quit_later(test->loop);
+}
+
+static
+void
+test_lock_wait3_released2(
+    GObject* connection,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+
+    test_complete_ok(connection, result);
+    GDEBUG("Lock 2 released");
+    /* This one will fail */
+    test_call_release2(test, test_lock_wait3_release_error);
+}
+
+static
+void
+test_lock_wait3_locked2(
+    GObject* connection,
+    GAsyncResult* result,
+    gpointer test)
+{
+    test_complete_ok(connection, result);
+    GDEBUG("Lock 2 acquired");
+    test_call_release2(test, test_lock_wait3_released2);
+}
+
+static
+void
+test_lock_wait3_locked_again(
+    GObject* connection,
+    GAsyncResult* result,
+    gpointer test)
+{
+    test_complete_ok(connection, result);
+    GDEBUG("Lock 1 acquired again");
+    /* Release both locks */
+    test_call_release(test, test_released_lock_1);
+    test_call_release(test, test_released_lock_1);
+}
+
+static
+void
+test_lock_wait3_cancelled(
+    GObject* connection,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    test_complete_error(connection, result, DBUS_SERVICE_ERROR_ABORTED);
+    GDEBUG("Lock 2 aborted (expected)");
+}
+
+static
+void
+test_lock_wait3_locked(
+    GObject* connection,
+    GAsyncResult* result,
+    gpointer test)
+{
+    test_complete_ok(connection, result);
+    GDEBUG("Lock 1 acquired");
+    /* These are going to be queued */
+    test_call_acquire2(test, TRUE, test_lock_wait3_cancelled);
+    test_call_acquire2(test, TRUE, test_lock_wait3_locked2);
+    /* Drop the first one immediately */
+    test_call_release2(test, test_dropped_lock_2);
+    /* And this one is going to succeed right away */
+    test_call_acquire(test, FALSE, test_lock_wait3_locked_again);
+}
+
+static
+void
+test_lock_wait3_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+
+    test_sender = test_sender_1;
+    test->service = dbus_service_adapter_new(test->adapter, server);
+    g_assert(test->service);
+    g_object_ref(test->connection = client);
+    test_call_acquire(test, TRUE, test_lock_wait3_locked);
+}
+
+static
+void
+test_lock_wait3(
+    void)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_data_init(&test);
+    dbus = test_dbus_new(test_lock_wait3_start, &test);
     test_run(&test_opt, test.loop);
     test_data_cleanup(&test);
     test_dbus_free(dbus);
@@ -2258,6 +2416,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("lock"), test_lock);
     g_test_add_func(TEST_("lock_wait"), test_lock_wait);
     g_test_add_func(TEST_("lock_wait2"), test_lock_wait2);
+    g_test_add_func(TEST_("lock_wait3"), test_lock_wait3);
     g_test_add_func(TEST_("lock_drop_wait"), test_lock_drop_wait);
     g_test_add_func(TEST_("lock_release_wait"), test_lock_release_wait);
     g_test_add_func(TEST_("lock_fail"), test_lock_fail);
