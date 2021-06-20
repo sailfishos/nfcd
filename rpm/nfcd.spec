@@ -1,10 +1,10 @@
 Name: nfcd
 
-Version: 1.1.4
+Version: 1.1.5
 Release: 0
 Summary: NFC daemon
 License: BSD
-URL: https://git.sailfishos.org/mer-core/nfcd
+URL: https://github.com/sailfishos/nfcd
 Source: %{name}-%{version}.tar.bz2
 
 %define libglibutil_version 1.0.49
