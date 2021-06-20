@@ -9,9 +9,10 @@
         nfc_ndef_rec_*;
         nfc_peer_*;
         nfc_plugin_*;
+        nfc_snep_*;
+        nfc_system_*;
         nfc_tag_*;
         nfc_target_*;
-        nfc_system_*;
     local:
         *;
 };
