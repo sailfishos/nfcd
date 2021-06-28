@@ -115,11 +115,14 @@ DBUS_NEARD_PLUGIN_SRC = \
   dbus_neard.c \
   dbus_neard_adapter.c \
   dbus_neard_error.c \
+  dbus_neard_manager.c \
   dbus_neard_plugin.c \
   dbus_neard_tag.c
 
 DBUS_NEARD_GEN_SRC = \
   org.neard.Adapter.c \
+  org.neard.HandoverAgent.c \
+  org.neard.Manager.c \
   org.neard.Record.c \
   org.neard.Tag.c
 

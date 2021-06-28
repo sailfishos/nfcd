@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -55,6 +55,7 @@ typedef struct dbus_neard_plugin {
     GHashTable* adapters;
     NfcManager* manager;
     gulong event_id[MANAGER_EVENT_COUNT];
+    DBusNeardManager* agent_manager;
 } DBusNeardPlugin;
 
 G_DEFINE_TYPE(DBusNeardPlugin, dbus_neard_plugin, NFC_TYPE_PLUGIN)
@@ -71,7 +72,8 @@ dbus_neard_plugin_create_adapter(
     NfcAdapter* adapter)
 {
     g_hash_table_replace(self->adapters, (void*)adapter->name,
-        dbus_neard_adapter_new(adapter, self->object_manager));
+        dbus_neard_adapter_new(adapter, self->object_manager,
+            self->agent_manager));
 }
 
 static
@@ -143,6 +145,7 @@ dbus_neard_plugin_start(
 
     GVERBOSE("Starting");
     self->object_manager = g_dbus_object_manager_server_new("/");
+    self->agent_manager = dbus_neard_manager_new();
 
     /* HACK to work around GDBusObjectManagerServer not allowing to manage
      * the root path. See https://bugzilla.gnome.org/show_bug.cgi?id=761810
@@ -169,7 +172,7 @@ dbus_neard_plugin_start(
 #endif
 
     self->manager = nfc_manager_ref(manager);
-    self->own_name_id = g_bus_own_name(G_BUS_TYPE_SYSTEM, NEARD_SERVICE,
+    self->own_name_id = g_bus_own_name(DBUS_NEARD_BUS_TYPE, NEARD_SERVICE,
         G_BUS_NAME_OWNER_FLAGS_REPLACE, NULL, dbus_neard_plugin_name_acquired,
         dbus_neard_plugin_name_lost, self, NULL);
 
@@ -197,6 +200,10 @@ dbus_neard_plugin_stop(
 
     GVERBOSE("Stopping");
     g_hash_table_remove_all(self->adapters);
+    if (self->agent_manager) {
+        dbus_neard_manager_unref(self->agent_manager);
+        self->agent_manager = NULL;
+    }
     if (self->object_manager) {
         g_object_unref(self->object_manager);
         self->object_manager = NULL;

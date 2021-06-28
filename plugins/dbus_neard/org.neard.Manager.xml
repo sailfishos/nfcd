@@ -1,0 +1,14 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+    "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+    <interface name="org.neard.Manager">
+        <method name="RegisterHandoverAgent">
+            <arg name="path" type="o" direction="in"/>
+            <arg name="carrier" type="s" direction="in"/>
+        </method>
+        <method name="UnregisterHandoverAgent">
+            <arg name="path" type="o" direction="in"/>
+            <arg name="carrier" type="s" direction="in"/>
+        </method>
+    </interface>
+</node>
