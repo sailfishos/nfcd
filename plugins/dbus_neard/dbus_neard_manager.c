@@ -37,6 +37,7 @@
 #include <nfc_ndef.h>
 
 #include <gutil_misc.h>
+#include <gutil_macros.h>
 
 enum {
     NEARD_CALL_REGISTER_HANDOVER_AGENT,
@@ -60,6 +61,11 @@ typedef struct dbus_neard_handover_agent {
     const char* carrier;
     guint watch;
 } DBusNeardHandoverAgent;
+
+typedef struct dbus_neard_handover_call {
+    OrgNeardManager* iface;
+    const char* carrier;
+} DBusNeardHandoverCall;
 
 static const char NEARD_MANAGER_PATH[] = "/";
 static const char BLUETOOTH_CARRIER[] = "bluetooth";
@@ -154,6 +160,7 @@ dbus_neard_manager_push_oob_done(
     gpointer user_data)
 {
     GError* error = NULL;
+    DBusNeardHandoverCall* call = user_data;
 
     if (org_neard_handover_agent_call_push_oob_finish(
         ORG_NEARD_HANDOVER_AGENT(proxy), result, &error)) {
@@ -162,6 +169,14 @@ dbus_neard_manager_push_oob_done(
         GERR("%s", GERRMSG(error));
         g_error_free(error);
     }
+
+    /* This signal can be used by the UI to notify the user */
+    org_neard_manager_emit_static_handover_completed(call->iface,
+        call->carrier, !error);
+
+    /* Free the call context */
+    g_object_unref(call->iface);
+    gutil_slice_free(call);
 }
 
 static
@@ -439,6 +454,7 @@ dbus_neard_manager_handle_ndef(
             if (ndef && ndef->next &&
                 dbus_neard_manager_parse_Hs(ndef, &cdr) &&
                 dbus_neard_manager_parse_bluetooth_oob(ndef->next, &cdr, &eir)) {
+                DBusNeardHandoverCall* call;
                 GVariantBuilder builder;
 
                 g_variant_builder_init(&builder, G_VARIANT_TYPE_VARDICT);
@@ -446,10 +462,14 @@ dbus_neard_manager_handle_ndef(
                     g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE,
                         eir.bytes, eir.size, 1));
 
+                call = g_slice_new(DBusNeardHandoverCall);
+                call->carrier = agent->carrier; /* Static string */
+                g_object_ref(call->iface = self->iface);
+
                 GDEBUG("Calling %s handover agent", agent->carrier);
                 org_neard_handover_agent_call_push_oob(agent->proxy,
                     g_variant_builder_end(&builder), NULL,
-                    dbus_neard_manager_push_oob_done, NULL);
+                    dbus_neard_manager_push_oob_done, call);
             }
         } else {
             GDEBUG("No %s handover agent", BLUETOOTH_CARRIER);

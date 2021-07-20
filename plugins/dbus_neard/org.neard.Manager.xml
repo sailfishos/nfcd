@@ -10,5 +10,10 @@
             <arg name="path" type="o" direction="in"/>
             <arg name="carrier" type="s" direction="in"/>
         </method>
+        <!-- Signals (Sailfish OS extension) -->
+        <signal name="StaticHandoverCompleted">
+            <arg name="carrier" type="s"/>
+            <arg name="success" type="b"/>
+        </signal>
     </interface>
 </node>
