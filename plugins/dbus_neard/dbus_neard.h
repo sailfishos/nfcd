@@ -47,6 +47,7 @@ typedef struct dbus_neard_adapter DBusNeardAdapter;
 typedef struct dbus_neard_tag DBusNeardTag;
 
 #define DBUS_NEARD_BUS_TYPE G_BUS_TYPE_SYSTEM
+#define DBUS_NEARD_DA_BUS   DA_BUS_SYSTEM
 
 #define DBUS_NEARD_ERROR (dbus_neard_error_quark())
 GQuark dbus_neard_error_quark(void);
@@ -58,6 +59,7 @@ typedef enum dbus_neard_error {
     DBUS_NEARD_ERROR_NOT_SUPPORTED,     /* org.neard.Error.NotSupported */
     DBUS_NEARD_ERROR_DOES_NOT_EXIST,    /* org.neard.Error.DoesNotExist */
     DBUS_NEARD_ERROR_ABORTED,           /* org.neard.Error.OperationAborted */
+    DBUS_NEARD_ERROR_ACCESS_DENIED,     /* org.neard.Error.AccessDenied */
     DBUS_NEARD_NUM_ERRORS
 } DBusNeardError;
 
@@ -71,6 +73,26 @@ typedef struct dbus_neard_protocol_name {
     NFC_PROTOCOL protocols;
     const char* name;
 } DBusNeardProtocolName;
+
+const DBusNeardProtocolName*
+dbus_neard_tag_type_name(
+    NFC_PROTOCOL protocol);
+
+/* DBusNeardSettings */
+
+typedef struct dbus_neard_settings {
+    gboolean bt_static_handover;
+} DBusNeardSettings;
+
+DBusNeardSettings*
+dbus_neard_settings_new(
+    void);
+
+void
+dbus_neard_settings_free(
+    DBusNeardSettings* settings);
+
+/* DBusNeardManager */
 
 DBusNeardManager*
 dbus_neard_manager_new(
@@ -89,9 +111,7 @@ dbus_neard_manager_handle_ndef(
     DBusNeardManager* manager,
     NfcNdefRec* ndef);
 
-const DBusNeardProtocolName*
-dbus_neard_tag_type_name(
-    NFC_PROTOCOL protocol);
+/* DBusNeardAdapter */
 
 DBusNeardAdapter*
 dbus_neard_adapter_new(
@@ -102,6 +122,8 @@ dbus_neard_adapter_new(
 void
 dbus_neard_adapter_free(
     DBusNeardAdapter* neard_adapter);
+
+/* DBusNeardTag */
 
 DBusNeardTag*
 dbus_neard_tag_new(

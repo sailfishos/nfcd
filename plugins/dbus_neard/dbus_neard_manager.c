@@ -49,6 +49,7 @@ struct dbus_neard_manager {
     OrgNeardManager* iface;
     gulong neard_calls[NEARD_CALL_COUNT];
     GHashTable* agents; /* carrier => DBusNeardHandoverAgent */
+    DBusNeardSettings* settings;
 };
 
 typedef struct dbus_neard_handover_agent {
@@ -354,6 +355,7 @@ void
 dbus_neard_manager_free(
     DBusNeardManager* self)
 {
+    dbus_neard_settings_free(self->settings);
     g_hash_table_destroy(self->agents);
     gutil_disconnect_handlers(self->iface, self->neard_calls,
         G_N_ELEMENTS(self->neard_calls));
@@ -385,6 +387,7 @@ dbus_neard_manager_new(
     bus = g_bus_get_sync(DBUS_NEARD_BUS_TYPE, NULL, &error);
     if (bus && g_dbus_interface_skeleton_export(G_DBUS_INTERFACE_SKELETON
         (self->iface), bus, NEARD_MANAGER_PATH, &error)) {
+        self->settings = dbus_neard_settings_new();
         GDEBUG("Created Agent Manager object at %s", NEARD_MANAGER_PATH);
     } else {
         dbus_neard_manager_free(self);
@@ -426,7 +429,7 @@ dbus_neard_manager_handle_ndef(
     DBusNeardManager* self,
     NfcNdefRec* ndef)
 {
-    if (G_LIKELY(self)) {
+    if (G_LIKELY(self) && self->settings->bt_static_handover) {
         DBusNeardHandoverAgent* agent = g_hash_table_lookup(self->agents,
             BLUETOOTH_CARRIER);
 
