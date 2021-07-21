@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -61,6 +61,7 @@ struct dbus_neard_adapter {
     char* path;
     OrgNeardAdapter* iface;
     GDBusObjectManagerServer* object_manager;
+    DBusNeardManager* agent_manager;
     GHashTable* tags;
     NfcAdapter* adapter;
     gulong nfc_event_id[ADAPTER_EVENT_COUNT];
@@ -79,7 +80,8 @@ dbus_neard_adapter_create_tag(
     NfcTag* tag)
 {
     g_hash_table_replace(self->tags, (void*)tag->name,
-        dbus_neard_tag_new(tag, self->path, self->object_manager));
+        dbus_neard_tag_new(tag, self->path, self->object_manager,
+            self->agent_manager));
 }
 
 static
@@ -247,7 +249,8 @@ dbus_neard_adapter_handle_stop_poll_loop(
 DBusNeardAdapter*
 dbus_neard_adapter_new(
     NfcAdapter* adapter,
-    GDBusObjectManagerServer* object_manager)
+    GDBusObjectManagerServer* object_manager,
+    DBusNeardManager* agent_manager)
 {
     DBusNeardAdapter* self = g_new0(DBusNeardAdapter, 1);
     GDBusObjectSkeleton* object;
@@ -258,6 +261,7 @@ dbus_neard_adapter_new(
     self->object_manager = g_object_ref(object_manager);
     self->adapter = nfc_adapter_ref(adapter);
     self->iface = org_neard_adapter_skeleton_new();
+    self->agent_manager = dbus_neard_manager_ref(agent_manager);
     self->tags = g_hash_table_new_full(g_str_hash, g_str_equal,
         NULL, dbus_neard_adapter_free_tag);
 
@@ -334,6 +338,7 @@ dbus_neard_adapter_free(
     DBusNeardAdapter* self)
 {
     GDEBUG("Removing neard D-Bus object for adapter %s", self->path);
+    dbus_neard_manager_unref(self->agent_manager);
     g_dbus_object_manager_server_unexport(self->object_manager, self->path);
     g_object_unref(self->object_manager);
     g_hash_table_destroy(self->tags);

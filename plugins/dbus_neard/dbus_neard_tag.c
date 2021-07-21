@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2019 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
@@ -61,6 +61,7 @@ struct dbus_neard_tag {
     gulong neard_event_id[NEARD_EVENT_COUNT];
     OrgNeardTag* iface;
     GDBusObjectManagerServer* object_manager;
+    DBusNeardManager* agent_manager;
 };
 
 static
@@ -205,8 +206,11 @@ dbus_neard_tag_initialized(
     DBusNeardTag* self = user_data;
 
     /* This callbacks should only be invoked once, but just in case... */
-    nfc_tag_remove_handlers(self->tag, self->tag_event_id + TAG_INITIALIZED, 1);
+    nfc_tag_remove_handlers(tag, self->tag_event_id + TAG_INITIALIZED, 1);
     dbus_neard_tag_export_records(self);
+    if (tag->ndef) {
+        dbus_neard_manager_handle_ndef(self->agent_manager, tag->ndef);
+    }
 }
 
 static
@@ -237,7 +241,8 @@ DBusNeardTag*
 dbus_neard_tag_new(
     NfcTag* tag,
     const char* adapter_path,
-    GDBusObjectManagerServer* object_manager)
+    GDBusObjectManagerServer* object_manager,
+    DBusNeardManager* agent_manager)
 {
     DBusNeardTag* self = g_new0(DBusNeardTag, 1);
     NfcTarget* target = tag->target;
@@ -249,6 +254,7 @@ dbus_neard_tag_new(
     self->object_manager = g_object_ref(object_manager);
     self->tag = nfc_tag_ref(tag);
     self->iface = org_neard_tag_skeleton_new();
+    self->agent_manager = dbus_neard_manager_ref(agent_manager);
 
     object = g_dbus_object_skeleton_new(self->path);
     g_dbus_object_skeleton_add_interface(object,
@@ -313,6 +319,7 @@ dbus_neard_tag_free(
     DBusNeardTag* self)
 {
     dbus_neard_tag_unexport(self);
+    dbus_neard_manager_unref(self->agent_manager);
     gutil_disconnect_handlers(self->iface, self->neard_event_id,
         G_N_ELEMENTS(self->neard_event_id));
     g_object_unref(self->iface);

@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -40,7 +40,8 @@ static const GDBusErrorEntry dbus_neard_errors[] = {
     {DBUS_NEARD_ERROR_NOT_READY,      DBUS_NEARD_ERROR_("NotReady")},
     {DBUS_NEARD_ERROR_NOT_SUPPORTED,  DBUS_NEARD_ERROR_("NotSupported")},
     {DBUS_NEARD_ERROR_DOES_NOT_EXIST, DBUS_NEARD_ERROR_("DoesNotExist")},
-    {DBUS_NEARD_ERROR_ABORTED,        DBUS_NEARD_ERROR_("OperationAborted")}
+    {DBUS_NEARD_ERROR_ABORTED,        DBUS_NEARD_ERROR_("OperationAborted")},
+    {DBUS_NEARD_ERROR_ACCESS_DENIED,  DBUS_NEARD_ERROR_("AccessDenied")}
 };
 
 G_STATIC_ASSERT(G_N_ELEMENTS(dbus_neard_errors) == DBUS_NEARD_NUM_ERRORS);

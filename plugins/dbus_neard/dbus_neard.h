@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Jolla Ltd.
- * Copyright (C) 2018 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -14,8 +14,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *      contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -42,8 +42,12 @@
 
 #include <gio/gio.h>
 
+typedef struct dbus_neard_manager DBusNeardManager;
 typedef struct dbus_neard_adapter DBusNeardAdapter;
 typedef struct dbus_neard_tag DBusNeardTag;
+
+#define DBUS_NEARD_BUS_TYPE G_BUS_TYPE_SYSTEM
+#define DBUS_NEARD_DA_BUS   DA_BUS_SYSTEM
 
 #define DBUS_NEARD_ERROR (dbus_neard_error_quark())
 GQuark dbus_neard_error_quark(void);
@@ -55,6 +59,7 @@ typedef enum dbus_neard_error {
     DBUS_NEARD_ERROR_NOT_SUPPORTED,     /* org.neard.Error.NotSupported */
     DBUS_NEARD_ERROR_DOES_NOT_EXIST,    /* org.neard.Error.DoesNotExist */
     DBUS_NEARD_ERROR_ABORTED,           /* org.neard.Error.OperationAborted */
+    DBUS_NEARD_ERROR_ACCESS_DENIED,     /* org.neard.Error.AccessDenied */
     DBUS_NEARD_NUM_ERRORS
 } DBusNeardError;
 
@@ -73,20 +78,59 @@ const DBusNeardProtocolName*
 dbus_neard_tag_type_name(
     NFC_PROTOCOL protocol);
 
+/* DBusNeardSettings */
+
+typedef struct dbus_neard_settings {
+    gboolean bt_static_handover;
+} DBusNeardSettings;
+
+DBusNeardSettings*
+dbus_neard_settings_new(
+    void);
+
+void
+dbus_neard_settings_free(
+    DBusNeardSettings* settings);
+
+/* DBusNeardManager */
+
+DBusNeardManager*
+dbus_neard_manager_new(
+    void);
+
+DBusNeardManager*
+dbus_neard_manager_ref(
+    DBusNeardManager* manager);
+
+void
+dbus_neard_manager_unref(
+    DBusNeardManager* manager);
+
+void
+dbus_neard_manager_handle_ndef(
+    DBusNeardManager* manager,
+    NfcNdefRec* ndef);
+
+/* DBusNeardAdapter */
+
 DBusNeardAdapter*
 dbus_neard_adapter_new(
     NfcAdapter* adapter,
-    GDBusObjectManagerServer* object_manager);
+    GDBusObjectManagerServer* object_manager,
+    DBusNeardManager* agent_manager);
 
 void
 dbus_neard_adapter_free(
     DBusNeardAdapter* neard_adapter);
 
+/* DBusNeardTag */
+
 DBusNeardTag*
 dbus_neard_tag_new(
     NfcTag* tag,
     const char* adapter_path,
-    GDBusObjectManagerServer* object_manager);
+    GDBusObjectManagerServer* object_manager,
+    DBusNeardManager* agent_manager);
 
 void
 dbus_neard_tag_free(
