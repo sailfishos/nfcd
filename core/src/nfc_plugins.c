@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2021 Jolla Ltd.
+ * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -84,6 +84,7 @@ nfc_plugins_scan_plugin_dir(
     GStrV* files = NULL;
     GDir* dir = g_dir_open(plugin_dir, 0, NULL);
 
+    GDEBUG("Loading plugins from %s", plugin_dir);
     if (dir) {
 	const char* file;
 
