@@ -159,7 +159,11 @@ dbus_service_connection_accept_done(
     }
     if (org_sailfishos_nfc_local_service_call_accept_finish(self->proxy,
         &accepted, NULL, result, &error)) {
-        nfc_peer_connection_accepted(connection);
+        if (accepted) {
+            nfc_peer_connection_accepted(connection);
+        } else {
+            nfc_peer_connection_rejected(connection);
+        }
     } else {
         GDEBUG("%s", GERRMSG(error));
         g_error_free(error);
