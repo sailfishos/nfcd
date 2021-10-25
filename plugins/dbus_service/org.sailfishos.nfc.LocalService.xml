@@ -10,7 +10,9 @@
     </method>
     <method name="DatagramReceived">
       <arg name="rsap" type="u" direction="in"/>
-      <arg name="data" type="ay" direction="in"/>
+      <arg name="data" type="ay" direction="in">
+        <annotation name="org.gtk.GDBus.C.ForceGVariant" value="true"/>
+      </arg>
     </method>
     <method name="PeerArrived">
       <arg name="path" type="o" direction="in"/>
