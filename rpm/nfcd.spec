@@ -10,10 +10,16 @@ Source: %{name}-%{version}.tar.bz2
 %define libglibutil_version 1.0.49
 %define glib_version 2.32
 
+BuildRequires: pkgconfig
 BuildRequires: pkgconfig(glib-2.0) >= %{glib_version}
 BuildRequires: pkgconfig(libdbusaccess)
 BuildRequires: pkgconfig(libglibutil) >= %{libglibutil_version}
 BuildRequires: file-devel
+
+# license macro requires rpm >= 4.11
+BuildRequires: pkgconfig(rpm)
+%define license_support %(pkg-config --exists 'rpm >= 4.11'; echo $?)
+
 Requires: glib2 >= %{glib_version}
 Requires: libglibutil >= %{libglibutil_version}
 Requires: systemd
@@ -27,7 +33,6 @@ Provides D-Bus interfaces to NFC functionality.
 
 %package plugin-devel
 Summary: Development files for %{name} plugins
-Requires: pkgconfig
 Requires: pkgconfig(libglibutil)
 
 %description plugin-devel
@@ -75,12 +80,14 @@ systemctl daemon-reload ||:
 
 %files
 %defattr(-,root,root,-)
-%license LICENSE
 %dir %attr(700,nfc,nfc) %{settings_dir}
 %{_sbindir}/*
 %{_sysconfdir}/dbus-1/system.d/*.conf
 %{target_wants_dir}/nfcd.service
 %{_unitdir}/nfcd.service
+%if %{license_support} == 0
+%license LICENSE
+%endif
 
 %files tools
 %{_bindir}/*
