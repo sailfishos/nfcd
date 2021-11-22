@@ -75,6 +75,7 @@ systemctl daemon-reload ||:
 
 %files
 %defattr(-,root,root,-)
+%license LICENSE
 %dir %attr(700,nfc,nfc) %{settings_dir}
 %{_sbindir}/*
 %{_sysconfdir}/dbus-1/system.d/*.conf
