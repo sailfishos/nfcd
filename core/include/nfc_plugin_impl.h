@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -46,13 +46,18 @@ typedef struct nfc_plugin_class {
     gboolean (*start)(NfcPlugin* plugin, NfcManager* manager);
     void (*stop)(NfcPlugin* plugin);
 
+    /* Since 1.1.10 */
+    void (*started)(NfcPlugin* plugin); /* All plugins started */
+
     /* Padding for future expansion */
     void (*_reserved1)(void);
     void (*_reserved2)(void);
     void (*_reserved3)(void);
     void (*_reserved4)(void);
-    void (*_reserved5)(void);
 } NfcPluginClass;
+
+#define NFC_PLUGIN_CLASS(klass) G_TYPE_CHECK_CLASS_CAST(klass, \
+        NFC_TYPE_PLUGIN, NfcPluginClass) /* Since 1.1.10 */
 
 /*
  * NFC_PLUGIN_DEFINE - simple way to define NfcPluginDesc with a single

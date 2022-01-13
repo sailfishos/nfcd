@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -379,7 +379,7 @@ nfc_plugins_start(
                 }
 
                 gutil_log(GLOG_MODULE_CURRENT,
-                    (desc->flags & NFC_PLUGIN_FLAG_MUST_START) ? 
+                    (desc->flags & NFC_PLUGIN_FLAG_MUST_START) ?
                     GLOG_LEVEL_ERR : GLOG_LEVEL_WARN,
                    "Plugin \"%s\" failed to start", desc->name);
 
@@ -388,7 +388,16 @@ nfc_plugins_start(
             }
             l = next;
         }
-        return ok;
+
+        if (ok) {
+            /* Notify plugins of a successful start */
+            for (l = self->plugins; l; l = l->next) {
+                NfcPluginData* data = l->data;
+
+                nfc_plugin_started(data->plugin);
+            }
+            return TRUE;
+        }
     }
     return FALSE;
 }
