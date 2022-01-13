@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
@@ -41,6 +41,7 @@ G_BEGIN_DECLS
 /* Types */
 
 typedef struct nfc_adapter NfcAdapter;
+typedef struct nfc_configurable NfcConfigurable;        /* Since 1.1.10 */
 typedef struct nfc_initiator NfcInitiator;              /* Since 1.1.0 */
 typedef struct nfc_language NfcLanguage;                /* Since 1.0.15 */
 typedef struct nfc_peer_connection NfcPeerConnection;   /* Since 1.1.0 */

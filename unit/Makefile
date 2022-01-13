@@ -3,8 +3,9 @@
 all:
 %:
 	@$(MAKE) -C core_adapter $*
-	@$(MAKE) -C core_initiator $*
+	@$(MAKE) -C core_config $*
 	@$(MAKE) -C core_crc $*
+	@$(MAKE) -C core_initiator $*
 	@$(MAKE) -C core_llc $*
 	@$(MAKE) -C core_llc_param $*
 	@$(MAKE) -C core_manager $*

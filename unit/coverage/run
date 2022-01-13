@@ -5,6 +5,7 @@
 
 TESTS="\
 core_adapter \
+core_config \
 core_crc \
 core_initiator \
 core_llc \
