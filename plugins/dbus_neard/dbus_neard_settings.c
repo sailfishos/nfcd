@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2021 Jolla Ltd.
- * Copyright (C) 2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2021-2022 Jolla Ltd.
+ * Copyright (C) 2021-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -33,6 +33,8 @@
 #include "dbus_neard.h"
 #include "dbus_neard/org.sailfishos.neard.Settings.h"
 
+#include <nfc_config.h>
+
 #ifdef HAVE_DBUSACCESS
 #include <dbusaccess_policy.h>
 #include <dbusaccess_peer.h>
@@ -52,27 +54,19 @@ enum {
     NEARD_SETTINGS_DBUS_CALL_COUNT
 };
 
-typedef struct dbus_neard_settings_priv {
-    DBusNeardSettings pub;
-    char* storage_dir;
-    char* storage_file;
+typedef struct dbus_neard_settings {
     GDBusConnection* bus;
     OrgSailfishosNeardSettings* iface;
     gulong dbus_call_id[NEARD_SETTINGS_DBUS_CALL_COUNT];
+    NfcConfigurable* config;
+    gulong change_id;
 #ifdef HAVE_DBUSACCESS
     DAPolicy* policy;
 #endif
-} DBusNeardSettingsPriv;
+} DBusNeardSettings;
 
 #define NEARD_SETTINGS_DBUS_PATH               "/"
 #define NEARD_SETTINGS_DBUS_INTERFACE_VERSION  (1)
-
-#define NEARD_SETTINGS_DIR                     "/var/lib/nfcd"
-#define NEARD_SETTINGS_FILE                    "neard"
-#define NEARD_SETTINGS_DIR_PERM                0700
-#define NEARD_SETTINGS_FILE_PERM               0600
-#define NEARD_SETTINGS_GROUP                   "Settings"
-#define NEARD_SETTINGS_KEY_BT_STATIC_HANDOVER  "BluetoothStaticHandover"
 
 #ifdef HAVE_DBUSACCESS
 
@@ -108,7 +102,7 @@ static const char dbus_neard_settings_default_policy[] =
 static
 gboolean
 dbus_neard_settings_access_check(
-    DBusNeardSettingsPriv* self,
+    DBusNeardSettings* self,
     GDBusMethodInvocation* call,
     NEARD_SETTINGS_ACTION action,
     DA_ACCESS def)
@@ -142,112 +136,65 @@ dbus_neard_settings_access_check(
 #endif /* HAVE_DBUSACCESS */
 
 static
-GKeyFile*
-dbus_neard_settings_load_config(
-    DBusNeardSettingsPriv* self)
-{
-    GKeyFile* config = g_key_file_new();
-
-    g_key_file_load_from_file(config, self->storage_file, 0, NULL);
-    return config;
-}
-
-static
-void
-dbus_neard_settings_save_config(
-    DBusNeardSettingsPriv* self,
-    GKeyFile* config)
-{
-    if (!g_mkdir_with_parents(self->storage_dir, NEARD_SETTINGS_DIR_PERM)) {
-        GError* error = NULL;
-        gsize len;
-        gchar* data = g_key_file_to_data(config, &len, NULL);
-
-        if (g_file_set_contents(self->storage_file, data, len, &error)) {
-            if (chmod(self->storage_file, NEARD_SETTINGS_FILE_PERM) < 0) {
-                GWARN("Failed to set %s permissions: %s", self->storage_file,
-                    strerror(errno));
-            } else {
-                GDEBUG("Wrote %s", self->storage_file);
-            }
-        } else {
-            GWARN("%s", GERRMSG(error));
-            g_error_free(error);
-        }
-        g_free(data);
-    } else {
-        GWARN("Failed to create directory %s", self->storage_dir);
-    }
-}
-
-static
 gboolean
 dbus_neard_settings_get_boolean(
-    GKeyFile* config,
+    DBusNeardSettings* self,
     const char* key,
     gboolean defval)
 {
-    GError* error = NULL;
-    const gboolean val = g_key_file_get_boolean(config, NEARD_SETTINGS_GROUP,
-        key, &error);
+    gboolean result = defval;
+    GVariant* value = nfc_config_get_value(self->config, key);
 
-    if (error) {
-        g_error_free(error);
-        /* Default */
-        return defval;
-    } else {
-        return val;
+    if (value) {
+        if (g_variant_is_of_type(value, G_VARIANT_TYPE_BOOLEAN)) {
+            result = g_variant_get_boolean(value);
+        }
+        g_variant_unref(value);
     }
+    return result;
 }
 
 static
 gboolean
 dbus_neard_settings_bt_static_handover(
-    GKeyFile* config)
+    DBusNeardSettings* self)
 {
-    return dbus_neard_settings_get_boolean(config,
-        NEARD_SETTINGS_KEY_BT_STATIC_HANDOVER, FALSE);
+    return dbus_neard_settings_get_boolean(self,
+        NEARD_SETTINGS_KEY_BT_STATIC_HANDOVER,
+        NEARD_SETTINGS_DEFAULT_BT_STATIC_HANDOVER);
 }
 
 static
 void
-dbus_neard_settings_update_config(
-    DBusNeardSettingsPriv* self)
+dbus_neard_settings_changed(
+    NfcConfigurable* config,
+    const char* key,
+    GVariant* value,
+    void* user_data)
 {
-    DBusNeardSettings* pub = &self->pub;
-    GKeyFile* config = dbus_neard_settings_load_config(self);
-    gboolean bt_handover = dbus_neard_settings_bt_static_handover(config);
-    gboolean save = FALSE;
+    DBusNeardSettings* self = user_data;
 
-    if (bt_handover != pub->bt_static_handover) {
-        save = TRUE;
-        g_key_file_set_boolean(config, NEARD_SETTINGS_GROUP,
-            NEARD_SETTINGS_KEY_BT_STATIC_HANDOVER, pub->bt_static_handover);
+    if (self->iface && !strcmp(NEARD_SETTINGS_KEY_BT_STATIC_HANDOVER, key) &&
+        g_variant_is_of_type(value, G_VARIANT_TYPE_BOOLEAN)) {
+        org_sailfishos_neard_settings_emit_bluetooth_static_handover_changed
+            (self->iface, g_variant_get_boolean(value));
     }
-
-    if (save) {
-        dbus_neard_settings_save_config(self, config);
-    }
-
-    g_key_file_unref(config);
 }
 
 static
 void
-dbus_neard_settings_set_bt_static_handover(
-    DBusNeardSettingsPriv* self,
-    gboolean enabled)
+dbus_neard_settings_start_emitting_events(
+    DBusNeardSettings* self)
 {
-    DBusNeardSettings* pub = &self->pub;
-
-    if (pub->bt_static_handover != enabled) {
-        pub->bt_static_handover = enabled;
-        GINFO("Bluetooth handover %s", enabled ? "enabled" : "disabled");
-        if (self->iface) {
-            org_sailfishos_neard_settings_emit_bluetooth_static_handover_changed
-                (self->iface, enabled);
-        }
-        dbus_neard_settings_update_config(self);
+    /*
+     * We don't emit BluetoothStaticHandoverChanged events until the
+     * current values have been requested at least once. Otherwise it
+     * unnecessary gets emitted e.g. when the initial value is set at
+     * startup.
+     */
+    if (!self->change_id) {
+        self->change_id = nfc_config_add_change_handler(self->config, NULL,
+            dbus_neard_settings_changed, self);
     }
 }
 
@@ -256,12 +203,13 @@ gboolean
 dbus_neard_settings_handle_get_all(
     OrgSailfishosNeardSettings* iface,
     GDBusMethodInvocation* call,
-    DBusNeardSettingsPriv* self)
+    DBusNeardSettings* self)
 {
     if (dbus_neard_settings_access_allowed(self, call, GET_ALL)) {
+        dbus_neard_settings_start_emitting_events(self);
         org_sailfishos_neard_settings_complete_get_all(iface, call,
             NEARD_SETTINGS_DBUS_INTERFACE_VERSION,
-            self->pub.bt_static_handover);
+            dbus_neard_settings_bt_static_handover(self));
     }
     return TRUE;
 }
@@ -271,9 +219,10 @@ gboolean
 dbus_neard_settings_handle_get_interface_version(
     OrgSailfishosNeardSettings* iface,
     GDBusMethodInvocation* call,
-    DBusNeardSettingsPriv* self)
+    DBusNeardSettings* self)
 {
     if (dbus_neard_settings_access_allowed(self, call, GET_INTERFACE_VERSION)) {
+        dbus_neard_settings_start_emitting_events(self);
         org_sailfishos_neard_settings_complete_get_interface_version(iface,
             call, NEARD_SETTINGS_DBUS_INTERFACE_VERSION);
     }
@@ -285,12 +234,13 @@ gboolean
 dbus_neard_settings_handle_get_bt_static_handover(
     OrgSailfishosNeardSettings* iface,
     GDBusMethodInvocation* call,
-    DBusNeardSettingsPriv* self)
+    DBusNeardSettings* self)
 {
     if (dbus_neard_settings_access_allowed(self, call,
         GET_BT_STATIC_HANDOVER)) {
+        dbus_neard_settings_start_emitting_events(self);
         org_sailfishos_neard_settings_complete_get_bluetooth_static_handover
-            (iface, call, self->pub.bt_static_handover);
+            (iface, call, dbus_neard_settings_bt_static_handover(self));
     }
     return TRUE;
 }
@@ -301,11 +251,14 @@ dbus_neard_settings_handle_set_bt_static_handover(
     OrgSailfishosNeardSettings* iface,
     GDBusMethodInvocation* call,
     gboolean enabled,
-    DBusNeardSettingsPriv* self)
+    DBusNeardSettings* self)
 {
     if (dbus_neard_settings_access_allowed(self, call,
         SET_BT_STATIC_HANDOVER)) {
-        dbus_neard_settings_set_bt_static_handover(self, enabled);
+        dbus_neard_settings_start_emitting_events(self);
+        nfc_config_set_value(self->config,
+            NEARD_SETTINGS_KEY_BT_STATIC_HANDOVER,
+            g_variant_new_boolean(enabled));
         org_sailfishos_neard_settings_complete_set_bluetooth_static_handover
             (iface, call);
     }
@@ -315,7 +268,7 @@ dbus_neard_settings_handle_set_bt_static_handover(
 static
 void
 dbus_neard_settings_unexport(
-    DBusNeardSettingsPriv* self)
+    DBusNeardSettings* self)
 {
     if (self->iface) {
         g_dbus_interface_skeleton_unexport
@@ -329,18 +282,13 @@ dbus_neard_settings_unexport(
 
 DBusNeardSettings*
 dbus_neard_settings_new(
-    void)
+    NfcConfigurable* config)
 {
     GError* error = NULL;
-    DBusNeardSettingsPriv* self = g_new0(DBusNeardSettingsPriv, 1);
-    DBusNeardSettings* pub = &self->pub;
+    DBusNeardSettings* self = g_new0(DBusNeardSettings, 1);
     GDBusConnection* bus = g_bus_get_sync(DBUS_NEARD_BUS_TYPE, NULL, &error);
-    GKeyFile* config;
 
-    self->storage_dir = g_strdup(NEARD_SETTINGS_DIR);
-    self->storage_file = g_build_filename(self->storage_dir,
-        NEARD_SETTINGS_FILE, NULL);
-
+    self->config = config;
     if (bus) {
         OrgSailfishosNeardSettings* iface;
 
@@ -381,21 +329,15 @@ dbus_neard_settings_new(
         dbus_neard_settings_policy_actions);
 #endif
 
-    /* Load current value(s) from the config file */
-    config = dbus_neard_settings_load_config(self);
-    pub->bt_static_handover = dbus_neard_settings_bt_static_handover(config);
-    g_key_file_unref(config);
-
-    return pub;
+    return self;
 }
 
 void
 dbus_neard_settings_free(
-    DBusNeardSettings* pub)
+    DBusNeardSettings* self)
 {
-    if (pub) {
-        DBusNeardSettingsPriv* self = G_CAST(pub, DBusNeardSettingsPriv, pub);
-
+    if (self) {
+        nfc_config_remove_handler(self->config, self->change_id);
         dbus_neard_settings_unexport(self);
 #ifdef HAVE_DBUSACCESS
         da_policy_unref(self->policy);
@@ -403,8 +345,6 @@ dbus_neard_settings_free(
         if (self->bus) {
             g_object_unref(self->bus);
         }
-        g_free(self->storage_dir);
-        g_free(self->storage_file);
         g_free(self);
     }
 }

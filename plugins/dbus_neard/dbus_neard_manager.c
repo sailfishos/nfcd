@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2021 Jolla Ltd.
- * Copyright (C) 2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2021-2022 Jolla Ltd.
+ * Copyright (C) 2021-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -50,7 +50,7 @@ struct dbus_neard_manager {
     OrgNeardManager* iface;
     gulong neard_calls[NEARD_CALL_COUNT];
     GHashTable* agents; /* carrier => DBusNeardHandoverAgent */
-    DBusNeardSettings* settings;
+    const DBusNeardOptions* options;
 };
 
 typedef struct dbus_neard_handover_agent {
@@ -370,7 +370,6 @@ void
 dbus_neard_manager_free(
     DBusNeardManager* self)
 {
-    dbus_neard_settings_free(self->settings);
     g_hash_table_destroy(self->agents);
     gutil_disconnect_handlers(self->iface, self->neard_calls,
         G_N_ELEMENTS(self->neard_calls));
@@ -380,13 +379,14 @@ dbus_neard_manager_free(
 
 DBusNeardManager*
 dbus_neard_manager_new(
-    void)
+    const DBusNeardOptions* options)
 {
     GError* error = NULL;
     DBusNeardManager* self = g_new0(DBusNeardManager, 1);
     GDBusConnection* bus;
 
     g_atomic_int_set(&self->refcount, 1);
+    self->options = options;
     self->agents = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
         dbus_neard_manager_free_agent);
     self->iface = org_neard_manager_skeleton_new();
@@ -402,7 +402,6 @@ dbus_neard_manager_new(
     bus = g_bus_get_sync(DBUS_NEARD_BUS_TYPE, NULL, &error);
     if (bus && g_dbus_interface_skeleton_export(G_DBUS_INTERFACE_SKELETON
         (self->iface), bus, NEARD_MANAGER_PATH, &error)) {
-        self->settings = dbus_neard_settings_new();
         GDEBUG("Created Agent Manager object at %s", NEARD_MANAGER_PATH);
     } else {
         dbus_neard_manager_free(self);
@@ -444,16 +443,16 @@ dbus_neard_manager_handle_ndef(
     DBusNeardManager* self,
     NfcNdefRec* ndef)
 {
-    if (G_LIKELY(self) && self->settings->bt_static_handover) {
+    if (G_LIKELY(self) && self->options->bt_static_handover) {
         DBusNeardHandoverAgent* agent = g_hash_table_lookup(self->agents,
             BLUETOOTH_CARRIER);
 
         if (agent) {
             GUtilData cdr, eir;
-    
+
             if (ndef && ndef->next &&
                 dbus_neard_manager_parse_Hs(ndef, &cdr) &&
-                dbus_neard_manager_parse_bluetooth_oob(ndef->next, &cdr, &eir)) {
+                dbus_neard_manager_parse_bluetooth_oob(ndef->next,&cdr,&eir)) {
                 DBusNeardHandoverCall* call;
                 GVariantBuilder builder;
 
