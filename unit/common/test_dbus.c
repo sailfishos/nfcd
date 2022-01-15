@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2019-2021 Jolla Ltd.
- * Copyright (C) 2019-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019-2022 Jolla Ltd.
+ * Copyright (C) 2019-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -32,22 +32,44 @@
 
 #include "test_dbus.h"
 
-#include <glib/gstdio.h>
-
 #include <gutil_log.h>
 
+#include <gio/gunixinputstream.h>
+#include <gio/gunixoutputstream.h>
+
+#include <sys/socket.h>
+#include <sys/un.h>
+
 struct test_dbus {
-    char* tmpdir;
     GDBusConnection* client_connection;
     GDBusConnection* server_connection;
-    GDBusServer* server;
-    GDBusAuthObserver* observer;
     TestDBusStartFunc start;
     TestDBusStartFunc start2;
     void* user_data;
-    gboolean started;
-    guint start2_id;
+    guint start_id;
+    int fd[2];
 };
+
+static
+GDBusConnection*
+test_dbus_connection(
+    int fd)
+{
+    GInputStream* in = g_unix_input_stream_new(fd, FALSE);
+    GOutputStream* out = g_unix_output_stream_new(fd, FALSE);
+    GIOStream* stream = g_simple_io_stream_new(in, out);
+    GDBusConnection* connection = g_dbus_connection_new_sync(stream, NULL,
+        G_DBUS_CONNECTION_FLAGS_NONE, NULL, NULL, NULL);
+
+    g_assert(in);
+    g_assert(out);
+    g_assert(stream);
+    g_assert(connection);
+    g_object_unref(in);
+    g_object_unref(out);
+    g_object_unref(stream);
+    return connection;
+}
 
 static
 gboolean
@@ -56,78 +78,35 @@ test_dbus_start2(
 {
     TestDBus* self = user_data;
 
-    GDEBUG("Starting test stage 2");
-    self->start2_id = 0;
-    self->start2(self->client_connection, self->server_connection,
-        self->user_data);
+    g_assert(self->start_id);
+    self->start_id = 0;
+    if (self->start2) {
+        self->start2(self->client_connection, self->server_connection,
+            self->user_data);
+    }
     return G_SOURCE_REMOVE;
 }
 
 static
-void
+gboolean
 test_dbus_start(
-    TestDBus* self)
-{
-    if ((self->start || self->start2) && !self->started) {
-        self->started = TRUE;
-        if (self->start) {
-            GDEBUG("Starting the test");
-            self->start(self->client_connection, self->server_connection,
-                self->user_data);
-        }
-        if (self->start2) {
-            self->start2_id = g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,
-                test_dbus_start2, self, NULL);
-        }
-    }
-}
-
-static
-void
-test_dbus_client_connection(
-    GObject* source,
-    GAsyncResult* res,
     gpointer user_data)
 {
     TestDBus* self = user_data;
 
-    GDEBUG("Got client connection");
-    g_assert(!self->client_connection);
-    self->client_connection = g_dbus_connection_new_finish(res, NULL);
-    g_assert(self->client_connection);
-    if (self->client_connection && self->server_connection && !self->started) {
-        test_dbus_start(self);
+    GDEBUG("Starting the test");
+    g_assert(self->start_id);
+    if (self->start) {
+        self->start(self->client_connection, self->server_connection,
+            self->user_data);
     }
-}
-
-static
-gboolean
-test_dbus_server_connection(
-    GDBusServer* server,
-    GDBusConnection* connection,
-    gpointer user_data)
-{
-    TestDBus* self = user_data;
-
-    GDEBUG("Got server connection");
-    g_assert(!self->server_connection);
-    g_object_ref(self->server_connection = connection);
-    if (self->client_connection && self->server_connection && !self->started) {
-        test_dbus_start(self);
+    if (self->start2) {
+        self->start_id = g_idle_add_full(G_PRIORITY_LOW,
+            test_dbus_start2, self, NULL);
+    } else {
+        self->start_id = 0;
     }
-    return TRUE;
-}
-
-static
-gboolean
-test_dbus_authorize(
-    GDBusAuthObserver* observer,
-    GIOStream* stream,
-    GCredentials* credentials,
-    gpointer user_data)
-{
-    GDEBUG("Authorizing server connection");
-    return TRUE;
+    return G_SOURCE_REMOVE;
 }
 
 TestDBus*
@@ -145,36 +124,15 @@ test_dbus_new2(
     void* user_data)
 {
     TestDBus* self = g_new0(TestDBus, 1);
-    char* guid = g_dbus_generate_guid();
-    char* tmpaddr;
-    const char* client_addr;
 
+    g_assert_cmpint(socketpair(AF_UNIX, SOCK_STREAM, 0, self->fd), == ,0);
+    self->client_connection = test_dbus_connection(self->fd[0]);
+    self->server_connection = test_dbus_connection(self->fd[1]);
     self->start = start;
     self->start2 = start2;
     self->user_data = user_data;
-    self->tmpdir = g_dir_make_tmp("test_dbus_XXXXXX", NULL);
-    tmpaddr = g_strconcat("unix:tmpdir=", self->tmpdir, NULL);
-
-    self->observer = g_dbus_auth_observer_new();
-    g_assert(g_signal_connect(self->observer, "authorize-authenticated-peer",
-        G_CALLBACK(test_dbus_authorize), self));
-
-    GDEBUG("DBus server address %s", tmpaddr);
-    self->server = g_dbus_server_new_sync(tmpaddr, G_DBUS_SERVER_FLAGS_NONE,
-        guid, self->observer, NULL, NULL);
-    g_assert(self->server);
-    g_assert(g_signal_connect(self->server, "new-connection",
-        G_CALLBACK(test_dbus_server_connection), self));
-    g_dbus_server_start(self->server);
-
-    client_addr = g_dbus_server_get_client_address(self->server);
-    GDEBUG("D-Bus client address %s", client_addr);
-    g_dbus_connection_new_for_address(client_addr,
-        G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT, NULL, NULL,
-        test_dbus_client_connection, self);
-
-    g_free(tmpaddr);
-    g_free(guid);
+    self->start_id = g_idle_add_full(G_PRIORITY_LOW,
+        test_dbus_start, self, NULL);
     return self;
 }
 
@@ -183,22 +141,13 @@ test_dbus_free(
     TestDBus* self)
 {
     if (self) {
-        g_dbus_server_stop(self->server);
-        if (self->start2_id) {
-            g_source_remove(self->start2_id);
+        if (self->start_id) {
+            g_source_remove(self->start_id);
         }
-        if (self->client_connection) {
-            g_dbus_connection_close_sync(self->client_connection, NULL, NULL);
-            g_object_unref(self->client_connection);
-        }
-        if (self->server_connection) {
-            g_dbus_connection_close_sync(self->server_connection, NULL, NULL);
-            g_object_unref(self->server_connection);
-        }
-        g_object_unref(self->observer);
-        g_object_unref(self->server);
-        g_rmdir(self->tmpdir);
-        g_free(self->tmpdir);
+        g_object_unref(self->client_connection);
+        g_object_unref(self->server_connection);
+        g_assert_cmpint(close(self->fd[0]), == ,0);
+        g_assert_cmpint(close(self->fd[1]), == ,0);
         g_free(self);
     }
 }
