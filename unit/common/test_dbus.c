@@ -50,6 +50,80 @@ struct test_dbus {
     int fd[2];
 };
 
+/* GSimpleIOStream requires glib 2.44 */
+typedef struct test_io_stream {
+    GIOStream parent;
+    GInputStream *in;
+    GOutputStream *out;
+} TestIoStream;
+
+typedef GIOStreamClass TestIoStreamClass;
+G_DEFINE_TYPE(TestIoStream, test_io_stream, G_TYPE_IO_STREAM)
+#define TEST_TYPE_IO_STREAM test_io_stream_get_type ()
+#define TEST_IO_STREAM(obj) G_TYPE_CHECK_INSTANCE_CAST(obj, \
+  TEST_TYPE_IO_STREAM, TestIoStream)
+
+static
+void
+test_io_stream_finalize(
+    GObject* object)
+{
+    TestIoStream* self = TEST_IO_STREAM(object);
+
+    g_object_unref(self->in);
+    g_object_unref(self->out);
+    G_OBJECT_CLASS(test_io_stream_parent_class)->finalize(object);
+}
+
+static
+GInputStream*
+test_io_stream_get_input_stream(
+    GIOStream* stream)
+{
+    return TEST_IO_STREAM(stream)->in;
+}
+
+static
+GOutputStream*
+test_io_stream_get_output_stream(
+    GIOStream *stream)
+{
+    return TEST_IO_STREAM(stream)->out;
+}
+
+static
+void
+test_io_stream_init(
+    TestIoStream* self)
+{
+}
+
+static
+void
+test_io_stream_class_init(
+    TestIoStreamClass* klass)
+{
+    G_OBJECT_CLASS(klass)->finalize = test_io_stream_finalize;
+    klass->get_input_stream = test_io_stream_get_input_stream;
+    klass->get_output_stream = test_io_stream_get_output_stream;
+}
+
+static
+GIOStream*
+test_io_stream_new(
+    GInputStream* in,
+    GOutputStream* out)
+{
+    if (in && out) {
+        TestIoStream* self = g_object_new(TEST_TYPE_IO_STREAM, NULL);
+
+        g_object_ref(self->in = in);
+        g_object_ref(self->out = out);
+        return &self->parent;
+    }
+    return NULL;
+}
+
 static
 GDBusConnection*
 test_dbus_connection(
@@ -57,7 +131,7 @@ test_dbus_connection(
 {
     GInputStream* in = g_unix_input_stream_new(fd, FALSE);
     GOutputStream* out = g_unix_output_stream_new(fd, FALSE);
-    GIOStream* stream = g_simple_io_stream_new(in, out);
+    GIOStream* stream = test_io_stream_new(in, out);
     GDBusConnection* connection = g_dbus_connection_new_sync(stream, NULL,
         G_DBUS_CONNECTION_FLAGS_NONE, NULL, NULL, NULL);
 
