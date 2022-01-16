@@ -38,6 +38,7 @@ all:
 	@$(MAKE) -C plugins_dbus_service_plugin $*
 	@$(MAKE) -C plugins_dbus_service_tag $*
 	@$(MAKE) -C plugins_dbus_service_util $*
+	@$(MAKE) -C plugins_settings $*
 
 clean: unitclean
 	rm -f *~

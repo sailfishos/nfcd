@@ -9,6 +9,17 @@
 PKGS += gio-2.0
 
 #
+# libdbusaccess is optional
+#
+
+HAVE_DBUSACCESS ?= 1
+
+ifneq ($(HAVE_DBUSACCESS),0)
+CFLAGS_PKGS += libdbusaccess # Don't link with libdbusaccess
+DEFINES += -DHAVE_DBUSACCESS
+endif
+
+#
 # Directories
 #
 
