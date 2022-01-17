@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -42,8 +42,9 @@
 
 #include <gio/gio.h>
 
-typedef struct dbus_neard_manager DBusNeardManager;
 typedef struct dbus_neard_adapter DBusNeardAdapter;
+typedef struct dbus_neard_manager DBusNeardManager;
+typedef struct dbus_neard_settings DBusNeardSettings;
 typedef struct dbus_neard_tag DBusNeardTag;
 
 #define DBUS_NEARD_BUS_TYPE G_BUS_TYPE_SYSTEM
@@ -63,11 +64,17 @@ typedef enum dbus_neard_error {
     DBUS_NEARD_NUM_ERRORS
 } DBusNeardError;
 
-/* neard D-Bus interface is mixing different things in a weird way... */
 #define NEARD_PROTOCOL_FELICA  "Felica"
 #define NEARD_PROTOCOL_MIFARE  "MIFARE"
 #define NEARD_PROTOCOL_ISO_DEP "ISO-DEP"
 #define NEARD_PROTOCOL_NFC_DEP "NFC-DEP"
+
+#define NEARD_SETTINGS_DEFAULT_BT_STATIC_HANDOVER FALSE
+#define NEARD_SETTINGS_KEY_BT_STATIC_HANDOVER "BluetoothStaticHandover"
+
+typedef struct dbus_neard_options {
+    gboolean bt_static_handover;
+} DBusNeardOptions;
 
 typedef struct dbus_neard_protocol_name {
     NFC_PROTOCOL protocols;
@@ -80,13 +87,9 @@ dbus_neard_tag_type_name(
 
 /* DBusNeardSettings */
 
-typedef struct dbus_neard_settings {
-    gboolean bt_static_handover;
-} DBusNeardSettings;
-
 DBusNeardSettings*
 dbus_neard_settings_new(
-    void);
+    NfcConfigurable* config);
 
 void
 dbus_neard_settings_free(
@@ -96,7 +99,7 @@ dbus_neard_settings_free(
 
 DBusNeardManager*
 dbus_neard_manager_new(
-    void);
+    const DBusNeardOptions* options);
 
 DBusNeardManager*
 dbus_neard_manager_ref(

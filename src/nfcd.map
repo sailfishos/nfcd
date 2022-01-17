@@ -1,6 +1,8 @@
 {
     global:
         nfc_adapter_*;
+        nfc_config_*;
+        nfc_configurable_*;
         nfc_core_*;
         nfc_crc_*;
         nfc_initiator_*;

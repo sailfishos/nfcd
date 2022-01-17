@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2022 Jolla Ltd.
+ * Copyright (C) 2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,30 +30,27 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef NFC_PLUGIN_PRIVATE_H
-#define NFC_PLUGIN_PRIVATE_H
+#include "settings_plugin.h"
 
-#include "nfc_types_p.h"
-
-#include <nfc_plugin.h>
-
-gboolean
-nfc_plugin_start(
-    NfcPlugin* plugin,
-    NfcManager* manager)
-    NFCD_INTERNAL;
-
-void
-nfc_plugin_stop(
-    NfcPlugin* plugin)
-    NFCD_INTERNAL;
+guint
+settings_plugin_name_own(
+    SettingsPlugin* plugin,
+    const char* name,
+    GBusAcquiredCallback bus_acquired,
+    GBusNameAcquiredCallback name_acquired,
+    GBusNameLostCallback name_lost)
+{
+    return g_bus_own_name(SETTINGS_G_BUS, name,
+        G_BUS_NAME_OWNER_FLAGS_REPLACE, bus_acquired, name_acquired,
+        name_lost, plugin, NULL);
+}
 
 void
-nfc_plugin_started(
-    NfcPlugin* plugin)
-    NFCD_INTERNAL;
-
-#endif /* NFC_PLUGIN_PRIVATE_H */
+settings_plugin_name_unown(
+    guint id)
+{
+    g_bus_unown_name(id);
+}
 
 /*
  * Local Variables:

@@ -19,5 +19,34 @@
     <signal name="EnabledChanged">
       <arg name="enabled" type="b"/>
     </signal>
+    <!-- Interface version 2 (since nfcd 1.1.10) -->
+    <method name="GetAll2">
+      <arg name="version" type="i" direction="out"/>
+      <arg name="enabled" type="b" direction="out"/>
+      <arg name="plugin_settings" type="a(sa{sv})" direction="out"/>
+    </method>
+    <method name="GetAllPluginSettings">
+      <arg name="plugin_settings" type="a(sa{sv})" direction="out"/>
+    </method>
+    <method name="GetPluginSettings">
+      <arg name="plugin" type="s" direction="in"/>
+      <arg name="settings" type="a{sv}" direction="out"/>
+    </method>
+    <method name="GetPluginValue">
+      <arg name="plugin" type="s" direction="in"/>
+      <arg name="key" type="s" direction="in"/>
+      <arg name="value" type="v" direction="out"/>
+    </method>
+    <method name="SetPluginValue">
+      <arg name="plugin" type="s" direction="in"/>
+      <arg name="key" type="s" direction="in"/>
+      <arg name="value" type="v" direction="in"/>
+    </method>
+    <!-- Signals -->
+    <signal name="PluginValueChanged">
+      <arg name="plugin" type="s"/>
+      <arg name="key" type="s"/>
+      <arg name="value" type="v"/>
+    </signal>
   </interface>
 </node>

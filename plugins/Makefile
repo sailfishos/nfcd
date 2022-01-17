@@ -169,6 +169,7 @@ $(COVERAGE_DBUS_NEARD_BUILD_DIR):
 
 SETTINGS_DIR = settings
 SETTINGS_PLUGIN_SRC = \
+  settings_dbus_name.c \
   settings_plugin.c
 
 SETTINGS_GEN_SRC = \

@@ -5,6 +5,7 @@
 
 TESTS="\
 core_adapter \
+core_config \
 core_crc \
 core_initiator \
 core_llc \
@@ -38,7 +39,8 @@ plugins_dbus_service_adapter \
 plugins_dbus_service_peer \
 plugins_dbus_service_plugin \
 plugins_dbus_service_tag \
-plugins_dbus_service_util"
+plugins_dbus_service_util \
+plugins_settings"
 
 function err() {
     echo "*** ERROR!" $1
@@ -71,7 +73,7 @@ popd > /dev/null
 make -C "$TOP_DIR" clean
 for t in $TESTS ; do
     pushd "$TEST_DIR/$t"
-    make -C "$TEST_DIR/$t" clean coverage || exit 1
+    make -j -C "$TEST_DIR/$t" coverage || exit 1
     build/coverage/test_$t || exit 1
     popd
 done
@@ -84,5 +86,5 @@ rm -f "$CORE_COV" "$PLUGINS_COV" "$ALL_COV" "$FILTERED_COV"
 lcov $LCOV_OPT -c -d "$CORE_DIR/build/coverage" -b "$CORE_DIR" -o "$CORE_COV" || exit 1
 lcov $LCOV_OPT -c -d "$PLUGINS_DIR/build/coverage" -b "$PLUGINS_DIR" -o "$PLUGINS_COV" || exit 1
 lcov $LCOV_OPT -a "$CORE_COV" -a "$PLUGINS_COV" -o "$ALL_COV"
-lcov $LCOV_OPT -e "$ALL_COV" "$CORE_DIR/src/*" "$PLUGINS_DIR/dbus_handlers/*" "$PLUGINS_DIR/dbus_service/*" -o "$FILTERED_COV" || exit 1
+lcov $LCOV_OPT -e "$ALL_COV" "$CORE_DIR/src/*" "$PLUGINS_DIR/dbus_handlers/*" "$PLUGINS_DIR/dbus_service/*" "$PLUGINS_DIR/settings/*" -o "$FILTERED_COV" || exit 1
 genhtml $GENHTML_OPT "$FILTERED_COV" -t "nfcd" --output-directory "$COV_DIR/report" || exit 1

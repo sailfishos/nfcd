@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2022 Jolla Ltd.
+ * Copyright (C) 2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,30 +30,46 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef NFC_PLUGIN_PRIVATE_H
-#define NFC_PLUGIN_PRIVATE_H
+#ifndef SETTINGS_PLUGIN_IMPL_H
+#define SETTINGS_PLUGIN_IMPL_H
 
-#include "nfc_types_p.h"
+/* Internal header file for settings plugin implementation */
 
-#include <nfc_plugin.h>
+#include <nfc_plugin_impl.h>
 
-gboolean
-nfc_plugin_start(
-    NfcPlugin* plugin,
-    NfcManager* manager)
-    NFCD_INTERNAL;
+#define GLOG_MODULE_NAME settings_log
+#include <gutil_log.h>
+
+#include <gio/gio.h>
+
+#define SETTINGS_G_BUS           G_BUS_TYPE_SYSTEM
+#define SETTINGS_DA_BUS          DA_BUS_SYSTEM
+
+/* Class structure is exposed for unit testing */
+typedef struct settings_plugin SettingsPlugin;
+typedef struct settings_plugin_class {
+    NfcPluginClass parent;
+    const char* storage_dir;
+    const char* config_dir;
+} SettingsPluginClass;
+
+GType settings_plugin_get_type(void);
+#define SETTINGS_PLUGIN_TYPE settings_plugin_get_type()
+
+/* And these are also separated so that unit test can substitute them */
+guint
+settings_plugin_name_own(
+    SettingsPlugin* plugin,
+    const char* name,
+    GBusAcquiredCallback bus_acquired,
+    GBusNameAcquiredCallback name_acquired,
+    GBusNameLostCallback name_lost);
 
 void
-nfc_plugin_stop(
-    NfcPlugin* plugin)
-    NFCD_INTERNAL;
+settings_plugin_name_unown(
+    guint id);
 
-void
-nfc_plugin_started(
-    NfcPlugin* plugin)
-    NFCD_INTERNAL;
-
-#endif /* NFC_PLUGIN_PRIVATE_H */
+#endif /* SETTINGS_PLUGIN_IMPL_H */
 
 /*
  * Local Variables:

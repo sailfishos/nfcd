@@ -67,7 +67,7 @@ BASE_FLAGS = -fPIC
 BASE_LDFLAGS = $(BASE_FLAGS) $(LDFLAGS)
 BASE_CFLAGS = $(BASE_FLAGS) $(CFLAGS)
 FULL_CFLAGS = $(BASE_CFLAGS) $(DEFINES) $(WARNINGS) $(INCLUDES) -MMD -MP \
-  $(shell pkg-config --cflags $(PKGS))
+  $(shell pkg-config --cflags $(PKGS) $(CFLAGS_PKGS))
 FULL_LDFLAGS = $(BASE_LDFLAGS)
 LIBS = $(shell pkg-config --libs $(PKGS)) -ldl
 DEBUG_FLAGS = -g
@@ -153,7 +153,10 @@ unitclean:
 clean: unitclean
 
 cleaner: unitclean
-	@make -C $(CORE_DIR) clean
+	@$(MAKE) -C "$(CORE_DIR)" clean
+ifneq ($(PLUGINS_DIR),)
+	@$(MAKE) -C "$(PLUGINS_DIR)" clean
+endif
 
 test_banner:
 	@echo "===========" $(EXE) "=========== "

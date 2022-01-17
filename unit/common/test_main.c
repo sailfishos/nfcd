@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -34,6 +34,12 @@
 
 #include <gutil_log.h>
 
+#include <unistd.h>
+#include <dirent.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+
 GUtilData*
 test_alloc_data(
     const void* bytes,
@@ -62,6 +68,35 @@ test_clone_data(
     const GUtilData* data)
 {
     return data ? test_alloc_data(data->bytes, data->size) : NULL;
+}
+
+/* Recursive rmdir */
+int
+test_rmdir(
+    const char* path)
+{
+    DIR* d = opendir(path);
+
+    if (d) {
+        const struct dirent* p;
+        int r = 0;
+
+        while (!r && (p = readdir(d))) {
+            if (strcmp(p->d_name, ".") && strcmp(p->d_name, "..")) {
+                struct stat st;
+                char* buf = g_build_filename(path, p->d_name, NULL);
+
+                if (!stat(buf, &st)) {
+                    r =  S_ISDIR(st.st_mode) ? test_rmdir(buf) : unlink(buf);
+                }
+                g_free(buf);
+            }
+        }
+        closedir(d);
+        return r ? r : rmdir(path);
+    } else {
+        return -1;
+    }
 }
 
 gboolean

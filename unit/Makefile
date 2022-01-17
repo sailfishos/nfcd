@@ -3,8 +3,9 @@
 all:
 %:
 	@$(MAKE) -C core_adapter $*
-	@$(MAKE) -C core_initiator $*
+	@$(MAKE) -C core_config $*
 	@$(MAKE) -C core_crc $*
+	@$(MAKE) -C core_initiator $*
 	@$(MAKE) -C core_llc $*
 	@$(MAKE) -C core_llc_param $*
 	@$(MAKE) -C core_manager $*
@@ -37,6 +38,7 @@ all:
 	@$(MAKE) -C plugins_dbus_service_plugin $*
 	@$(MAKE) -C plugins_dbus_service_tag $*
 	@$(MAKE) -C plugins_dbus_service_util $*
+	@$(MAKE) -C plugins_settings $*
 
 clean: unitclean
 	rm -f *~

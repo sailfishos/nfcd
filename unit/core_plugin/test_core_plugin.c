@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -37,8 +37,6 @@
 
 #include <gutil_log.h>
 
-#include <dlfcn.h>
-
 static TestOpt test_opt;
 
 struct nfc_manager {
@@ -54,6 +52,7 @@ typedef struct test_plugin {
     NfcPlugin plugin;
     NfcManager* manager;
     gboolean fail_start;
+    gboolean started;
 } TestPlugin;
 
 G_DEFINE_TYPE(TestPlugin, test_plugin, NFC_TYPE_PLUGIN)
@@ -103,6 +102,19 @@ test_plugin_stop(
 
 static
 void
+test_plugin_started(
+    NfcPlugin* plugin)
+{
+    TestPlugin* self = TEST_PLUGIN(plugin);
+
+    g_assert(self->manager);
+    g_assert(!self->started);
+    self->started = TRUE;
+    NFC_PLUGIN_CLASS(test_plugin_parent_class)->started(plugin);
+}
+
+static
+void
 test_plugin_init(
     TestPlugin* self)
 {
@@ -115,6 +127,7 @@ test_plugin_class_init(
 {
     klass->start = test_plugin_start;
     klass->stop = test_plugin_stop;
+    klass->started = test_plugin_started;
 }
 
 /*==========================================================================*
@@ -128,9 +141,7 @@ test_null(
 {
     /* Public interfaces are NULL tolerant */
     g_assert(!nfc_plugin_ref(NULL));
-    g_assert(!nfc_plugin_start(NULL, NULL));
     nfc_plugin_unref(NULL);
-    nfc_plugin_stop(NULL);
 }
 
 /*==========================================================================*
@@ -158,6 +169,10 @@ test_basic(
 
     /* Second start just returns TRUE */
     g_assert(nfc_plugin_start(plugin, &manager));
+
+    /* Make sure started() method is called */
+    nfc_plugin_started(plugin);
+    g_assert(test->started);
 
     /* Stop */
     nfc_plugin_stop(plugin);

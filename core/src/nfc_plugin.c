@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -76,35 +76,42 @@ nfc_plugin_start(
     NfcPlugin* self,
     NfcManager* manager)
 {
-    if (G_LIKELY(self)) {
-        NfcPluginPriv* priv = self->priv;
+    /* Caller checks plugin pointer for NULL */
+    NfcPluginPriv* priv = self->priv;
 
-        /* Don't start twice */
-        if (priv->started) {
-            /* Already started */
-            return TRUE;
-        } else if (NFC_PLUGIN_GET_CLASS(self)->start(self, manager)) {
-            /* Started successfully */
-            priv->started = TRUE;
-            return TRUE;
-        }
+    /* Don't start twice */
+    if (priv->started) {
+        /* Already started */
+        return TRUE;
+    } else if (NFC_PLUGIN_GET_CLASS(self)->start(self, manager)) {
+        /* Started successfully */
+        priv->started = TRUE;
+        return TRUE;
+    } else {
+        return FALSE;
     }
-    return FALSE;
 }
 
 void
 nfc_plugin_stop(
     NfcPlugin* self)
 {
-    if (G_LIKELY(self)) {
-        NfcPluginPriv* priv = self->priv;
+    /* Caller checks plugin pointer for NULL */
+    NfcPluginPriv* priv = self->priv;
 
-        /* Only stop if started */
-        if (priv->started) {
-            NFC_PLUGIN_GET_CLASS(self)->stop(self);
-            priv->started = FALSE;
-        }
+    /* Only stop if started */
+    if (priv->started) {
+        NFC_PLUGIN_GET_CLASS(self)->stop(self);
+        priv->started = FALSE;
     }
+}
+
+void
+nfc_plugin_started(
+    NfcPlugin* self)
+{
+    /* Caller checks plugin pointer for NULL */
+    NFC_PLUGIN_GET_CLASS(self)->started(self);
 }
 
 /*==========================================================================*
@@ -122,7 +129,7 @@ nfc_plugin_default_start(
 
 static
 void
-nfc_plugin_default_stop(
+nfc_plugin_default_nop(
     NfcPlugin* self)
 {
 }
@@ -157,7 +164,8 @@ nfc_plugin_class_init(
     g_type_class_add_private(klass, sizeof(NfcPluginPriv));
     object_class->dispose = nfc_plugin_dispose;
     klass->start = nfc_plugin_default_start;
-    klass->stop = nfc_plugin_default_stop;
+    klass->stop = nfc_plugin_default_nop;
+    klass->started = nfc_plugin_default_nop;
 }
 
 /*
