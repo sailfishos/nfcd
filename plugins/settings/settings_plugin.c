@@ -128,12 +128,15 @@ G_DEFINE_TYPE(SettingsPlugin, settings_plugin, NFC_TYPE_PLUGIN)
 #define SETTINGS_KEY_ENABLED             "Enabled"
 #define SETTINGS_KEY_ALWAYS_ON           "AlwaysOn"
 
+#define SETTINGS_DEFAULT_ENABLED         TRUE
+#define SETTINGS_DEFAULT_ALWAYS_ON       FALSE
+
 typedef enum settings_error {
     SETTINGS_ERROR_ACCESS_DENIED,        /* AccessDenied */
     SETTINGS_ERROR_FAILED,               /* Failed */
     SETTINGS_ERROR_UNKNOWN_PLUGIN,       /* UnknownPlugin */
     SETTINGS_ERROR_UNKNOWN_KEY,          /* UnknownKey */
-    SETTINGS_NUM_ERRORS
+    SETTINGS_ERROR_UNKNOWN_VALUE         /* UnknownValue */
 } SETTINGS_ERROR;
 
 #define SETTINGS_DBUS_ERROR (settings_plugin_error_quark())
@@ -295,7 +298,7 @@ settings_plugin_nfc_enabled(
     GKeyFile* config)
 {
     return settings_plugin_get_boolean(self, config,
-        SETTINGS_KEY_ENABLED, TRUE);
+        SETTINGS_KEY_ENABLED, SETTINGS_DEFAULT_ENABLED);
 }
 
 static
@@ -305,7 +308,7 @@ settings_plugin_nfc_always_on(
     GKeyFile* config)
 {
     return settings_plugin_get_boolean(self, config,
-        SETTINGS_KEY_ALWAYS_ON, FALSE);
+        SETTINGS_KEY_ALWAYS_ON, SETTINGS_DEFAULT_ALWAYS_ON);
 }
 
 static
@@ -334,8 +337,9 @@ settings_plugin_update_boolean(
         }
     } else if (have_default && value == default_value) {
         /* Remove the default value from the config */
-        g_key_file_remove_key(config, group, key, NULL);
-        return TRUE;
+        if (g_key_file_remove_key(config, group, key, NULL)) {
+            return TRUE;
+        }
     } else if (config_value != value) {
         /* Not a default and doesn't match the config - save it */
         g_key_file_set_boolean(config, group, key, value);
@@ -373,7 +377,7 @@ settings_plugin_update_settings(
                     const char* key = *ptr++;
                     GVariant* value = nfc_config_get_value(pc->config, key);
                     char* str = g_key_file_get_string(config, group, key, NULL);
-                    char* defval = g_key_file_get_string(self->defaults,
+                    char* defval = g_key_file_get_value(self->defaults,
                         group, key, NULL);
                     char* sval = NULL;
 
@@ -489,7 +493,8 @@ settings_plugin_error_quark()
         { SETTINGS_ERROR_ACCESS_DENIED, SETTINGS_ERROR_("AccessDenied") },
         { SETTINGS_ERROR_FAILED, SETTINGS_ERROR_("Failed") },
         { SETTINGS_ERROR_UNKNOWN_PLUGIN, SETTINGS_ERROR_("UnknownPlugin") },
-        { SETTINGS_ERROR_UNKNOWN_KEY, SETTINGS_ERROR_("UnknownKey") }
+        { SETTINGS_ERROR_UNKNOWN_KEY, SETTINGS_ERROR_("UnknownKey") },
+        { SETTINGS_ERROR_UNKNOWN_VALUE, SETTINGS_ERROR_("UnknownValue") }
     };
 
     g_dbus_error_register_error_domain("dbus-nfc-settings-error-quark",
@@ -739,10 +744,12 @@ settings_plugin_dbus_handle_get_plugin_value(
                 org_sailfishos_nfc_settings_complete_get_plugin_value(iface,
                     call, g_variant_new_variant(value));
                 g_variant_unref(value);
-            } else {
-                /* What else could be wrong? */
+            } else if (!settings_plugin_is_valid_key(pc->config, key)) {
                 g_dbus_method_invocation_return_error_literal(call,
                     SETTINGS_DBUS_ERROR, SETTINGS_ERROR_UNKNOWN_KEY, key);
+            } else {
+                g_dbus_method_invocation_return_error_literal(call,
+                    SETTINGS_DBUS_ERROR, SETTINGS_ERROR_UNKNOWN_VALUE, key);
             }
         } else {
             g_dbus_method_invocation_return_error_literal(call,
@@ -1094,6 +1101,7 @@ void
 settings_plugin_init(
     SettingsPlugin* self)
 {
+    self->nfc_enabled = SETTINGS_DEFAULT_ENABLED;
     self->defaults = g_key_file_new();
     self->storage_file = g_build_filename(GET_THIS_CLASS(self)->storage_dir,
         SETTINGS_STORAGE_FILE, NULL);
