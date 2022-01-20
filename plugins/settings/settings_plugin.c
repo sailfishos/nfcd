@@ -128,12 +128,15 @@ G_DEFINE_TYPE(SettingsPlugin, settings_plugin, NFC_TYPE_PLUGIN)
 #define SETTINGS_KEY_ENABLED             "Enabled"
 #define SETTINGS_KEY_ALWAYS_ON           "AlwaysOn"
 
+#define SETTINGS_DEFAULT_ENABLED         TRUE
+#define SETTINGS_DEFAULT_ALWAYS_ON       FALSE
+
 typedef enum settings_error {
     SETTINGS_ERROR_ACCESS_DENIED,        /* AccessDenied */
     SETTINGS_ERROR_FAILED,               /* Failed */
     SETTINGS_ERROR_UNKNOWN_PLUGIN,       /* UnknownPlugin */
     SETTINGS_ERROR_UNKNOWN_KEY,          /* UnknownKey */
-    SETTINGS_NUM_ERRORS
+    SETTINGS_ERROR_UNKNOWN_VALUE         /* UnknownValue */
 } SETTINGS_ERROR;
 
 #define SETTINGS_DBUS_ERROR (settings_plugin_error_quark())
@@ -295,7 +298,7 @@ settings_plugin_nfc_enabled(
     GKeyFile* config)
 {
     return settings_plugin_get_boolean(self, config,
-        SETTINGS_KEY_ENABLED, TRUE);
+        SETTINGS_KEY_ENABLED, SETTINGS_DEFAULT_ENABLED);
 }
 
 static
@@ -305,123 +308,57 @@ settings_plugin_nfc_always_on(
     GKeyFile* config)
 {
     return settings_plugin_get_boolean(self, config,
-        SETTINGS_KEY_ALWAYS_ON, FALSE);
-}
-
-static
-gboolean
-settings_plugin_update_boolean(
-    SettingsPlugin* self,
-    GKeyFile* config,
-    const char* key,
-    gboolean value)
-{
-    const char* group = SETTINGS_GROUP;
-    GError* error = NULL;
-    gboolean default_value = g_key_file_get_boolean(self->defaults, group,
-        key, &error);
-    gboolean have_default = !error;
-    gboolean config_value;
-
-    g_clear_error(&error);
-    config_value = g_key_file_get_boolean(config, group, key, &error);
-    if (error) {
-        g_error_free(error);
-        /* Save it only if it's not the default value */
-        if (!have_default || value != default_value) {
-            g_key_file_set_boolean(config, group, key, value);
-            return TRUE;
-        }
-    } else if (have_default && value == default_value) {
-        /* Remove the default value from the config */
-        g_key_file_remove_key(config, group, key, NULL);
-        return TRUE;
-    } else if (config_value != value) {
-        /* Not a default and doesn't match the config - save it */
-        g_key_file_set_boolean(config, group, key, value);
-        return TRUE;
-    }
-    return FALSE;
-}
-
-static
-gboolean
-settings_plugin_update_settings(
-    SettingsPlugin* self,
-    GKeyFile* config)
-{
-    GStrV* plugins = self->order;
-    gboolean save = FALSE;
-
-    if (settings_plugin_update_boolean(self, config, SETTINGS_KEY_ENABLED,
-        self->nfc_enabled)) {
-        save = TRUE;
-    }
-
-    /* Check plugin configs */
-    if (plugins) {
-        while (*plugins) {
-            const char* group = *plugins++;
-            const SettingsPluginConfig* pc = g_hash_table_lookup(self->plugins,
-                group);
-            const char* const* keys = nfc_config_get_keys(pc->config);
-
-            if (keys) {
-                const char* const* ptr = keys;
-
-                while (*ptr) {
-                    const char* key = *ptr++;
-                    GVariant* value = nfc_config_get_value(pc->config, key);
-                    char* str = g_key_file_get_string(config, group, key, NULL);
-                    char* defval = g_key_file_get_string(self->defaults,
-                        group, key, NULL);
-                    char* sval = NULL;
-
-                    if (value) {
-                        sval = g_variant_print(value, FALSE);
-                        g_variant_unref(value);
-                    }
-
-                    if (sval && defval && !strcmp(sval, defval)) {
-                        /* Don't store the default value */
-                        GVERBOSE_("[%s] %s %s => (default)", group,
-                            key, sval);
-                        if (g_key_file_remove_key(config, group, key, NULL)) {
-                            save = TRUE;
-                        }
-                    } else if (g_strcmp0(sval, str)) {
-                        GVERBOSE_("[%s] %s %s => %s", group, key, str, sval);
-                        if (sval) {
-                            g_key_file_set_string(config, group, key, sval);
-                            save = TRUE;
-                        } else if (g_key_file_remove_key(config, group, key,
-                            NULL)) {
-                            save = TRUE;
-                        }
-                    }
-
-                    g_free(defval);
-                    g_free(sval);
-                    g_free(str);
-                }
-            }
-        }
-    }
-
-    return save;
+        SETTINGS_KEY_ALWAYS_ON, SETTINGS_DEFAULT_ALWAYS_ON);
 }
 
 static
 void
-settings_plugin_update_config(
-    SettingsPlugin* self)
+settings_plugin_save_boolean(
+    SettingsPlugin* self,
+    const char* group,
+    const char* key,
+    gboolean new_value)
 {
     GKeyFile* config = settings_plugin_load_config(self);
+    GError* error = NULL;
+    gboolean old_value = g_key_file_get_boolean(config, group, key, &error);
 
-    if (settings_plugin_update_settings(self, config)) {
+    if (error || new_value != old_value) {
+        GVERBOSE("%s/%s = %s", group, key, new_value ? "true" : "false");
+        g_key_file_set_boolean(config, group, key, new_value);
         settings_plugin_save_config(self, config);
     }
 
+    g_clear_error(&error);
+    g_key_file_unref(config);
+}
+
+static
+void
+settings_plugin_save_value(
+    SettingsPlugin* self,
+    const char* group,
+    const char* key,
+    GVariant* value)
+{
+    GKeyFile* config = settings_plugin_load_config(self);
+    char* new_value = value ? g_variant_print(value, FALSE) : NULL;
+
+    if (new_value) {
+        char* old_value = g_key_file_get_value(config, group, key, NULL);
+
+        if (g_strcmp0(new_value, old_value)) {
+            GVERBOSE("%s/%s %s => %s", group, key, old_value, new_value);
+            g_key_file_set_value(config, group, key, new_value);
+            settings_plugin_save_config(self, config);
+        }
+        g_free(old_value);
+    } else if (g_key_file_remove_key(config, group, key, NULL)) {
+        GVERBOSE("%s/%s is removed", group, key);
+        settings_plugin_save_config(self, config);
+    }
+
+    g_free(new_value);
     g_key_file_unref(config);
 }
 
@@ -489,7 +426,8 @@ settings_plugin_error_quark()
         { SETTINGS_ERROR_ACCESS_DENIED, SETTINGS_ERROR_("AccessDenied") },
         { SETTINGS_ERROR_FAILED, SETTINGS_ERROR_("Failed") },
         { SETTINGS_ERROR_UNKNOWN_PLUGIN, SETTINGS_ERROR_("UnknownPlugin") },
-        { SETTINGS_ERROR_UNKNOWN_KEY, SETTINGS_ERROR_("UnknownKey") }
+        { SETTINGS_ERROR_UNKNOWN_KEY, SETTINGS_ERROR_("UnknownKey") },
+        { SETTINGS_ERROR_UNKNOWN_VALUE, SETTINGS_ERROR_("UnknownValue") }
     };
 
     g_dbus_error_register_error_domain("dbus-nfc-settings-error-quark",
@@ -548,7 +486,6 @@ settings_plugin_set_nfc_enabled(
         GINFO("NFC %s", enabled ? "enabled" : "disabled");
         org_sailfishos_nfc_settings_emit_enabled_changed(self->iface, enabled);
         nfc_manager_set_enabled(self->manager, enabled);
-        settings_plugin_update_config(self);
     }
 }
 
@@ -631,6 +568,8 @@ settings_plugin_dbus_handle_set_enabled(
     if (settings_plugin_access_allowed(self, call,
         SETTINGS_ACTION_SET_ENABLED, SETTINGS_DEFAULT_ACCESS_SET_ENABLED)) {
         settings_plugin_set_nfc_enabled(self, enabled);
+        settings_plugin_save_boolean(self, SETTINGS_GROUP,
+            SETTINGS_KEY_ENABLED, enabled);
         org_sailfishos_nfc_settings_complete_set_enabled(iface, call);
     }
     return TRUE;
@@ -739,10 +678,12 @@ settings_plugin_dbus_handle_get_plugin_value(
                 org_sailfishos_nfc_settings_complete_get_plugin_value(iface,
                     call, g_variant_new_variant(value));
                 g_variant_unref(value);
-            } else {
-                /* What else could be wrong? */
+            } else if (!settings_plugin_is_valid_key(pc->config, key)) {
                 g_dbus_method_invocation_return_error_literal(call,
                     SETTINGS_DBUS_ERROR, SETTINGS_ERROR_UNKNOWN_KEY, key);
+            } else {
+                g_dbus_method_invocation_return_error_literal(call,
+                    SETTINGS_DBUS_ERROR, SETTINGS_ERROR_UNKNOWN_VALUE, key);
             }
         } else {
             g_dbus_method_invocation_return_error_literal(call,
@@ -850,9 +791,9 @@ settings_plugin_config_changed(
     SettingsPluginConfig* pc = user_data;
     SettingsPlugin* self = pc->settings;
 
+    settings_plugin_save_value(self, pc->name, key, value);
     org_sailfishos_nfc_settings_emit_plugin_value_changed(self->iface,
         pc->name, key, g_variant_new_variant(value));
-    settings_plugin_update_config(self);
 }
 
 static
@@ -940,7 +881,13 @@ settings_plugin_started(
     GKeyFile* config = settings_plugin_load_config(self);
     char** names;
 
+    /* Special case, one-time dbus_neard migration */
+    const char* migrate_plugin_name = "dbus_neard";
+    const char* migrate_plugin_key = "BluetoothStaticHandover";
+    gboolean save_config = FALSE;
+
     /* All functional plugins have been successfully started */
+    GVERBOSE("Initializing");
     while (*ptr) {
         NfcPlugin* p = *ptr++;
 
@@ -973,10 +920,10 @@ settings_plugin_started(
         if (keys) {
             while (*keys) {
                 const char* key = *keys++;
-                char* str = g_key_file_get_string(config, name, key, NULL);
+                char* str = g_key_file_get_value(config, name, key, NULL);
 
                 if (!str) {
-                    str = g_key_file_get_string(self->defaults, name, key,
+                    str = g_key_file_get_value(self->defaults, name, key,
                         NULL);
                 }
                 if (str) {
@@ -991,6 +938,18 @@ settings_plugin_started(
                     nfc_config_set_value(pc->config, key, var);
                     g_variant_unref(var);
                     g_free(str);
+                } else if (!save_config &&
+                    !strcmp(name, migrate_plugin_name) &&
+                    !strcmp(key, migrate_plugin_key)) {
+                    GVariant* value = nfc_config_get_value(pc->config, key);
+
+                    if (value) {
+                        save_config = TRUE;
+                        str = g_variant_print(value, FALSE);
+                        g_key_file_set_value(config, name, key, str);
+                        g_variant_unref(value);
+                        g_free(str);
+                    }
                 }
             }
         }
@@ -1009,8 +968,7 @@ settings_plugin_started(
         nfc_manager_request_power(self->manager, TRUE);
     }
 
-    /* Check the config (mostly for dbus_neard migration) */
-    if (settings_plugin_update_settings(self, config)) {
+    if (save_config) {
         settings_plugin_save_config(self, config);
     }
 
@@ -1094,6 +1052,7 @@ void
 settings_plugin_init(
     SettingsPlugin* self)
 {
+    self->nfc_enabled = SETTINGS_DEFAULT_ENABLED;
     self->defaults = g_key_file_new();
     self->storage_file = g_build_filename(GET_THIS_CLASS(self)->storage_dir,
         SETTINGS_STORAGE_FILE, NULL);

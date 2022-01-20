@@ -57,6 +57,7 @@ static DA_ACCESS test_access = DA_ACCESS_ALLOW;
 
 #define TMP_DIR_TEMPLATE                 "test_XXXXXX"
 #define TEST_PLUGIN_NAME                 "test"
+#define TEST_DBUS_NEARD_PLUGIN_NAME      "dbus_neard"
 
 #define SETTINGS_CONFIG_DEFAULTS_FILE    "defaults.conf"
 #define SETTINGS_CONFIG_DEFAULTS_DIR     "defaults.d"
@@ -74,6 +75,7 @@ static DA_ACCESS test_access = DA_ACCESS_ALLOW;
 #define SETTINGS_ERROR_ACCESS_DENIED     SETTINGS_ERROR_("AccessDenied")
 #define SETTINGS_ERROR_UNKNOWN_PLUGIN    SETTINGS_ERROR_("UnknownPlugin")
 #define SETTINGS_ERROR_UNKNOWN_KEY       SETTINGS_ERROR_("UnknownKey")
+#define SETTINGS_ERROR_UNKNOWN_VALUE     SETTINGS_ERROR_("UnknownValue")
 #define SETTINGS_ERROR_FAILED            SETTINGS_ERROR_("Failed")
 
 typedef struct test_bus_name {
@@ -96,6 +98,10 @@ typedef struct test_data {
     NfcManager* manager;
     GDBusConnection* client; /* Owned by TestDBus */
     guint flags;
+
+#define TEST_ENABLED_CHANGED_SIGNAL_FLAG 0x01
+#define TEST_PLUGIN_VALUE_CHANGED_SIGNAL_FLAG 0x02
+
 } TestData;
 
 typedef
@@ -111,6 +117,15 @@ static GUtilIdlePool* test_pool;
 static const char* dbus_sender = ":1.0";
 
 static NfcPlugin* test_plugin_create(void);
+static NfcPlugin* test_dbus_neard_plugin_create(void);
+static const NfcPluginDesc NFC_PLUGIN_DESC(test) = {
+    TEST_PLUGIN_NAME, "Test", NFC_CORE_VERSION,
+    test_plugin_create, NULL, 0
+};
+static const NfcPluginDesc NFC_PLUGIN_DESC(dbus_neard) = {
+    TEST_DBUS_NEARD_PLUGIN_NAME, "Dummy neard D-Bus plugin", NFC_CORE_VERSION,
+    test_dbus_neard_plugin_create, NULL, 0
+};
 
 static
 void
@@ -154,23 +169,35 @@ test_data_init_with_plugins(
 
 static
 void
+test_data_init4(
+    TestData* test,
+    const char* config,
+    TestFunc prestart)
+{
+    static const NfcPluginDesc* const test_plugins4[] = {
+        &NFC_PLUGIN_DESC(settings),
+        &NFC_PLUGIN_DESC(test),
+        &NFC_PLUGIN_DESC(dbus_neard),
+        NULL
+    };
+
+    test_data_init_with_plugins(test, config, prestart, test_plugins4);
+}
+
+static
+void
 test_data_init3(
     TestData* test,
     const char* config,
     TestFunc prestart)
 {
-    static const NfcPluginDesc NFC_PLUGIN_DESC(test) = {
-        TEST_PLUGIN_NAME, "Test", NFC_CORE_VERSION,
-        test_plugin_create, NULL, 0
-    };
-
-    static const NfcPluginDesc* const test_plugins2[] = {
+    static const NfcPluginDesc* const test_plugins3[] = {
         &NFC_PLUGIN_DESC(settings),
         &NFC_PLUGIN_DESC(test),
         NULL
     };
 
-    test_data_init_with_plugins(test, config, prestart, test_plugins2);
+    test_data_init_with_plugins(test, config, prestart, test_plugins3);
 }
 
 static
@@ -355,40 +382,114 @@ test_done_access_denied(
 
 static
 void
-test_get_plugin_value_check(
+test_get_plugin_string_value_check(
     GDBusConnection* client,
     GAsyncResult* result,
     TestData* test,
     const char* expected_value)
 {
     GError* error = NULL;
+    GVariant* svalue = NULL;
     GVariant* value = NULL;
-    GVariant* string = NULL;
     GVariant* var = g_dbus_connection_call_finish(client, result, &error);
 
     g_assert(!error);
     g_assert(var);
     g_variant_get(var, "(@v)", &value);
     g_assert(g_variant_is_of_type(value, G_VARIANT_TYPE_VARIANT));
-    string = g_variant_get_variant(value);
-    g_assert(g_variant_is_of_type(string, G_VARIANT_TYPE_STRING));
-    GDEBUG("%s", g_variant_get_string(string, NULL));
-    g_assert_cmpstr(g_variant_get_string(string, NULL), == ,expected_value);
+    svalue = g_variant_get_variant(value);
+    g_assert(g_variant_is_of_type(svalue, G_VARIANT_TYPE_STRING));
+    GDEBUG("%s", g_variant_get_string(svalue, NULL));
+    g_assert_cmpstr(g_variant_get_string(svalue, NULL), == ,expected_value);
 
+    g_variant_unref(svalue);
     g_variant_unref(value);
-    g_variant_unref(string);
     g_variant_unref(var);
 }
 
 static
 void
-test_get_plugin_value_done(
+test_get_plugin_boolean_value_check(
+    GDBusConnection* client,
+    GAsyncResult* result,
+    TestData* test,
+    gboolean expected_value)
+{
+    GError* error = NULL;
+    GVariant* bvalue = NULL;
+    GVariant* value = NULL;
+    GVariant* var = g_dbus_connection_call_finish(client, result, &error);
+
+    g_assert(!error);
+    g_assert(var);
+    g_variant_get(var, "(@v)", &value);
+    g_assert(g_variant_is_of_type(value, G_VARIANT_TYPE_VARIANT));
+    bvalue = g_variant_get_variant(value);
+    g_assert(g_variant_is_of_type(bvalue, G_VARIANT_TYPE_BOOLEAN));
+    GDEBUG("%s", g_variant_get_boolean(bvalue) ? "true" : "false");
+    g_assert_cmpint(g_variant_get_boolean(bvalue), == ,expected_value);
+
+    g_variant_unref(bvalue);
+    g_variant_unref(value);
+    g_variant_unref(var);
+}
+
+static
+void
+test_get_plugin_string_value_done(
     GObject* client,
     GAsyncResult* result,
     TestData* test,
-    const char* val)
+    const char* expected_value)
 {
-    test_get_plugin_value_check(G_DBUS_CONNECTION(client), result, test, val);
+    test_get_plugin_string_value_check(G_DBUS_CONNECTION(client), result,
+        test, expected_value);
+    test_quit_later(test->loop);
+}
+
+static
+void
+test_get_plugin_boolean_value_done(
+    GObject* client,
+    GAsyncResult* result,
+    TestData* test,
+    gboolean expected_value)
+{
+    test_get_plugin_boolean_value_check(G_DBUS_CONNECTION(client), result,
+        test, expected_value);
+    test_quit_later(test->loop);
+}
+
+static
+void
+test_get_enabled_check(
+    GDBusConnection* client,
+    GAsyncResult* result,
+    TestData* test,
+    gboolean expected)
+{
+    gboolean enabled = 0;
+    GError* error = NULL;
+    GVariant* var = g_dbus_connection_call_finish(client, result, &error);
+
+    g_assert(var);
+    g_assert(!error);
+    g_variant_get(var, "(b)", &enabled);
+    GDEBUG("enabled=%d", enabled);
+    g_assert(enabled == expected);
+    g_variant_unref(var);
+    test_quit_later(test->loop);
+}
+
+static
+void
+test_get_enabled_done(
+    GObject* client,
+    GAsyncResult* result,
+    TestData* test,
+    gboolean expected)
+{
+    test_get_enabled_check(G_DBUS_CONNECTION(client), result, test, expected);
     test_quit_later(test->loop);
 }
 
@@ -468,6 +569,36 @@ test_done_failed(
 
 static
 void
+test_check_config_value(
+    GKeyFile* config,
+    const char* group,
+    const char* key,
+    const char* expected_value)
+{
+    char* value;
+
+    value = g_key_file_get_value(config, group, key, NULL);
+    g_assert_cmpstr(value, == ,expected_value);
+    g_free(value);
+}
+
+static
+void
+test_check_config_file_value(
+    TestData* test,
+    const char* group,
+    const char* key,
+    const char* expected_value)
+{
+    GKeyFile* config = g_key_file_new();
+
+    g_assert(g_key_file_load_from_file(config, test->storage_file, 0, NULL));
+    test_check_config_value(config, group, key, expected_value);
+    g_key_file_unref(config);
+}
+
+static
+void
 test_normal_run(
     void (*init)(TestData* test, const char* config),
     const char* config,
@@ -519,6 +650,24 @@ test_normal3(
     test_dbus_free(dbus);
 }
 
+static
+void
+test_normal4(
+    const char* config,
+    TestFunc prestart,
+    TestDBusStartFunc start)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_allow_calls();
+    test_data_init4(&test, config, prestart);
+    dbus = test_dbus_new2(test_start, start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
 /*==========================================================================*
  * Test plugin
  *==========================================================================*/
@@ -526,27 +675,26 @@ test_normal3(
 typedef NfcPluginClass TestPluginClass;
 typedef struct test_plugin {
     NfcPlugin plugin;
-    NfcManager* manager;
     char* value;
+    char* value2;
 } TestPlugin;
 
 #define TEST_PLUGIN_KEY "key"
+#define TEST_PLUGIN_KEY2 "key2" /* Doesn't have a default */
 #define TEST_PLUGIN_DEFAULT_VALUE "value"
 #define TEST_PLUGIN_NON_DEFAULT_VALUE "non-default"
 static void test_plugin_config_init(NfcConfigurableInterface* iface);
 G_DEFINE_TYPE_WITH_CODE(TestPlugin, test_plugin, NFC_TYPE_PLUGIN,
 G_IMPLEMENT_INTERFACE(NFC_TYPE_CONFIGURABLE, test_plugin_config_init))
-#define TEST_TYPE_PLUGIN (test_plugin_get_type())
+#define TEST_TYPE_PLUGIN test_plugin_get_type()
 #define TEST_PLUGIN(obj) (G_TYPE_CHECK_INSTANCE_CAST(obj, \
         TEST_TYPE_PLUGIN, TestPlugin))
-#define PARENT_CLASS() G_TYPE_CHECK_CLASS_CAST(test_plugin_parent_class, \
-        NFC_TYPE_PLUGIN, NfcPluginClass)
 #define TEST_CONFIG_VALUE_CHANGED_NAME "test-plugin-config-value-changed"
-enum neard_plugin_signal {
+enum test_plugin_signal {
      TEST_CONFIG_VALUE_CHANGED,
-     TEST_PLUGIN_SIGNAL_COUNT
+     TEST_PLUGIN_SIGNALS
 };
-static guint test_plugin_signals[TEST_PLUGIN_SIGNAL_COUNT] = { 0 };
+static guint test_plugin_signals[TEST_PLUGIN_SIGNALS] = { 0 };
 
 static
 NfcPlugin*
@@ -562,23 +710,7 @@ test_plugin_start(
     NfcPlugin* plugin,
     NfcManager* manager)
 {
-    TestPlugin* self = TEST_PLUGIN(plugin);
-
-    g_assert(!self->manager);
-    self->manager = manager;
     return TRUE;
-}
-
-static
-void
-test_plugin_stop(
-    NfcPlugin* plugin)
-{
-    TestPlugin* self = TEST_PLUGIN(plugin);
-
-    g_assert(self->manager);
-    self->manager = NULL;
-    PARENT_CLASS()->stop(plugin);
 }
 
 static
@@ -597,6 +729,7 @@ test_plugin_finalize(
     TestPlugin* self = TEST_PLUGIN(plugin);
 
     g_free(self->value);
+    g_free(self->value2);
     G_OBJECT_CLASS(test_plugin_parent_class)->finalize(plugin);
 }
 
@@ -607,7 +740,6 @@ test_plugin_class_init(
 {
     G_OBJECT_CLASS(klass)->finalize = test_plugin_finalize;
     klass->start = test_plugin_start;
-    klass->stop = test_plugin_stop;
     test_plugin_signals[TEST_CONFIG_VALUE_CHANGED] =
         g_signal_new(TEST_CONFIG_VALUE_CHANGED_NAME,
             G_OBJECT_CLASS_TYPE(klass), G_SIGNAL_RUN_FIRST |
@@ -621,7 +753,7 @@ test_plugin_config_get_keys(
     NfcConfigurable* config)
 {
     static const char* const test_plugin_keys[] = {
-        TEST_PLUGIN_KEY, NULL
+        TEST_PLUGIN_KEY, TEST_PLUGIN_KEY2, NULL
     };
 
     return test_plugin_keys;
@@ -635,12 +767,15 @@ test_plugin_config_get_value(
 {
     TestPlugin* self = TEST_PLUGIN(config);
 
+    /* OK to return a floating reference */
     if (!g_strcmp0(key, TEST_PLUGIN_KEY)) {
-        /* OK to return a floating reference */
         return g_variant_new_string(self->value);
-    } else {
-        return NULL;
+    } else if (!g_strcmp0(key, TEST_PLUGIN_KEY2)) {
+        if (self->value2) {
+            return g_variant_new_string(self->value2);
+        }
     }
+    return NULL;
 }
 
 static
@@ -667,6 +802,24 @@ test_plugin_config_set_value(
             GDEBUG("%s: %s => %s", key, self->value, newval);
             g_free(self->value);
             self->value = g_strdup(newval);
+            g_signal_emit(self, test_plugin_signals
+                [TEST_CONFIG_VALUE_CHANGED], g_quark_from_string(key),
+                key, value);
+        }
+    } else if (!g_strcmp0(key, TEST_PLUGIN_KEY2)) {
+        const char* newval = NULL;
+
+        if (!value) {
+            ok = TRUE;
+        } else if (g_variant_is_of_type(value, G_VARIANT_TYPE_STRING)) {
+            newval = g_variant_get_string(value, NULL);
+            ok = TRUE;
+        }
+
+        if (ok && g_strcmp0(self->value, newval)) {
+            GDEBUG("%s: %s => %s", key, self->value2, newval);
+            g_free(self->value2);
+            self->value2 = g_strdup(newval);
             g_signal_emit(self, test_plugin_signals
                 [TEST_CONFIG_VALUE_CHANGED], g_quark_from_string(key),
                 key, value);
@@ -698,6 +851,145 @@ test_plugin_config_init(
     iface->get_value = test_plugin_config_get_value;
     iface->set_value = test_plugin_config_set_value;
     iface->add_change_handler = test_plugin_config_add_change_handler;
+}
+
+/*==========================================================================*
+ * Dummy dbus_neard plugin (to test migration)
+ *==========================================================================*/
+
+typedef NfcPluginClass TestDBusNeardPluginClass;
+typedef struct test_dbus_neard_plugin {
+    NfcPlugin plugin;
+    gboolean value;
+} TestDBusNeardPlugin;
+
+#define DBUS_NEARD_PLUGIN_KEY "BluetoothStaticHandover"
+#define DBUS_NEARD_PLUGIN_DEFAULT_VALUE FALSE
+
+static void test_dbus_neard_plugin_config_init(NfcConfigurableInterface* intf);
+G_DEFINE_TYPE_WITH_CODE(TestDBusNeardPlugin, test_dbus_neard_plugin,
+NFC_TYPE_PLUGIN, G_IMPLEMENT_INTERFACE(NFC_TYPE_CONFIGURABLE,
+test_dbus_neard_plugin_config_init))
+#define TEST_TYPE_DBUS_NEARD_PLUGIN (test_dbus_neard_plugin_get_type())
+#define TEST_DBUS_NEARD_PLUGIN(obj) (G_TYPE_CHECK_INSTANCE_CAST(obj, \
+        TEST_TYPE_DBUS_NEARD_PLUGIN, TestDBusNeardPlugin))
+#define TEST_DBUS_NEARD_CONFIG_VALUE_CHANGED_NAME \
+        "test-dbus_neard-plugin-config-value-changed"
+enum test_dbus_neard_plugin_signal {
+     TEST_DBUS_NEARD_CONFIG_VALUE_CHANGED,
+     TEST_DBUS_NEARD_SIGNALS
+};
+static guint test_dbus_neard_plugin_signals[TEST_DBUS_NEARD_SIGNALS] = { 0 };
+
+static
+NfcPlugin*
+test_dbus_neard_plugin_create(
+    void)
+{
+    return g_object_new(TEST_TYPE_DBUS_NEARD_PLUGIN, NULL);
+}
+
+static
+void
+test_dbus_neard_plugin_init(
+    TestDBusNeardPlugin* self)
+{
+    self->value = DBUS_NEARD_PLUGIN_DEFAULT_VALUE;
+}
+
+static
+void
+test_dbus_neard_plugin_class_init(
+    NfcPluginClass* klass)
+{
+    klass->start = test_plugin_start; /* Reusable */
+    test_dbus_neard_plugin_signals[TEST_DBUS_NEARD_CONFIG_VALUE_CHANGED] =
+        g_signal_new(TEST_DBUS_NEARD_CONFIG_VALUE_CHANGED_NAME,
+            G_OBJECT_CLASS_TYPE(klass), G_SIGNAL_RUN_FIRST |
+            G_SIGNAL_DETAILED, 0, NULL, NULL, NULL,
+            G_TYPE_NONE, 2, G_TYPE_STRING, G_TYPE_VARIANT);
+}
+
+static
+const char* const*
+test_dbus_neard_config_get_keys(
+    NfcConfigurable* config)
+{
+    static const char* const test_dbus_neard_plugin_keys[] = {
+        DBUS_NEARD_PLUGIN_KEY, NULL
+    };
+
+    return test_dbus_neard_plugin_keys;
+}
+
+static
+GVariant*
+test_dbus_neard_config_get_value(
+    NfcConfigurable* config,
+    const char* key)
+{
+    /* OK to return a floating reference */
+    if (!g_strcmp0(key, DBUS_NEARD_PLUGIN_KEY)) {
+        return g_variant_new_boolean(TEST_DBUS_NEARD_PLUGIN(config)->value);
+    }
+    return NULL;
+}
+
+static
+gboolean
+test_dbus_neard_config_set_value(
+    NfcConfigurable* config,
+    const char* key,
+    GVariant* value)
+{
+    gboolean ok = FALSE;
+
+    if (!g_strcmp0(key, DBUS_NEARD_PLUGIN_KEY)) {
+        TestDBusNeardPlugin* self = TEST_DBUS_NEARD_PLUGIN(config);
+        gboolean newval = DBUS_NEARD_PLUGIN_DEFAULT_VALUE;
+
+        if (!value) {
+            ok = TRUE;
+        } else if (g_variant_is_of_type(value, G_VARIANT_TYPE_BOOLEAN)) {
+            newval = g_variant_get_boolean(value);
+            ok = TRUE;
+        }
+
+        if (ok && self->value != newval) {
+            GDEBUG("%s: %s => %s", key, self->value ? "true" : "false",
+                newval ? "true" : "false");
+            self->value = newval;
+            g_signal_emit(self, test_dbus_neard_plugin_signals
+                [TEST_DBUS_NEARD_CONFIG_VALUE_CHANGED],
+                g_quark_from_string(key), key, value);
+        }
+    }
+    return ok;
+}
+
+static
+gulong
+test_dbus_neard_config_add_change_handler(
+    NfcConfigurable* config,
+    const char* key,
+    NfcConfigChangeFunc func,
+    void* user_data)
+{
+    return g_signal_connect_closure_by_id(TEST_DBUS_NEARD_PLUGIN(config),
+        test_dbus_neard_plugin_signals[TEST_DBUS_NEARD_CONFIG_VALUE_CHANGED],
+        key ? g_quark_from_string(key) : 0,
+        g_cclosure_new(G_CALLBACK(func), user_data, NULL), FALSE);
+}
+
+static
+void
+test_dbus_neard_plugin_config_init(
+    NfcConfigurableInterface* iface)
+{
+    iface->get_keys = test_dbus_neard_config_get_keys;
+    iface->get_value = test_dbus_neard_config_get_value;
+    iface->set_value = test_dbus_neard_config_set_value;
+    iface->add_change_handler = test_dbus_neard_config_add_change_handler;
 }
 
 /*==========================================================================*
@@ -904,7 +1196,7 @@ test_defaults_load_done(
     GAsyncResult* result,
     gpointer user_data)
 {
-    test_get_plugin_value_done(object, result, user_data, "foo");
+    test_get_plugin_string_value_done(object, result, user_data, "foo");
 }
 
 static
@@ -1002,7 +1294,7 @@ test_defaults_override_done(
 
     /* Since all values are default, there was need to save the settings */
     g_assert(!g_file_test(test->storage_file, G_FILE_TEST_EXISTS));
-    test_get_plugin_value_done(object, result, test, "bar");
+    test_get_plugin_string_value_done(object, result, test, "bar");
 }
 
 static
@@ -1079,7 +1371,7 @@ test_defaults_no_override_done(
 
     /* Since all values are default, there was need to save the settings */
     g_assert(!g_file_test(test->storage_file, G_FILE_TEST_EXISTS));
-    test_get_plugin_value_done(object, result, test, "foo");
+    test_get_plugin_string_value_done(object, result, test, "foo");
 }
 
 static
@@ -1153,59 +1445,10 @@ void
 test_config_load_done(
     GObject* client,
     GAsyncResult* result,
-    gpointer user_data)
+    gpointer test)
 {
-    TestData* test = user_data;
-    GKeyFile* config = g_key_file_new();
-
-    test_call_ok_done(client, result, test);
-
-    /*
-     * The config file is there but the value has been removed because
-     * it now matches the default.
-     */
-    g_assert(g_key_file_load_from_file(config, test->storage_file, 0, NULL));
-    g_assert(!g_key_file_get_value(config, TEST_PLUGIN_NAME,
-        TEST_PLUGIN_KEY, NULL));
-    g_assert(!g_key_file_get_value(config, SETTINGS_GROUP,
-        SETTINGS_KEY_ENABLED, NULL));
-    g_key_file_unref(config);
-}
-
-static
-void
-test_config_load_enabled(
-    GObject* object,
-    GAsyncResult* result,
-    gpointer user_data)
-{
-    TestData* test = user_data;
-    GDBusConnection* client = G_DBUS_CONNECTION(object);
-
-    test_call_ok_check(client, result);
-    g_assert(test->manager->enabled);
-
-    /* Set the plugin value matching the default loaded from the file */
-    test_call_set_plugin_value(test, client, TEST_PLUGIN_NAME, TEST_PLUGIN_KEY,
-        g_variant_new_variant(g_variant_new_string("bar")),
-        test_config_load_done);
-}
-
-static
-void
-test_config_load_check(
-    GObject* object,
-    GAsyncResult* result,
-    gpointer user_data)
-{
-    TestData* test = user_data;
-    GDBusConnection* client = G_DBUS_CONNECTION(object);
-
     /* Value is taken from the config */
-    test_get_plugin_value_check(client, result, user_data, "foo");
-
-    /* Set Enabled value that matches the default loaded from the file */
-    test_call_set_enabled(test, client, TRUE, test_config_load_enabled);
+    test_get_plugin_string_value_done(client, result, (TestData*) test, "foo");
 }
 
 static
@@ -1219,7 +1462,7 @@ test_config_load_start(
 
     g_assert(!test->manager->enabled);
     test_call_get_plugin_value(test, client, TEST_PLUGIN_NAME, TEST_PLUGIN_KEY,
-        test_config_load_check);
+        test_config_load_done);
 }
 
 static
@@ -1250,6 +1493,147 @@ test_config_load(
         "[" TEST_PLUGIN_NAME "]\n"
         TEST_PLUGIN_KEY "='foo'\n",
         test_config_load_prestart, test_config_load_start);
+}
+
+/*==========================================================================*
+ * config/save
+ *==========================================================================*/
+
+static
+void
+test_config_save_done(
+    GObject* client,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    GKeyFile* config = g_key_file_new();
+    GError* error = NULL;
+
+    g_assert(!test->manager->enabled);
+    test_call_ok_done(client, result, test);
+
+    /* Verify that the "Enabled" value has been saved */
+    g_assert(g_key_file_load_from_file(config, test->storage_file, 0, NULL));
+    g_assert(!g_key_file_get_boolean(config, SETTINGS_GROUP,
+        SETTINGS_KEY_ENABLED, &error));
+    g_assert(!error);
+
+    g_key_file_unref(config);
+}
+
+static
+void
+test_config_save_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+
+    g_assert(test->manager->enabled);
+    test_call_set_enabled(test, client, FALSE, test_config_save_done);
+}
+
+static
+void
+test_config_save(
+    void)
+{
+    test_normal2(NULL, test_config_save_start);
+}
+
+/*==========================================================================*
+ * migrate
+ *==========================================================================*/
+
+static
+void
+test_migrate_done(
+    GObject* client,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    GKeyFile* config = g_key_file_new();
+    GError* error = NULL;
+
+    test_get_plugin_boolean_value_done(client, result, test,
+        DBUS_NEARD_PLUGIN_DEFAULT_VALUE);
+
+    /* Verify that the "BluetoothStaticHandover" value has been migrated */
+    g_assert(g_key_file_load_from_file(config, test->storage_file, 0, NULL));
+    g_assert_cmpint(g_key_file_get_boolean(config, TEST_DBUS_NEARD_PLUGIN_NAME,
+        DBUS_NEARD_PLUGIN_KEY, &error), == ,DBUS_NEARD_PLUGIN_DEFAULT_VALUE);
+    g_assert(!error);
+
+    g_key_file_unref(config);
+}
+
+static
+void
+test_migrate_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* test)
+{
+    test_call_get_plugin_value(test, client, TEST_DBUS_NEARD_PLUGIN_NAME,
+        DBUS_NEARD_PLUGIN_KEY, test_migrate_done);
+}
+
+static
+void
+test_migrate(
+    void)
+{
+    test_normal4(NULL, NULL, test_migrate_start);
+}
+
+/*==========================================================================*
+ * no_migrate
+ *==========================================================================*/
+
+static
+void
+test_no_migrate_done(
+    GObject* client,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    GKeyFile* config = g_key_file_new();
+    GError* error = NULL;
+
+    test_get_plugin_boolean_value_done(client, result, test,
+        !DBUS_NEARD_PLUGIN_DEFAULT_VALUE);
+
+    /* Verify that the "BluetoothStaticHandover" value stays unchanged */
+    g_assert(g_key_file_load_from_file(config, test->storage_file, 0, NULL));
+    g_assert_cmpint(g_key_file_get_boolean(config, TEST_DBUS_NEARD_PLUGIN_NAME,
+        DBUS_NEARD_PLUGIN_KEY, &error), == ,!DBUS_NEARD_PLUGIN_DEFAULT_VALUE);
+    g_assert(!error);
+
+    g_key_file_unref(config);
+}
+
+static
+void
+test_no_migrate_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* test)
+{
+    test_call_get_plugin_value(test, client, TEST_DBUS_NEARD_PLUGIN_NAME,
+        DBUS_NEARD_PLUGIN_KEY, test_no_migrate_done);
+}
+
+static
+void
+test_no_migrate(
+    void)
+{
+    test_normal4("[" TEST_DBUS_NEARD_PLUGIN_NAME "]\n"
+        DBUS_NEARD_PLUGIN_KEY "=true\n", NULL, test_no_migrate_start);
 }
 
 /*==========================================================================*
@@ -1394,23 +1778,11 @@ test_get_interface_version_access_denied(
 static
 void
 test_get_enabled_ok_done(
-    GObject* object,
+    GObject* client,
     GAsyncResult* result,
     gpointer user_data)
 {
-    TestData* test = user_data;
-    gboolean enabled = 0;
-    GError* error = NULL;
-    GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
-        result, &error);
-
-    g_assert(var);
-    g_assert(!error);
-    g_variant_get(var, "(b)", &enabled);
-    GDEBUG("enabled=%d", enabled);
-    g_assert(enabled);
-    g_variant_unref(var);
-    test_quit_later(test->loop);
+    test_get_enabled_done(client, result, (TestData*) user_data, TRUE);
 }
 
 static
@@ -1457,23 +1829,62 @@ test_get_enabled_access_denied(
  * set_enabled/ok
  *==========================================================================*/
 
+#define TEST_SET_ENABLED_VALUE FALSE
+
+static
+void
+test_set_enabled_ok_signal(
+    GDBusConnection* connection,
+    const char* sender,
+    const char* path,
+    const char* iface,
+    const char* name,
+    GVariant* args,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    gboolean enabled;
+
+    g_variant_get(args, "(b)", &enabled);
+    g_assert_cmpint(enabled, == ,TEST_SET_ENABLED_VALUE);
+    GDEBUG("%s %s", name, enabled ? "true" : "false");
+
+    /* test_set_enabled_ok_done will check this flags */
+    g_assert_cmpint(test->flags, == ,0);
+    test->flags |= TEST_ENABLED_CHANGED_SIGNAL_FLAG;
+}
+
 static
 void
 test_set_enabled_ok_done(
+    GObject* client,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+
+    g_assert(!test->manager->enabled);
+    g_assert_cmpint(test->flags, == ,TEST_ENABLED_CHANGED_SIGNAL_FLAG);
+    test_call_ok_done(client, result, test);
+}
+
+static
+void
+test_set_enabled_ok_repeat(
     GObject* object,
     GAsyncResult* result,
     gpointer user_data)
 {
     TestData* test = user_data;
-    GError* error = NULL;
-    GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
-        result, &error);
+    GDBusConnection* client = G_DBUS_CONNECTION(object);
 
     g_assert(!test->manager->enabled);
-    g_assert(var);
-    g_assert(!error);
-    g_variant_unref(var);
-    test_quit_later(test->loop);
+    g_assert_cmpint(test->flags, == ,TEST_ENABLED_CHANGED_SIGNAL_FLAG);
+    test_call_ok_check(client, result);
+
+    /* Second time around there won't be any signals */
+    test_call_set_enabled(test, client, TEST_SET_ENABLED_VALUE,
+        test_set_enabled_ok_done);
 }
 
 static
@@ -1485,8 +1896,14 @@ test_set_enabled_ok_start(
 {
     TestData* test = user_data;
 
+    g_assert(g_dbus_connection_signal_subscribe(client, NULL,
+        SETTINGS_DBUS_INTERFACE, "EnabledChanged",
+        SETTINGS_DBUS_PATH, NULL, G_DBUS_SIGNAL_FLAGS_NO_MATCH_RULE,
+        test_set_enabled_ok_signal, test, NULL));
+
     g_assert(test->manager->enabled);
-    test_call_set_enabled(test, client, FALSE, test_set_enabled_ok_done);
+    test_call_set_enabled(test, client, TEST_SET_ENABLED_VALUE,
+        test_set_enabled_ok_repeat);
 }
 
 static
@@ -1836,7 +2253,7 @@ test_get_plugin_value_default_done(
     GAsyncResult* result,
     gpointer user_data)
 {
-    test_get_plugin_value_done(object, result, user_data,
+    test_get_plugin_string_value_done(object, result, user_data,
         TEST_PLUGIN_DEFAULT_VALUE);
 }
 
@@ -1870,7 +2287,7 @@ test_get_plugin_value_load_done(
     GAsyncResult* result,
     gpointer user_data)
 {
-    test_get_plugin_value_done(object, result, user_data,
+    test_get_plugin_string_value_done(object, result, user_data,
         TEST_PLUGIN_NON_DEFAULT_VALUE);
 }
 
@@ -1988,11 +2405,44 @@ test_get_plugin_value_unknown_key(
 }
 
 /*==========================================================================*
+ * get_plugin_value/unknown_value
+ *==========================================================================*/
+
+static
+void
+test_get_plugin_value_unknown_value_done(
+    GObject* client,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    test_done_with_error(client, result, (TestData*) user_data,
+        SETTINGS_ERROR_UNKNOWN_VALUE);
+}
+
+static
+void
+test_get_plugin_value_unknown_value_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* test)
+{
+    test_call_get_plugin_value(test, client, TEST_PLUGIN_NAME, TEST_PLUGIN_KEY2,
+        test_get_plugin_value_unknown_value_done);
+}
+
+static
+void
+test_get_plugin_value_unknown_value(
+    void)
+{
+    test_normal2(NULL, test_get_plugin_value_unknown_value_start);
+}
+
+/*==========================================================================*
  * set_plugin_value/ok
  *==========================================================================*/
 
 #define TEST_SET_PLUGIN_VALUE_OK_NEW_VALUE "foo"
-#define TEST_SET_PLUGIN_VALUE_OK_SIGNAL 0x01
 
 static
 void
@@ -2025,39 +2475,57 @@ test_set_plugin_value_ok_signal(
     g_variant_unref(string);
 
     /* test_set_plugin_value_ok_done will check this flags */
-    g_assert(!(test->flags & TEST_SET_PLUGIN_VALUE_OK_SIGNAL));
-    test->flags |= TEST_SET_PLUGIN_VALUE_OK_SIGNAL;
+    g_assert_cmpint(test->flags, == ,0);
+    test->flags |= TEST_PLUGIN_VALUE_CHANGED_SIGNAL_FLAG;
+}
+
+static
+void
+test_set_plugin_value_ok_check_config(
+    TestData* test)
+{
+    test_check_config_file_value(test, TEST_PLUGIN_NAME, TEST_PLUGIN_KEY,
+        "'" TEST_SET_PLUGIN_VALUE_OK_NEW_VALUE "'");
 }
 
 static
 void
 test_set_plugin_value_ok_done(
-    GObject* object,
+    GObject* client,
     GAsyncResult* result,
     gpointer user_data)
 {
     TestData* test = user_data;
-    GError* error = NULL;
-    GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
-      result, &error);
-    GKeyFile* conf = g_key_file_new();
-    char* str;
 
-    g_assert(!error);
-    g_assert(var);
-    g_variant_unref(var);
+    /* Make sure the new value is still there */
+    test_set_plugin_value_ok_check_config(test);
+    test_call_ok_done(client, result, test);
+}
+
+static
+void
+test_set_plugin_value_ok_repeat(
+    GObject* object,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    GDBusConnection* client = G_DBUS_CONNECTION(object);
+    TestData* test = user_data;
+
+    test_call_ok_check(client, result);
 
     /* We must have received the signal */
-    g_assert((test->flags & TEST_SET_PLUGIN_VALUE_OK_SIGNAL) != 0);
+    g_assert_cmpint(test->flags, == ,TEST_PLUGIN_VALUE_CHANGED_SIGNAL_FLAG);
 
     /* Make sure the new value is saved */
-    g_assert(g_key_file_load_from_file(conf, test->storage_file, 0, NULL));
-    str = g_key_file_get_string(conf, TEST_PLUGIN_NAME, TEST_PLUGIN_KEY, NULL);
-    g_assert_cmpstr(str, == ,"'" TEST_SET_PLUGIN_VALUE_OK_NEW_VALUE "'");
-    g_key_file_unref(conf);
-    g_free(str);
+    test_check_config_file_value(test, TEST_PLUGIN_NAME, TEST_PLUGIN_KEY,
+        "'" TEST_SET_PLUGIN_VALUE_OK_NEW_VALUE "'");
 
-    test_quit_later(test->loop);
+    /* There won't be any signals if we're settings the save value again */
+    test_call_set_plugin_value(test, client, TEST_PLUGIN_NAME, TEST_PLUGIN_KEY,
+        g_variant_new_variant(g_variant_new_string(
+        TEST_SET_PLUGIN_VALUE_OK_NEW_VALUE)),
+        test_set_plugin_value_ok_done);
 }
 
 static
@@ -2074,7 +2542,7 @@ test_set_plugin_value_ok_start(
     test_call_set_plugin_value(test, client, TEST_PLUGIN_NAME, TEST_PLUGIN_KEY,
         g_variant_new_variant(g_variant_new_string(
         TEST_SET_PLUGIN_VALUE_OK_NEW_VALUE)),
-        test_set_plugin_value_ok_done);
+        test_set_plugin_value_ok_repeat);
 }
 
 static
@@ -2197,6 +2665,9 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("defaults/override"), test_defaults_override);
     g_test_add_func(TEST_("defaults/no_override"), test_defaults_no_override);
     g_test_add_func(TEST_("config/load"), test_config_load);
+    g_test_add_func(TEST_("config/save"), test_config_save);
+    g_test_add_func(TEST_("migrate"), test_migrate);
+    g_test_add_func(TEST_("no_migrate"), test_no_migrate);
     g_test_add_func(TEST_("get_all/ok"), test_get_all_ok);
     g_test_add_func(TEST_("get_all/access_denied"),
         test_get_all_access_denied);
@@ -2237,6 +2708,8 @@ int main(int argc, char* argv[])
         test_get_plugin_value_unknown_plugin);
     g_test_add_func(TEST_("get_plugin_value/unknown_key"),
         test_get_plugin_value_unknown_key);
+    g_test_add_func(TEST_("get_plugin_value/unknown_value"),
+        test_get_plugin_value_unknown_value);
     g_test_add_func(TEST_("set_plugin_value/ok"),
         test_set_plugin_value_ok);
     g_test_add_func(TEST_("set_plugin_value/access_denied"),
