@@ -18,8 +18,21 @@
         4 - Type 3 Tag
         8 - Type 4A Tag (ISO-DEP, ISO 14443)
         16 - Type 4B Tag,(ISO-DEP, ISO 14443)
+        32 - NFC-DEP Protocol (ISO 18092)
 
       The above codes are bitmasks elsewhere, but here used as enum values.
+
+      Poll Parameters:
+
+        NFC-A:
+          "SEL_RES"  - "ay", SEL_RES Response
+          "NFCID1"   - "ay", Device identifier
+
+        NFC-B:
+          "NFCID0"   - "ay", NFCID0 (device identifier) part of SENSB_RES
+          "APPDATA"  - "ay", Application Data part of SENSB_RES
+          "PROTINFO" - "ay", Protocol Info part of SENSB_RES
+
     -->
     <method name="GetAll">
       <arg name="version" type="i" direction="out"/>
@@ -67,10 +80,10 @@
       <arg name="type" type="u" direction="out"/>
       <arg name="interfaces" type="as" direction="out"/>
       <arg name="ndef_records" type="ao" direction="out"/>
-      <arg name="parameters" type="a{sv}" direction="out"/>
+      <arg name="poll_parameters" type="a{sv}" direction="out"/>
     </method>
     <method name="GetPollParameters">
-      <arg name="parameters" type="a{sv}" direction="out"/>
+      <arg name="poll_parameters" type="a{sv}" direction="out"/>
     </method>
     <!-- Interface version 4 -->
     <method name="Transceive">
@@ -84,7 +97,7 @@
     <!-- Interface version 5 -->
     <method name="Acquire2"> <!-- Allows presense check -->
       <arg name="wait" type="b" direction="in"/>
-   </method>
-   <method name="Release2"/> <!-- Matches Acquire2 -->
+    </method>
+    <method name="Release2"/> <!-- Matches Acquire2 -->
   </interface>
 </node>
