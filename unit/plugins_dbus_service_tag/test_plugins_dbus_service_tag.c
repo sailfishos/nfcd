@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2019-2021 Jolla Ltd.
- * Copyright (C) 2019-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019-2022 Jolla Ltd.
+ * Copyright (C) 2019-2022 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
@@ -99,6 +99,7 @@ void
 test_data_cleanup(
     TestData* test)
 {
+    nfc_manager_stop(test->manager, 0);
     if (test->connection) {
         g_object_unref(test->connection);
     }
@@ -2386,6 +2387,23 @@ test_transceive_error2(
     test_dbus_free(dbus);
 }
 
+static
+void
+test_transceive_error3(
+    void)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_data_init(&test);
+    /* Simulate transmission error */
+    TEST_TARGET(test.adapter->tags[0]->target)->fail_transmit++;
+    dbus = test_dbus_new(test_transceive_error_start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
 /*==========================================================================*
  * Common
  *==========================================================================*/
@@ -2427,6 +2445,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("transceive/ok"), test_transceive_ok);
     g_test_add_func(TEST_("transceive/error1"), test_transceive_error1);
     g_test_add_func(TEST_("transceive/error2"), test_transceive_error2);
+    g_test_add_func(TEST_("transceive/error3"), test_transceive_error3);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }
