@@ -218,6 +218,10 @@ test_dbus_free(
         if (self->start_id) {
             g_source_remove(self->start_id);
         }
+        g_assert(g_dbus_connection_close_sync(self->client_connection,
+            NULL, NULL));
+        g_assert(g_dbus_connection_close_sync(self->server_connection,
+            NULL, NULL));
         g_object_unref(self->client_connection);
         g_object_unref(self->server_connection);
         g_assert_cmpint(close(self->fd[0]), == ,0);
