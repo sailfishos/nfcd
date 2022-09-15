@@ -46,10 +46,10 @@
 #include "test_adapter.h"
 #include "test_target.h"
 #include "test_dbus.h"
+#include "test_name_watch.h"
 
 #include <gutil_idlepool.h>
 
-#define NFC_SERVICE "org.sailfishos.nfc.daemon"
 #define NFC_TAG_INTERFACE "org.sailfishos.nfc.Tag"
 #define MIN_INTERFACE_VERSION (5)
 
@@ -57,8 +57,6 @@ static TestOpt test_opt;
 static const char test_sender_1[] = ":1.1";
 static const char test_sender_2[] = ":1.2";
 static const char* test_sender = test_sender_1;
-static GSList* test_name_watches = NULL;
-static guint test_name_watches_last_id = 0;
 
 typedef struct test_data {
     GMainLoop* loop;
@@ -78,7 +76,7 @@ test_data_init(
     NfcTarget* target;
     NfcParamPoll poll;
 
-    g_assert(!test_name_watches);
+    g_assert(!test_name_watch_count());
     memset(test, 0, sizeof(*test));
     memset(&pi, 0, sizeof(pi));
     g_assert((test->manager = nfc_manager_new(&pi)) != NULL);
@@ -108,7 +106,7 @@ test_data_cleanup(
     dbus_service_adapter_free(test->service);
     g_main_loop_unref(test->loop);
     gutil_idle_pool_destroy(test->pool);
-    g_assert(!test_name_watches);
+    g_assert(!test_name_watch_count());
 }
 
 static
@@ -282,115 +280,13 @@ test_start_and_get(
 
 /*==========================================================================*
  * Stubs
- *
- * Peer-to-peer D-Bus connection doesn't fully simulate the real bus
- * connection. Some tricks are necessary.
  *==========================================================================*/
-
-typedef struct test_name_watch {
-    guint id;
-    char* name;
-    GDBusConnection* connection;
-    GBusNameVanishedCallback name_vanished;
-    GDestroyNotify destroy;
-    gpointer user_data;
-    guint name_vanished_id;
-} TestNameWatch;
-
-static
-void
-test_name_watch_free(
-    TestNameWatch* watch)
-{
-    if (watch->destroy) {
-        watch->destroy(watch->user_data);
-    }
-    if (watch->name_vanished_id) {
-        g_source_remove(watch->name_vanished_id);
-    }
-    g_object_unref(watch->connection);
-    g_free(watch->name);
-    g_free(watch);
-}
-
-static
-gboolean
-test_name_watch_vanished(
-    void* data)
-{
-    TestNameWatch* watch = data;
-
-    watch->name_vanished_id = 0;
-    watch->name_vanished(watch->connection, watch->name, watch->user_data);
-    return G_SOURCE_REMOVE;
-}
-
-static
-void
-test_name_watch_vanish(
-    const char* name)
-{
-    GSList* l;
-
-    for (l = test_name_watches; l; l = l->next) {
-        TestNameWatch* watch = l->data;
-
-        if (!strcmp(watch->name, name)) {
-            if (watch->name_vanished && !watch->name_vanished_id) {
-                watch->name_vanished_id = g_idle_add(test_name_watch_vanished,
-                    watch);
-            }
-            return;
-        }
-    }
-    g_assert_not_reached();
-}
 
 const char*
 g_dbus_method_invocation_get_sender(
     GDBusMethodInvocation* call)
 {
     return test_sender;
-}
-
-guint
-g_bus_watch_name_on_connection(
-    GDBusConnection* connection,
-    const gchar* name,
-    GBusNameWatcherFlags flags,
-    GBusNameAppearedCallback name_appeared,
-    GBusNameVanishedCallback name_vanished,
-    gpointer user_data,
-    GDestroyNotify destroy)
-{
-    TestNameWatch* watch = g_new0(TestNameWatch, 1);
-
-    watch->id = ++test_name_watches_last_id;
-    watch->name = g_strdup(name);
-    watch->name_vanished = name_vanished;
-    watch->destroy = destroy;
-    watch->user_data = user_data;
-    g_object_ref(watch->connection = connection);
-    test_name_watches = g_slist_append(test_name_watches, watch);
-    return watch->id;
-}
-
-void
-g_bus_unwatch_name(
-    guint id)
-{
-    GSList* l;
-
-    for (l = test_name_watches; l; l = l->next) {
-        TestNameWatch* watch = l->data;
-
-        if (watch->id == id) {
-            test_name_watches = g_slist_delete_link(test_name_watches, l);
-            test_name_watch_free(watch);
-            return;
-        }
-    }
-    g_assert_not_reached();
 }
 
 /*==========================================================================*
@@ -2001,7 +1897,7 @@ test_data_init_tag_b(
     NfcTarget* target;
     NfcParamPoll poll;
 
-    g_assert(!test_name_watches);
+    g_assert(!test_name_watch_count());
     memset(test, 0, sizeof(*test));
     memset(&pi, 0, sizeof(pi));
     g_assert((test->manager = nfc_manager_new(&pi)) != NULL);
@@ -2135,7 +2031,7 @@ test_data_init_tag_a(
     NfcTarget* target;
     NfcParamPoll poll;
 
-    g_assert(!test_name_watches);
+    g_assert(!test_name_watch_count());
     memset(test, 0, sizeof(*test));
     memset(&pi, 0, sizeof(pi));
     g_assert((test->manager = nfc_manager_new(&pi)) != NULL);

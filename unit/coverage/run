@@ -36,6 +36,7 @@ plugins_dbus_handlers_type_sp \
 plugins_dbus_handlers_type_text \
 plugins_dbus_handlers_type_uri \
 plugins_dbus_service_adapter \
+plugins_dbus_service_isodep \
 plugins_dbus_service_peer \
 plugins_dbus_service_plugin \
 plugins_dbus_service_tag \
