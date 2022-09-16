@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -31,6 +31,8 @@
  */
 
 #include "dbus_service.h"
+#include "dbus_service_util.h"
+
 #include "dbus_service/org.sailfishos.nfc.TagType2.h"
 
 #include <nfc_tag_t2.h>
@@ -78,18 +80,6 @@ typedef struct dbus_service_tag_t2_async_call {
     g_bytes_new_with_free_func(g_variant_get_data(data), \
       g_variant_get_size(data), (GDestroyNotify) g_variant_unref, \
       g_variant_ref(data));
-
-static
-GVariant*
-dbus_service_tag_t2_dup_data_as_variant(
-    const void* data,
-    guint size)
-{
-    return size ?
-        g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE, data, size, 1) :
-        g_variant_new_from_data(G_VARIANT_TYPE("ay"), NULL, 0, TRUE,
-            NULL, NULL);
-}
 
 static
 GVariant*
@@ -258,7 +248,7 @@ dbus_service_tag_t2_handle_read_done(
 
     if (status == NFC_TRANSMIT_STATUS_OK) {
         org_sailfishos_nfc_tag_type2_complete_read(read->iface,
-            read->call, dbus_service_tag_t2_dup_data_as_variant(data, len));
+            read->call, dbus_service_dup_byte_array_as_variant(data, len));
     } else {
         g_dbus_method_invocation_return_error_literal(read->call,
             DBUS_SERVICE_ERROR, DBUS_SERVICE_ERROR_FAILED,
@@ -365,7 +355,7 @@ dbus_service_tag_t2_handle_read_data_done(
 
     if (status == NFC_TAG_T2_IO_STATUS_OK) {
         org_sailfishos_nfc_tag_type2_complete_read_data(read->iface,
-            read->call, dbus_service_tag_t2_dup_data_as_variant(data, len));
+            read->call, dbus_service_dup_byte_array_as_variant(data, len));
     } else {
         switch (status) {
         case NFC_TAG_T2_IO_STATUS_BAD_BLOCK:
@@ -423,7 +413,7 @@ dbus_service_tag_t2_handle_read_all_data_done(
 
     if (status == NFC_TAG_T2_IO_STATUS_OK) {
         org_sailfishos_nfc_tag_type2_complete_read_all_data(read->iface,
-            read->call, dbus_service_tag_t2_dup_data_as_variant(data, len));
+            read->call, dbus_service_dup_byte_array_as_variant(data, len));
     } else {
         g_dbus_method_invocation_return_error_literal(read->call,
             DBUS_SERVICE_ERROR, DBUS_SERVICE_ERROR_FAILED,
