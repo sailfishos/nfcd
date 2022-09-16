@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
@@ -42,6 +42,7 @@
 #include "nfc_log.h"
 
 #include <gutil_misc.h>
+#include <gutil_macros.h>
 
 /* Block size for Type 2 Tags is always 4 bytes according to
  * NFCForum-TS-Type-2-Tag_1.1 spec */
@@ -270,9 +271,14 @@ nfc_tag_t2_generate_id(
 static
 void
 nfc_tag_t2_cmd_destroy(
-    void* data)
+    void* user_data)
 {
-    g_slice_free(NfcTagType2Cmd, data);
+    NfcTagType2Cmd* cmd = user_data;
+
+    if (cmd->destroy) {
+        cmd->destroy(cmd->user_data);
+    }
+    gutil_slice_free(cmd);
 }
 
 static
