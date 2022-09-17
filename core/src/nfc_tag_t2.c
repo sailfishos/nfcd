@@ -397,7 +397,7 @@ nfc_tag_t2_read_data_free(
         g_source_remove(read->complete_id);
     }
     g_free(read->buffer);
-    g_slice_free(NfcTagType2ReadData, read);
+    gutil_slice_free(read);
 }
 
 static
@@ -1127,8 +1127,8 @@ nfc_tag_t2_read_data_seq(
                 priv->reads = g_hash_table_new_full(g_direct_hash,
                     g_direct_equal, NULL, nfc_tag_t2_read_data_free);
             }
-            g_hash_table_insert(priv->reads, GUINT_TO_POINTER(read->seq_id),
-                read);
+            g_hash_table_insert(priv->reads,
+                GUINT_TO_POINTER(read->seq_id), read);
 
             end_block = (offset + read->size + block_size - 1) / block_size;
             nfc_tag_t2_data_block_to_sector(self, start_block, NULL, &valid);
@@ -1156,14 +1156,21 @@ nfc_tag_t2_read_data_seq(
             if (start_block == end_block) {
                 /* Everything was cached - call completion on a fresh stack */
                 read->complete_id = g_idle_add(nfc_tag_t2_read_complete, read);
+                return read->seq_id;
             } else {
                 /* We actually need to read something */
                 read->seq = seq ? nfc_target_sequence_ref(seq) :
                     nfc_target_sequence_new(self->tag.target);
                 read->cmd_id = nfc_tag_t2_cmd_read(self, header_blocks +
                     start_block, read->seq, nfc_tag_t2_read_resp, NULL, read);
+                if (read->cmd_id) {
+                    return read->seq_id;
+                }
+                /* Read failed */
+                read->destroy = NULL;
+                g_hash_table_remove(priv->reads,
+                    GUINT_TO_POINTER(read->seq_id));
             }
-            return read->seq_id;
         }
     }
     return 0;
@@ -1274,12 +1281,17 @@ nfc_tag_t2_write_seq(
                 sector_number, offset, bytes, seq, G_CALLBACK(complete),
                 destroy, user_data);
 
-            GDEBUG("Writing %u blocks starting at %u", (guint)
+            GDEBUG("Writing %u block(s) starting at %u", (guint)
                 (size / block_size), block);
             nfc_tag_t2_sector_invalidate(sector, block_size, block, 1);
             write->cmd_id = nfc_tag_t2_cmd_write(self, block, data,
                 write->seq, nfc_tag_t2_write_resp, NULL, write);
-            return write->seq_id;
+            if (write->cmd_id) {
+                return write->seq_id;
+            }
+            /* Write failed */
+            write->destroy = NULL;
+            g_hash_table_remove(priv->writes, GUINT_TO_POINTER(write->seq_id));
         }
     }
     return 0;
@@ -1336,6 +1348,9 @@ nfc_tag_t2_write_data_seq(
                 if (target->sequence == write->seq) {
                     /* Our sequence has started right away */
                     nfc_tag_t2_write_data_unaligned_start(write);
+                    if (write->cmd_id) {
+                        return write->seq_id;
+                    }
                 } else {
                     /* Even if the block is cached, we can't really do
                      * anything until our sequence starts, because the
@@ -1344,15 +1359,21 @@ nfc_tag_t2_write_data_seq(
                     GDEBUG("Write #%u is pending", write->seq_id);
                     write->start_id = nfc_target_add_sequence_handler(target,
                         nfc_tag_t2_write_data_unaligned_wait, write);
+                    return write->seq_id;
                 }
             } else {
                 nfc_tag_t2_sector_invalidate(sector, block_size,
                     start_block, 1);
                 write->cmd_id = nfc_tag_t2_cmd_write(self, start_block,
                     data, write->seq, nfc_tag_t2_write_data_resp, NULL, write);
+                if (write->cmd_id) {
+                    return write->seq_id;
+                }
             }
 
-            return write->seq_id;
+            /* Write failed */
+            write->destroy = NULL;
+            g_hash_table_remove(priv->writes, GUINT_TO_POINTER(write->seq_id));
         }
     }
     return 0;
