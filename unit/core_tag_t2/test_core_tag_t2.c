@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
@@ -37,6 +37,7 @@
 #include "nfc_ndef.h"
 
 #include "test_common.h"
+#include "test_target_t2.h"
 
 #include <gutil_log.h>
 #include <gutil_misc.h>
@@ -351,55 +352,10 @@ static const guint8 test_data_ntag216[] = { /* "https://www.merproject.org" */
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
-typedef struct test_target_error TestTargetError;
-typedef NfcTargetClass TestTargetClass;
-typedef struct test_target {
-    NfcTarget target;
-    guint transmit_id;
-    guint8* storage;
-    GUtilData data;
-    const TestTargetError* read_error;
-    const TestTargetError* write_error;
-} TestTarget;
-
-#define TEST_TARGET_READ_SIZE (16)
-#define TEST_TARGET_BLOCK_SIZE (4)
-#define TEST_FIRST_DATA_BLOCK (4)
-#define TEST_DATA_OFFSET (TEST_FIRST_DATA_BLOCK * TEST_TARGET_BLOCK_SIZE)
-G_DEFINE_TYPE(TestTarget, test_target, NFC_TYPE_TARGET)
-#define TEST_TYPE_TARGET (test_target_get_type())
-#define TEST_TARGET(obj) (G_TYPE_CHECK_INSTANCE_CAST(obj, \
-        TEST_TYPE_TARGET, TestTarget))
-
-typedef enum test_target_error_type {
-     TEST_TARGET_ERROR_TRANSMIT,
-     TEST_TARGET_ERROR_CRC,
-     TEST_TARGET_ERROR_NACK,
-     TEST_TARGET_ERROR_SHORT_RESP,
-     TEST_TARGET_ERROR_TIMEOUT
-} TEST_TARGET_ERROR_TYPE;
-
-struct test_target_error {
-    TEST_TARGET_ERROR_TYPE type;
-    guint block;
-};
-
-typedef struct test_target_read {
-    TestTarget* test;
-    guint block;
-} TestTargetRead;
-
-typedef struct test_target_write {
-    TestTarget* test;
-    guint block;
-    guint8* data;
-    guint size;
-} TestTargetWrite;
-
 static
 NfcTagType2*
 test_tag_new(
-    TestTarget* test,
+    TestTargetT2* test,
     guint8 sel_res)
 {
     static const guint8 nfcid1[] = {0x04, 0x9b, 0xfb, 0x4a, 0xeb, 0x2b, 0x80};
@@ -414,243 +370,6 @@ test_tag_new(
     return tag;
 }
 
-static
-TestTarget*
-test_target_new(
-     const guint8* bytes,
-     guint size)
-{
-     TestTarget* self = g_object_new(TEST_TYPE_TARGET, NULL);
-
-     self->target.technology = NFC_TECHNOLOGY_A;
-     self->data.bytes = self->storage = g_memdup(bytes, size);
-     self->data.size = size;
-     return self;
-}
-
-static
-gboolean
-test_target_read_done(
-    gpointer user_data)
-{
-    TestTargetRead* read = user_data;
-    TestTarget* test = read->test;
-    NfcTarget* target = &test->target;
-    const GUtilData* data = &test->data;
-    NFC_TRANSMIT_STATUS status = NFC_TRANSMIT_STATUS_OK;
-    guint offset = (read->block * TEST_TARGET_BLOCK_SIZE) % data->size;
-    guint8 buf[TEST_TARGET_READ_SIZE];
-    guint len = sizeof(buf);
-
-    g_assert(test->transmit_id);
-    test->transmit_id = 0;
-
-    if ((offset + TEST_TARGET_READ_SIZE) <= data->size) {
-        memcpy(buf, data->bytes + offset, TEST_TARGET_READ_SIZE);
-    } else {
-        const guint remain = (offset + TEST_TARGET_READ_SIZE) - data->size;
-
-        memcpy(buf, data->bytes + offset, TEST_TARGET_READ_SIZE - remain);
-        memcpy(buf + (TEST_TARGET_READ_SIZE - remain), data->bytes, remain);
-    }
-
-    if (test->read_error && test->read_error->block == read->block) {
-        switch (test->read_error->type) {
-        case TEST_TARGET_ERROR_TRANSMIT:
-            status = NFC_TRANSMIT_STATUS_ERROR;
-            len = 0;
-            break;
-        case TEST_TARGET_ERROR_CRC:
-            status = NFC_TRANSMIT_STATUS_CORRUPTED;
-            len = 0;
-            break;
-        case TEST_TARGET_ERROR_NACK:
-            status = NFC_TRANSMIT_STATUS_NACK;
-            buf[0] = 0;
-            len = 1;
-            break;
-        case TEST_TARGET_ERROR_SHORT_RESP:
-            buf[0] = 0x08; /* Neither ACK nor NACK */
-            len = 1;
-            break;
-        case TEST_TARGET_ERROR_TIMEOUT:
-            test->read_error = NULL;
-            /* To avoid glib assert on cancel */
-            test->transmit_id = g_timeout_add_seconds(SUPER_LONG_TIMEOUT,
-                test_timeout_expired, NULL);
-            /* Don't call nfc_target_transmit_done() */
-            return G_SOURCE_REMOVE;
-        }
-        test->read_error = NULL;
-    }
-
-    nfc_target_transmit_done(target, status, buf, len);
-    return G_SOURCE_REMOVE;
-}
-
-static
-gboolean
-test_target_write_done(
-    gpointer user_data)
-{
-    TestTargetWrite* write = user_data;
-    TestTarget* test = write->test;
-    NfcTarget* target = &test->target;
-    guint8 ack = 0xaa;
-    guint len = 1;
-    NFC_TRANSMIT_STATUS status = NFC_TRANSMIT_STATUS_OK;
-
-    g_assert(test->transmit_id);
-    test->transmit_id = 0;
-
-    if (test->write_error && test->write_error->block == write->block) {
-        switch (test->write_error->type) {
-        case TEST_TARGET_ERROR_TRANSMIT:
-            status = NFC_TRANSMIT_STATUS_ERROR;
-            len = 0;
-            break;
-        case TEST_TARGET_ERROR_CRC:
-            g_assert(FALSE);
-            break;
-        case TEST_TARGET_ERROR_NACK:
-            ack = 0;
-            break;
-        case TEST_TARGET_ERROR_SHORT_RESP:
-            g_assert(FALSE);
-            break;
-        case TEST_TARGET_ERROR_TIMEOUT:
-            test->read_error = NULL;
-            /* To avoid glib assert on cancel */
-            test->transmit_id = g_timeout_add_seconds(SUPER_LONG_TIMEOUT,
-                test_timeout_expired, NULL);
-            /* Don't call nfc_target_transmit_done() */
-            return G_SOURCE_REMOVE;
-        }
-        test->write_error = NULL;
-    } else {
-        const guint storage_size = test->data.size;
-        guint offset = (write->block * TEST_TARGET_BLOCK_SIZE) % storage_size;
-        guint size = write->size;
-        const guint8* src = write->data;
-
-        while (size > 0) {
-            if ((offset + size) <= storage_size) {
-                memcpy(test->storage + offset, src, size);
-                break;
-            } else {
-                const guint to_copy = storage_size - offset;
-
-                memcpy(test->storage + offset, src, to_copy);
-                size -= to_copy;
-                src += to_copy;
-                offset = 0;
-            }
-        }
-    }
-
-    nfc_target_transmit_done(target, status, &ack, len);
-    return G_SOURCE_REMOVE;
-}
-
-static
-void
-test_target_write_free(
-    gpointer user_data)
-{
-    TestTargetWrite* write = user_data;
-
-    g_free(write->data);
-    g_free(write);
-}
-
-static
-gboolean
-test_target_transmit(
-    NfcTarget* target,
-    const void* data,
-    guint len)
-{
-    TestTarget* test = TEST_TARGET(target);
-
-    g_assert(!test->transmit_id);
-    if (len > 0) {
-        const guint8* cmd = data;
-
-        switch (cmd[0]) {
-        case 0x30: /* READ */
-            if (len == 2) {
-                TestTargetRead* read = g_new(TestTargetRead, 1);
-
-                read->test = test;
-                read->block = cmd[1];
-                GDEBUG("Read block #%u", read->block);
-                test->transmit_id = g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,
-                    test_target_read_done, read, g_free);
-                return TRUE;
-            }
-            break;
-        case 0xa2: /* WRITE */
-            if (len >= 2) {
-                TestTargetWrite* write = g_new(TestTargetWrite, 1);
-
-                write->test = test;
-                write->block = cmd[1];
-                write->size = len - 2;
-                write->data = g_memdup(cmd + 2, write->size);
-                GDEBUG("Write block #%u, %u bytes", write->block, write->size);
-                test->transmit_id = g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,
-                    test_target_write_done, write, test_target_write_free);
-                return TRUE;
-            }
-            break;
-        }
-    }
-    return FALSE;
-}
-
-static
-void
-test_target_cancel_transmit(
-    NfcTarget* target)
-{
-    TestTarget* test = TEST_TARGET(target);
-
-    g_assert(test->transmit_id);
-    g_source_remove(test->transmit_id);
-    test->transmit_id = 0;
-}
-
-static
-void
-test_target_init(
-    TestTarget* self)
-{
-}
-
-static
-void
-test_target_finalize(
-    GObject* object)
-{
-    TestTarget* test = TEST_TARGET(object);
-
-    if (test->transmit_id) {
-        g_source_remove(test->transmit_id);
-    }
-    g_free(test->storage);
-    G_OBJECT_CLASS(test_target_parent_class)->finalize(object);
-}
-
-static
-void
-test_target_class_init(
-    NfcTargetClass* klass)
-{
-    klass->transmit = test_target_transmit;
-    klass->cancel_transmit = test_target_cancel_transmit;
-    G_OBJECT_CLASS(klass)->finalize = test_target_finalize;
-}
-
 /*==========================================================================*
  * null
  *==========================================================================*/
@@ -660,7 +379,7 @@ void
 test_null(
     void)
 {
-    NfcTarget* target = g_object_new(TEST_TYPE_TARGET, NULL);
+    NfcTarget* target = g_object_new(TEST_TYPE_TARGET_T2, NULL);
 
     /* Public interfaces are NULL tolerant */
     g_assert(!nfc_tag_t2_new(NULL, NULL));
@@ -693,7 +412,7 @@ test_basic_exit(
 static
 void
 test_basic_check_sel_res(
-    TestTarget* test,
+    TestTargetT2* test,
     guint8 sel_res,
     NFC_TAG_TYPE type)
 {
@@ -709,7 +428,8 @@ void
 test_basic(
     void)
 {
-    TestTarget* test = test_target_new(TEST_ARRAY_AND_SIZE(test_data_empty));
+    TestTargetT2* test = test_target_t2_new
+        (TEST_ARRAY_AND_SIZE(test_data_empty));
     NfcTagType2* t2 = test_tag_new(test, 0);
     NfcTag* tag = &t2->tag;
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
@@ -762,7 +482,7 @@ test_unsup(
     gconstpointer test_data)
 {
     const GUtilData* data = test_data;
-    TestTarget* test = test_target_new(data->bytes, data->size);
+    TestTargetT2* test = test_target_t2_new(data->bytes, data->size);
     NfcTagType2* t2 = test_tag_new(test, 0);
     NfcTag* tag = &t2->tag;
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
@@ -800,16 +520,17 @@ void
 test_init_err1(
     void)
 {
-    TestTarget* test = test_target_new(TEST_ARRAY_AND_SIZE(test_data_empty));
+    TestTargetT2* test = test_target_t2_new
+        (TEST_ARRAY_AND_SIZE(test_data_empty));
     NfcTagType2* t2 = test_tag_new(test, 0);
     NfcTag* tag = &t2->tag;
-    TestTargetError error;
+    TestTargetT2Error error;
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
     gulong id = nfc_tag_add_initialized_handler(tag, test_init_err1_done, loop);
 
     /* Damage CRC for the very first block */
     memset(&error, 0, sizeof(error));
-    error.type = TEST_TARGET_ERROR_CRC;
+    error.type = TEST_TARGET_T2_ERROR_CRC;
     test->read_error = &error;
 
     test_run(&test_opt, loop);
@@ -847,17 +568,18 @@ void
 test_init_err2(
     void)
 {
-    TestTarget* test = test_target_new(TEST_ARRAY_AND_SIZE(test_data_empty));
+    TestTargetT2* test = test_target_t2_new
+        (TEST_ARRAY_AND_SIZE(test_data_empty));
     NfcTagType2* t2 = test_tag_new(test, 0);
     NfcTag* tag = &t2->tag;
-    TestTargetError error;
+    TestTargetT2Error error;
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
     gulong id = nfc_tag_add_initialized_handler(tag, test_init_err2_done, loop);
 
     /* Generate transmission error for a block containing NDEF */
     memset(&error, 0, sizeof(error));
-    error.block = TEST_FIRST_DATA_BLOCK;
-    error.type = TEST_TARGET_ERROR_TRANSMIT;
+    error.block = TEST_TARGET_T2_FIRST_DATA_BLOCK;
+    error.type = TEST_TARGET_T2_ERROR_TRANSMIT;
     test->read_error = &error;
 
     test_run(&test_opt, loop);
@@ -881,10 +603,10 @@ test_read_data_done(
     guint len,
     void* user_data)
 {
-    TestTarget* test = TEST_TARGET(t2->tag.target);
+    TestTargetT2* test = TEST_TARGET_T2(t2->tag.target);
 
     g_assert(len == t2->data_size);
-    g_assert(!memcmp(data, test->data.bytes + TEST_DATA_OFFSET,
+    g_assert(!memcmp(data, test->data.bytes + TEST_TARGET_T2_DATA_OFFSET,
         t2->data_size));
 }
 
@@ -894,13 +616,13 @@ test_read_data_start(
     NfcTag* tag,
     void* user_data)
 {
-    TestTarget* test = TEST_TARGET(tag->target);
+    TestTargetT2* test = TEST_TARGET_T2(tag->target);
     NfcTagType2* t2 = NFC_TAG_T2(tag);
     NfcNdefRec* rec = tag->ndef;
     guint8* buf;
 
     g_assert(gutil_data_equal(&t2->serial, &t2->nfcid1));
-    g_assert(t2->data_size == test->data.size - TEST_DATA_OFFSET);
+    g_assert(t2->data_size == test->data.size - TEST_TARGET_T2_DATA_OFFSET);
 
     g_assert(rec);
     g_assert(!rec->next);
@@ -911,7 +633,7 @@ test_read_data_start(
     buf = g_malloc(t2->data_size);
     g_assert(nfc_tag_t2_read_data_sync(t2, 0, 32, buf) ==
         NFC_TAG_T2_IO_STATUS_OK);
-    g_assert(!memcmp(buf, test->data.bytes + TEST_DATA_OFFSET, 32));
+    g_assert(!memcmp(buf, test->data.bytes + TEST_TARGET_T2_DATA_OFFSET, 32));
 
     /* But not the rest */
     g_assert(nfc_tag_t2_read_data_sync(t2, 0, t2->data_size, buf) ==
@@ -927,7 +649,8 @@ void
 test_read_data(
     void)
 {
-    TestTarget* test = test_target_new(TEST_ARRAY_AND_SIZE(test_data_google));
+    TestTargetT2* test = test_target_t2_new
+        (TEST_ARRAY_AND_SIZE(test_data_google));
     NfcTagType2* t2 = test_tag_new(test, 0);
     NfcTag* tag = &t2->tag;
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
@@ -944,13 +667,14 @@ test_read_data(
         NFC_TAG_T2_IO_STATUS_BAD_SIZE);
 
     /* Now the whole thing must be cached */
-    g_assert(t2->data_size == test->data.size - TEST_DATA_OFFSET);
+    g_assert(t2->data_size == test->data.size - TEST_TARGET_T2_DATA_OFFSET);
     g_assert(nfc_tag_t2_read_data_sync(t2, 0, t2->data_size, NULL) ==
         NFC_TAG_T2_IO_STATUS_OK);
     buf = g_malloc(t2->data_size);
     g_assert(nfc_tag_t2_read_data_sync(t2, 0, t2->data_size, buf) ==
         NFC_TAG_T2_IO_STATUS_OK);
-    g_assert(!memcmp(buf, test->data.bytes + TEST_DATA_OFFSET, t2->data_size));
+    g_assert(!memcmp(buf, test->data.bytes + TEST_TARGET_T2_DATA_OFFSET,
+        t2->data_size));
     g_free(buf);
 
     /* This one will still complete asynchronously */
@@ -1000,7 +724,8 @@ void
 test_read_data_872(
     void)
 {
-    TestTarget* test = test_target_new(TEST_ARRAY_AND_SIZE(test_data_ntag216));
+    TestTargetT2* test = test_target_t2_new
+        (TEST_ARRAY_AND_SIZE(test_data_ntag216));
     NfcTagType2* t2 = test_tag_new(test, 0);
     NfcTag* tag = &t2->tag;
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
@@ -1033,7 +758,7 @@ test_read_data_cached_done(
 {
     g_assert(status == NFC_TAG_T2_IO_STATUS_OK);
     g_assert(len == TEST_READ_DATA_CACHED_SIZE);
-    g_assert(!memcmp(data, test_data_empty + TEST_DATA_OFFSET +
+    g_assert(!memcmp(data, test_data_empty + TEST_TARGET_T2_DATA_OFFSET +
         TEST_READ_DATA_CACHED_OFFSET, len));
     g_main_loop_quit((GMainLoop*)user_data);
 }
@@ -1054,7 +779,8 @@ void
 test_read_data_cached(
     void)
 {
-    TestTarget* test = test_target_new(TEST_ARRAY_AND_SIZE(test_data_empty));
+    TestTargetT2* test = test_target_t2_new
+        (TEST_ARRAY_AND_SIZE(test_data_empty));
     NfcTagType2* t2 = test_tag_new(test, 0);
     NfcTag* tag = &t2->tag;
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
@@ -1094,7 +820,8 @@ void
 test_read_data_abort(
     void)
 {
-    TestTarget* test = test_target_new(TEST_ARRAY_AND_SIZE(test_data_google));
+    TestTargetT2* test = test_target_t2_new
+        (TEST_ARRAY_AND_SIZE(test_data_google));
     NfcTagType2* t2 = test_tag_new(test, 0);
     NfcTag* tag = &t2->tag;
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
@@ -1124,8 +851,9 @@ test_read_data_err_done(
     guint len,
     void* user_data)
 {
-    g_assert(status == NFC_TAG_T2_IO_STATUS_IO_ERROR);
-    g_assert(len == (TEST_READ_DATA_ERR_BLOCK * TEST_FIRST_DATA_BLOCK));
+    g_assert_cmpint(status, == ,NFC_TAG_T2_IO_STATUS_IO_ERROR);
+    g_assert_cmpuint(len, == ,(TEST_READ_DATA_ERR_BLOCK *
+        TEST_TARGET_T2_FIRST_DATA_BLOCK));
     g_main_loop_quit((GMainLoop*)user_data);
 }
 
@@ -1136,7 +864,7 @@ test_read_data_err_start(
     void* loop)
 {
     g_assert(nfc_tag_t2_read_data(NFC_TAG_T2(tag), 0,
-        TEST_READ_DATA_ERR_BLOCK * TEST_TARGET_BLOCK_SIZE + 1,
+        TEST_READ_DATA_ERR_BLOCK * TEST_TARGET_T2_BLOCK_SIZE + 1,
         test_read_data_err_done, test_destroy_quit_loop, loop));
 }
 
@@ -1145,18 +873,19 @@ void
 test_read_data_err(
     void)
 {
-    TestTarget* test = test_target_new(TEST_ARRAY_AND_SIZE(test_data_empty));
+    TestTargetT2* test = test_target_t2_new
+        (TEST_ARRAY_AND_SIZE(test_data_empty));
     NfcTagType2* t2 = test_tag_new(test, 0);
     NfcTag* tag = &t2->tag;
-    TestTargetError error;
+    TestTargetT2Error error;
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
     gulong init_id = nfc_tag_add_initialized_handler(tag,
         test_read_data_err_start, loop);
 
     /* Damage CRC for data block #4 (not fetched during initialization) */
     memset(&error, 0, sizeof(error));
-    error.block = TEST_FIRST_DATA_BLOCK + TEST_READ_DATA_ERR_BLOCK;
-    error.type = TEST_TARGET_ERROR_CRC;
+    error.block = TEST_TARGET_T2_FIRST_DATA_BLOCK + TEST_READ_DATA_ERR_BLOCK;
+    error.type = TEST_TARGET_T2_ERROR_CRC;
     test->read_error = &error;
 
     test_run(&test_opt, loop);
@@ -1200,10 +929,11 @@ void
 test_read_crc_err(
     void)
 {
-    TestTarget* test = test_target_new(TEST_ARRAY_AND_SIZE(test_data_empty));
+    TestTargetT2* test = test_target_t2_new
+        (TEST_ARRAY_AND_SIZE(test_data_empty));
     NfcTagType2* t2 = test_tag_new(test, 0);
     NfcTag* tag = &t2->tag;
-    TestTargetError error;
+    TestTargetT2Error error;
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
     gulong init_id = nfc_tag_add_initialized_handler(tag,
         test_read_crc_err_start, loop);
@@ -1211,7 +941,7 @@ test_read_crc_err(
     /* Damage CRC for block #16 (not fetched during initialization) */
     memset(&error, 0, sizeof(error));
     error.block = 16;
-    error.type = TEST_TARGET_ERROR_CRC;
+    error.type = TEST_TARGET_T2_ERROR_CRC;
     test->read_error = &error;
 
     test_run(&test_opt, loop);
@@ -1258,10 +988,11 @@ void
 test_read_nack(
     void)
 {
-    TestTarget* test = test_target_new(TEST_ARRAY_AND_SIZE(test_data_empty));
+    TestTargetT2* test = test_target_t2_new
+        (TEST_ARRAY_AND_SIZE(test_data_empty));
     NfcTagType2* t2 = test_tag_new(test, 0);
     NfcTag* tag = &t2->tag;
-    TestTargetError error;
+    TestTargetT2Error error;
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
     gulong init_id = nfc_tag_add_initialized_handler(tag,
         test_read_nack_start, loop);
@@ -1269,7 +1000,7 @@ test_read_nack(
     /* Generate NACK for block #16 (not fetched during initialization) */
     memset(&error, 0, sizeof(error));
     error.block = 16;
-    error.type = TEST_TARGET_ERROR_NACK;
+    error.type = TEST_TARGET_T2_ERROR_NACK;
     test->read_error = &error;
 
     test_run(&test_opt, loop);
@@ -1296,7 +1027,7 @@ test_read_timeout_done(
     void* user_data)
 {
     g_assert(status == NFC_TAG_T2_IO_STATUS_IO_ERROR);
-    g_assert(len == TEST_DATA_OFFSET); /* This much was cached */
+    g_assert(len == TEST_TARGET_T2_DATA_OFFSET); /* This much was cached */
     g_main_loop_quit((GMainLoop*)user_data);
 }
 
@@ -1307,7 +1038,7 @@ test_read_timeout_start(
     void* loop)
 {
     g_assert(nfc_tag_t2_read_data(NFC_TAG_T2(tag), 0,
-        TEST_READ_TIMEOUT_BLOCK * TEST_TARGET_BLOCK_SIZE + 1,
+        TEST_READ_TIMEOUT_BLOCK * TEST_TARGET_T2_BLOCK_SIZE + 1,
         test_read_timeout_done, test_destroy_quit_loop, loop));
 }
 
@@ -1316,18 +1047,19 @@ void
 test_read_timeout(
     void)
 {
-    TestTarget* test = test_target_new(TEST_ARRAY_AND_SIZE(test_data_empty));
+    TestTargetT2* test = test_target_t2_new
+        (TEST_ARRAY_AND_SIZE(test_data_empty));
     NfcTagType2* t2 = test_tag_new(test, 0);
     NfcTag* tag = &t2->tag;
-    TestTargetError error;
+    TestTargetT2Error error;
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
     gulong init_id = nfc_tag_add_initialized_handler(tag,
         test_read_timeout_start, loop);
 
     /* Never complete read of block #4 (not fetched during initialization) */
     memset(&error, 0, sizeof(error));
-    error.block = TEST_FIRST_DATA_BLOCK + TEST_READ_TIMEOUT_BLOCK;
-    error.type = TEST_TARGET_ERROR_TIMEOUT;
+    error.block = TEST_TARGET_T2_FIRST_DATA_BLOCK + TEST_READ_TIMEOUT_BLOCK;
+    error.type = TEST_TARGET_T2_ERROR_TIMEOUT;
     test->read_error = &error;
 
     test_run(&test_opt, loop);
@@ -1363,10 +1095,11 @@ test_write_check(
     guint len,
     void* user_data)
 {
-    TestTarget* test = TEST_TARGET(t2->tag.target);
+    TestTargetT2* test = TEST_TARGET_T2(t2->tag.target);
 
-    g_assert(len == t2->data_size);
-    g_assert(!memcmp(data, test->data.bytes + TEST_DATA_OFFSET, t2->data_size));
+    g_assert_cmpuint(len, == ,t2->data_size);
+    g_assert(!memcmp(data, test->data.bytes + TEST_TARGET_T2_DATA_OFFSET,
+        t2->data_size));
 }
 
 static
@@ -1388,7 +1121,8 @@ void
 test_write(
     void)
 {
-    TestTarget* test = test_target_new(TEST_ARRAY_AND_SIZE(test_data_google));
+    TestTargetT2* test = test_target_t2_new
+        (TEST_ARRAY_AND_SIZE(test_data_google));
     NfcTagType2* t2 = test_tag_new(test, 0);
     NfcTag* tag = &t2->tag;
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
@@ -1462,7 +1196,8 @@ void
 test_write_data1(
     void)
 {
-    TestTarget* test = test_target_new(TEST_ARRAY_AND_SIZE(test_data_google));
+    TestTargetT2* test = test_target_t2_new
+        (TEST_ARRAY_AND_SIZE(test_data_google));
     NfcTagType2* t2 = test_tag_new(test, 0);
     NfcTag* tag = &t2->tag;
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
@@ -1483,8 +1218,8 @@ test_write_data1(
     test_run(&test_opt, loop);
 
     /* Check the contents */
-    g_assert(!memcmp(test->data.bytes + TEST_DATA_OFFSET, jolla_rec,
-        sizeof(jolla_rec)));
+    g_assert(!memcmp(test->data.bytes + TEST_TARGET_T2_DATA_OFFSET,
+        TEST_ARRAY_AND_SIZE(jolla_rec)));
 
     /* It's not considered cached anymore */
     g_assert(nfc_tag_t2_read_data_sync(t2, 0, sizeof(jolla_rec), NULL) ==
@@ -1560,7 +1295,8 @@ void
 test_write_data2(
     void)
 {
-    TestTarget* test = test_target_new(TEST_ARRAY_AND_SIZE(test_data_google));
+    TestTargetT2* test = test_target_t2_new
+        (TEST_ARRAY_AND_SIZE(test_data_google));
     NfcTagType2* t2 = test_tag_new(test, 0);
     NfcTag* tag = &t2->tag;
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
@@ -1570,7 +1306,7 @@ test_write_data2(
     test_run(&test_opt, loop);
 
     /* Check the contents */
-    g_assert(!memcmp(test->data.bytes + TEST_DATA_OFFSET, jolla_rec,
+    g_assert(!memcmp(test->data.bytes + TEST_TARGET_T2_DATA_OFFSET, jolla_rec,
         NDEF_JOLLA_COM_SIZE_EXACT));
 
     /* It's not considered cached anymore */
@@ -1646,7 +1382,8 @@ void
 test_write_data3(
     void)
 {
-    TestTarget* test = test_target_new(TEST_ARRAY_AND_SIZE(test_data_google));
+    TestTargetT2* test = test_target_t2_new
+        (TEST_ARRAY_AND_SIZE(test_data_google));
     NfcTagType2* t2 = test_tag_new(test, 0);
     NfcTag* tag = &t2->tag;
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
@@ -1661,7 +1398,7 @@ test_write_data3(
 
     /* Contents should be wiped (test a few more bytes then we have written) */
     for (i = 0; i < NDEF_GOOGLE_COM_SIZE_ALIGNED; i++) {
-        g_assert(!test->data.bytes[TEST_DATA_OFFSET + i]);
+        g_assert(!test->data.bytes[TEST_TARGET_T2_DATA_OFFSET + i]);
     }
 
     /* It's not considered cached anymore */
@@ -1676,8 +1413,8 @@ test_write_data3(
     test_run(&test_opt, loop);
 
     /* Check the contents */
-    g_assert(!memcmp(test->data.bytes + TEST_DATA_OFFSET, jolla_rec,
-        sizeof(jolla_rec)));
+    g_assert(!memcmp(test->data.bytes + TEST_TARGET_T2_DATA_OFFSET,
+        TEST_ARRAY_AND_SIZE(jolla_rec)));
 
     nfc_tag_remove_handler(tag, id);
     nfc_tag_unref(tag);
@@ -1714,7 +1451,7 @@ test_write_err1_start(
         NDEF_GOOGLE_COM_SIZE_ALIGNED);
 
     /* Try to zero the NDEF (and fail) */
-    g_assert(nfc_tag_t2_write(t2, 0, TEST_FIRST_DATA_BLOCK, rec,
+    g_assert(nfc_tag_t2_write(t2, 0, TEST_TARGET_T2_FIRST_DATA_BLOCK, rec,
         test_write_err1_complete, test_destroy_quit_loop, loop));
     g_bytes_unref(rec);
 }
@@ -1724,18 +1461,19 @@ void
 test_write_err1(
     void)
 {
-    TestTarget* test = test_target_new(TEST_ARRAY_AND_SIZE(test_data_google));
+    TestTargetT2* test = test_target_t2_new
+        (TEST_ARRAY_AND_SIZE(test_data_google));
     NfcTagType2* t2 = test_tag_new(test, 0);
     NfcTag* tag = &t2->tag;
-    TestTargetError error;
+    TestTargetT2Error error;
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
     gulong id = nfc_tag_add_initialized_handler(tag,
         test_write_err1_start, loop);
 
     /* Generate write error for the very first block we try to erase */
     memset(&error, 0, sizeof(error));
-    error.block = TEST_FIRST_DATA_BLOCK;
-    error.type = TEST_TARGET_ERROR_TRANSMIT;
+    error.block = TEST_TARGET_T2_FIRST_DATA_BLOCK;
+    error.type = TEST_TARGET_T2_ERROR_TRANSMIT;
     test->write_error = &error;
 
     test_run(&test_opt, loop);
@@ -1786,18 +1524,19 @@ void
 test_write_data_err1(
     void)
 {
-    TestTarget* test = test_target_new(TEST_ARRAY_AND_SIZE(test_data_google));
+    TestTargetT2* test = test_target_t2_new
+        (TEST_ARRAY_AND_SIZE(test_data_google));
     NfcTagType2* t2 = test_tag_new(test, 0);
     NfcTag* tag = &t2->tag;
-    TestTargetError error;
+    TestTargetT2Error error;
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
     gulong id = nfc_tag_add_initialized_handler(tag,
         test_write_data_err1_start, loop);
 
     /* Generate write error for the very first block we try to erase */
     memset(&error, 0, sizeof(error));
-    error.block = TEST_FIRST_DATA_BLOCK;
-    error.type = TEST_TARGET_ERROR_TRANSMIT;
+    error.block = TEST_TARGET_T2_FIRST_DATA_BLOCK;
+    error.type = TEST_TARGET_T2_ERROR_TRANSMIT;
     test->write_error = &error;
 
     test_run(&test_opt, loop);
@@ -1841,7 +1580,7 @@ test_write_data_err2_start(
 
     /* Try to a byte (and fail to fetch the current contents) */
     g_assert(nfc_tag_t2_write_data(t2, 1 + TEST_DATA_ERR2_BLOCK *
-        TEST_TARGET_BLOCK_SIZE, rec, test_write_data_err2_complete,
+        TEST_TARGET_T2_BLOCK_SIZE, rec, test_write_data_err2_complete,
         test_destroy_quit_loop, user_data /* loop */));
     g_bytes_unref(rec);
 }
@@ -1851,18 +1590,19 @@ void
 test_write_data_err2(
     void)
 {
-    TestTarget* test = test_target_new(TEST_ARRAY_AND_SIZE(test_data_google));
+    TestTargetT2* test = test_target_t2_new
+        (TEST_ARRAY_AND_SIZE(test_data_google));
     NfcTagType2* t2 = test_tag_new(test, 0);
     NfcTag* tag = &t2->tag;
-    TestTargetError error;
+    TestTargetT2Error error;
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
     gulong id = nfc_tag_add_initialized_handler(tag,
         test_write_data_err2_start, loop);
 
     /* Generate read error for the very first block we try to erase */
     memset(&error, 0, sizeof(error));
-    error.block = TEST_DATA_ERR2_BLOCK + TEST_FIRST_DATA_BLOCK;
-    error.type = TEST_TARGET_ERROR_TRANSMIT;
+    error.block = TEST_DATA_ERR2_BLOCK + TEST_TARGET_T2_FIRST_DATA_BLOCK;
+    error.type = TEST_TARGET_T2_ERROR_TRANSMIT;
     test->read_error = &error;
 
     test_run(&test_opt, loop);

@@ -40,6 +40,7 @@ plugins_dbus_service_isodep \
 plugins_dbus_service_peer \
 plugins_dbus_service_plugin \
 plugins_dbus_service_tag \
+plugins_dbus_service_tag_t2 \
 plugins_dbus_service_util \
 plugins_settings"
 
