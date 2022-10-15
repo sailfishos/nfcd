@@ -80,7 +80,7 @@ COVERAGE_BUILD_DIR = $(BUILD_DIR)/coverage
 #
 
 VERSION_FILE = $(INCLUDE_DIR)/nfc_version.h
-get_version = $(shell grep -E "^ *\\\#define +NFC_VERSION_$1 +[0-9]+$$" $(VERSION_FILE) | sed "s/  */ /g" | cut -d " " -f 3)
+get_version = $(shell grep -E '^ *\#define +NFC_VERSION_$1 +[0-9]+$$' $(VERSION_FILE) | sed 's/  */ /g' | cut -d ' ' -f 3)
 
 VERSION_MAJOR = $(call get_version,MAJOR)
 VERSION_MINOR = $(call get_version,MINOR)
