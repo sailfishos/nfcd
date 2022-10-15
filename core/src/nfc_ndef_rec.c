@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -463,7 +463,7 @@ nfc_ndef_rec_initialize(
             self->flags |= NFC_NDEF_REC_FLAG_LAST;
         }
         self->rtd = rtd;
-        self->raw.bytes = priv->data = g_memdup(rec->bytes, rec->size);
+        self->raw.bytes = priv->data = gutil_memdup(rec->bytes, rec->size);
         self->raw.size = rec->size;
         self->type.bytes = self->raw.bytes + ndef->type_offset;
         self->type.size = ndef->type_length;

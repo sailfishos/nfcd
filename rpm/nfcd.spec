@@ -7,7 +7,7 @@ License: BSD
 URL: https://github.com/sailfishos/nfcd
 Source: %{name}-%{version}.tar.bz2
 
-%define libglibutil_version 1.0.49
+%define libglibutil_version 1.0.52
 %define glib_version 2.32
 
 BuildRequires: pkgconfig

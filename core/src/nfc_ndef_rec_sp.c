@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2019-2020 Jolla Ltd.
- * Copyright (C) 2019-2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2019-2022 Jolla Ltd.
+ * Copyright (C) 2019-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -72,7 +72,7 @@ nfc_ndef_rec_sp_media_new(
     NfcNdefMediaPriv* media = g_slice_new0(NfcNdefMediaPriv);
 
     media->pub.data.size = rec->payload.size;
-    media->pub.data.bytes = media->data = g_memdup
+    media->pub.data.bytes = media->data = gutil_memdup
         (rec->payload.bytes, rec->payload.size);
     media->pub.type = media->type = g_strndup
         ((char*)rec->type.bytes, rec->type.size);
@@ -156,7 +156,7 @@ nfc_ndef_rec_sp_payload_new(
 
         data.bytes = (guint8*)type;
         data.size = strlen(type);
-        priv->type = g_memdup(type, data.size + 1);
+        priv->type = gutil_memdup(type, data.size + 1);
         rec_t = last = nfc_ndef_rec_sp_append_well_known(last,
             &nfc_ndef_rec_sp_type_t, &data);
     } else {
@@ -275,7 +275,7 @@ nfc_ndef_rec_sp_parse(
                 /* 3.3.5 The Size Record */
                 if (ndef->payload.size == 4 && !self->size) {
                     /* Table 3. The Size Record Layout */
-                    self->size = 
+                    self->size =
                         ((((guint32)ndef->payload.bytes[0]) << 24) |
                          (((guint32)ndef->payload.bytes[1]) << 16) |
                          (((guint32)ndef->payload.bytes[2]) << 8) |

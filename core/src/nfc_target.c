@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
@@ -849,7 +849,7 @@ nfc_target_transmit(
              * Can't pass the data pointer to the transmit implementation
              * right away, make a copy.
              */
-            tx->data = tx->copied_data = g_memdup(data, len);
+            tx->data = tx->copied_data = gutil_memdup(data, len);
             nfc_target_transmit_queue_req(&priv->req_queue, req);
         }
     }

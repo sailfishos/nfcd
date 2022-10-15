@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2018-2022 Jolla Ltd.
+ * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
@@ -38,6 +38,7 @@
 #include "nfc_target_impl.h"
 
 #include <gutil_log.h>
+#include <gutil_misc.h>
 
 static TestOpt test_opt;
 
@@ -126,7 +127,7 @@ test_transmit_response_new_ok(
 {
     TestTransmitResponse* resp = g_new0(TestTransmitResponse, 1);
 
-    resp->data = g_memdup(bytes, len);
+    resp->data = gutil_memdup(bytes, len);
     resp->len = len;
     resp->status = NFC_TRANSMIT_STATUS_OK;
     return resp;

@@ -36,6 +36,7 @@
 #include "nfc_target_impl.h"
 
 #include <gutil_log.h>
+#include <gutil_misc.h>
 
 #define SUPER_LONG_TIMEOUT (24*60*60) /* seconds */
 
@@ -213,7 +214,7 @@ test_target_t2_transmit(
                 write->target = self;
                 write->block = cmd[1];
                 write->size = len - 2;
-                write->data = g_memdup(cmd + 2, write->size);
+                write->data = gutil_memdup(cmd + 2, write->size);
                 GDEBUG("Write block #%u, %u bytes", write->block, write->size);
                 self->transmit_id = g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,
                     test_target_t2_write_done, write,
@@ -281,7 +282,7 @@ test_target_t2_new(
      TestTargetT2* self = g_object_new(TEST_TYPE_TARGET_T2, NULL);
 
      self->target.technology = NFC_TECHNOLOGY_A;
-     self->data.bytes = self->storage = g_memdup(bytes, size);
+     self->data.bytes = self->storage = gutil_memdup(bytes, size);
      self->data.size = size;
      return self;
 }

@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2020 Jolla Ltd.
- * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
+ * Copyright (C) 2020-2022 Jolla Ltd.
+ * Copyright (C) 2020-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -36,6 +36,7 @@
 #define GLOG_MODULE_NAME NFC_PEER_LOG_MODULE
 #include <gutil_log.h>
 #include <gutil_macros.h>
+#include <gutil_misc.h>
 
 #include <stdlib.h>
 
@@ -203,7 +204,7 @@ nfc_peer_services_copy(
             }
 
             priv->sap_mask = self->sap_mask;
-            copy->list = priv->list = g_memdup(self->list,
+            copy->list = priv->list = gutil_memdup(self->list,
                 sizeof(NfcPeerService*) * (n + 1));
         }
         return copy;
