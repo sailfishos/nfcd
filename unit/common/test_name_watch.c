@@ -35,6 +35,8 @@
 
 #include <gio/gio.h>
 
+#include <string.h>
+
 /*==========================================================================*
  * Peer-to-peer D-Bus connection doesn't fully simulate the real bus
  * connection. Some tricks are necessary.
