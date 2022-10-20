@@ -38,7 +38,7 @@
       <arg name="present" type="u" direction="out"/>
     </method>
     <method name="GetTypeNameFormat">
-      <arg name="protocol" type="u" direction="out"/>
+      <arg name="tnf" type="u" direction="out"/>
     </method>
     <method name="GetInterfaces">
       <arg name="interfaces" type="as" direction="out"/>

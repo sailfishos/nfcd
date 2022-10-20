@@ -35,6 +35,7 @@ all:
 	@$(MAKE) -C plugins_dbus_handlers_type_uri $*
 	@$(MAKE) -C plugins_dbus_service_adapter $*
 	@$(MAKE) -C plugins_dbus_service_isodep $*
+	@$(MAKE) -C plugins_dbus_service_ndef $*
 	@$(MAKE) -C plugins_dbus_service_peer $*
 	@$(MAKE) -C plugins_dbus_service_plugin $*
 	@$(MAKE) -C plugins_dbus_service_tag $*
