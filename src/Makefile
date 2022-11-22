@@ -81,7 +81,7 @@ DEFINES += -DDEFAULT_PLUGIN_DIR='"$(DEFAULT_PLUGIN_DIR)"'
 INCLUDES = -I. -I$(NFC_CORE_DIR)/include -I$(NFC_PLUGINS_DIR)
 FULL_CFLAGS = -fPIC $(CFLAGS) $(DEFINES) $(WARNINGS) $(INCLUDES) \
   -MMD -MP $(shell pkg-config --cflags $(PKGS))
-FULL_LDFLAGS = $(LDFLAGS) -Wl,-export-dynamic \
+FULL_LDFLAGS = $(LDFLAGS) -pie -Wl,-export-dynamic \
   -Wl,--version-script=$(SRC_DIR)/nfcd.map
 
 ifndef KEEP_SYMBOLS
