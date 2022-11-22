@@ -54,7 +54,7 @@ WARNINGS = -Wall -Wstrict-aliasing -Wunused-result
 INCLUDES = -I. -I$(GEN_DIR)
 FULL_CFLAGS = -fPIC $(CFLAGS) $(DEFINES) $(WARNINGS) $(INCLUDES) \
   -MMD -MP $(shell pkg-config --cflags $(PKGS))
-FULL_LDFLAGS = $(LDFLAGS)
+FULL_LDFLAGS = $(LDFLAGS) -pie
 
 KEEP_SYMBOLS ?= 0
 ifneq ($(KEEP_SYMBOLS),0)

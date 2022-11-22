@@ -67,7 +67,7 @@ INCLUDES = -I. -I$(NFC_CORE_DIR)/include -I$(GEN_DIR)
 DEFINES += -DNFCD_EXPORT='__attribute__((visibility ("default")))'
 FULL_CFLAGS = -fPIC $(CFLAGS) $(DEFINES) $(WARNINGS) $(INCLUDES) \
   -MMD -MP $(shell pkg-config --cflags $(PKGS))
-FULL_LDFLAGS = $(LDFLAGS)
+FULL_LDFLAGS = $(LDFLAGS) -pie
 
 KEEP_SYMBOLS ?= 0
 ifneq ($(KEEP_SYMBOLS),0)
