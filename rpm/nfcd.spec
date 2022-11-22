@@ -1,6 +1,6 @@
 Name: nfcd
 
-Version: 1.1.13
+Version: 1.1.14
 Release: 0
 Summary: NFC daemon
 License: BSD
@@ -55,7 +55,6 @@ make %{_smp_mflags} LIBDIR=%{_libdir} KEEP_SYMBOLS=1 release pkgconfig
 %define target_wants_dir %{_unitdir}/network.target.wants
 %define settings_dir %{_sharedstatedir}/nfcd/
 %define settings_file %{settings_dir}/settings
-rm -rf %{buildroot}
 make install DESTDIR=%{buildroot} LIBDIR=%{_libdir} UNITDIR=%{_unitdir}
 install -d -m 0700 %{buildroot}/%{settings_dir}
 mkdir -p %{buildroot}/%{target_wants_dir}
