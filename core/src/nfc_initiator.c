@@ -186,6 +186,32 @@ nfc_transmission_respond(
     return FALSE;
 }
 
+gboolean
+nfc_transmission_respond_bytes(
+    NfcTransmission* self,
+    GBytes* data,
+    NfcTransmissionDoneFunc done,
+    void* user_data)
+{
+    if (G_LIKELY(self && !self->responded)) {
+        NfcInitiator* owner = self->owner;
+
+        self->responded = TRUE;
+        if (owner) {
+            self->done = done;
+            self->user_data = user_data;
+            nfc_transmission_ref(self);
+            if (GET_THIS_CLASS(owner)->respond_bytes(owner, data)) {
+                nfc_transmission_unref(self);
+                return TRUE;
+            }
+            self->done = NULL;
+            nfc_transmission_unref(self);
+        }
+    }
+    return FALSE;
+}
+
 /*==========================================================================*
  * Interface
  *==========================================================================*/
@@ -398,6 +424,22 @@ nfc_initiator_default_respond(
 }
 
 static
+gboolean
+nfc_initiator_default_respond_bytes(
+    NfcInitiator* self,
+    GBytes* bytes)
+{
+    if (bytes) {
+        gsize len = 0;
+        const void* data = g_bytes_get_data(bytes, &len);
+
+        return GET_THIS_CLASS(self)->respond(self, data, (guint) len);
+    } else {
+        return GET_THIS_CLASS(self)->respond(self, NULL, 0);
+    }
+}
+
+static
 void
 nfc_initiator_nop(
     NfcInitiator* self)
@@ -461,6 +503,7 @@ nfc_initiator_class_init(
 
     g_type_class_add_private(klass, sizeof(NfcInitiatorPriv));
     klass->respond = nfc_initiator_default_respond;
+    klass->respond_bytes = nfc_initiator_default_respond_bytes;
     klass->deactivate = nfc_initiator_nop;
     klass->gone = nfc_initiator_default_gone;
     G_OBJECT_CLASS(klass)->finalize = nfc_initiator_finalize;

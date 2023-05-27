@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2020-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2020 Jolla Ltd.
- * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -149,14 +149,12 @@ static
 gboolean
 nfc_llc_io_target_send(
     NfcLlcIo* io,
-    GBytes* send)
+    GBytes* data)
 {
     NfcLlcIoTarget* self = THIS(io);
-    gsize size;
-    gconstpointer data = g_bytes_get_data(send, &size);
 
     io->can_send = FALSE;
-    if (nfc_transmission_respond(self->transmission, data, (guint)size,
+    if (nfc_transmission_respond_bytes(self->transmission, data,
         nfc_llc_io_target_response_sent, self)) {
         return TRUE;
     } else {
