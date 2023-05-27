@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2020-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2020-2021 Jolla Ltd.
- * Copyright (C) 2020-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -57,6 +57,18 @@ typedef struct nfc_initiator_class {
     /* These base implementation emits signal, must always be called. */
     void (*gone)(NfcInitiator* initiator);
 
+    /*
+     * Since 1.1.15
+     *
+     * NfcInitiatorClass implementation may use this callback to avoid
+     * copying the data and allocating unnecessary GBytes objects. The
+     * base class calls respond() with the data contained in this GBytes.
+     *
+     * N.B. Even if the respond_bytes() is handled, respond() can still
+     * be called, the implementation must be prepared to handle both.
+     */
+    gboolean (*respond_bytes)(NfcInitiator* initiator, GBytes* data);
+
     /* Padding for future expansion */
     void (*_reserved1)(void);
     void (*_reserved2)(void);
@@ -67,7 +79,6 @@ typedef struct nfc_initiator_class {
     void (*_reserved7)(void);
     void (*_reserved8)(void);
     void (*_reserved9)(void);
-    void (*_reserved10)(void);
 } NfcInitiatorClass;
 
 #define NFC_INITIATOR_CLASS(klass) G_TYPE_CHECK_CLASS_CAST((klass), \

@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2020-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2020 Jolla Ltd.
- * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -49,6 +49,16 @@ test_initiator_inc(
     void* user_data)
 {
     (*(int*)user_data)++;
+}
+
+static
+void
+test_transmission_not_reached(
+    NfcTransmission* t,
+    gboolean ok,
+    void* user_data)
+{
+    g_assert_not_reached();
 }
 
 /*==========================================================================*
@@ -175,6 +185,7 @@ test_null(
     nfc_initiator_gone(NULL);
     nfc_initiator_unref(NULL);
 
+    g_assert(!nfc_transmission_respond_bytes(NULL, NULL, NULL, NULL));
     g_assert(!nfc_transmission_respond(NULL, NULL, 0, NULL, NULL));
     g_assert(!nfc_transmission_ref(NULL));
     nfc_transmission_unref(NULL);
@@ -222,6 +233,7 @@ test_basic(
 {
     NfcInitiator* init = test_initiator1_new(0);
     NfcTransmission* trans = NULL;
+    GBytes* out = g_bytes_new_static(test_out.bytes, test_out.size);
     int gone = 0, done = 0;
     gulong id[2];
 
@@ -241,9 +253,27 @@ test_basic(
     g_assert(trans);
     g_assert(nfc_transmission_respond(trans, test_out.bytes, test_out.size,
         test_basic_transmission_ok, &done));
+    /* Second attempt to respond fails */
+    g_assert(!nfc_transmission_respond(trans, test_out.bytes, test_out.size,
+        test_transmission_not_reached, NULL));
     nfc_transmission_unref(trans);
     g_assert_cmpint(gone, == ,0);
     g_assert_cmpint(done, == ,1);
+    trans = NULL;
+
+    /* Simulate another transmission (and respond with GBytes) */
+    nfc_initiator_transmit(init, test_in.bytes, test_in.size);
+    g_assert_cmpint(gone, == ,0);
+    g_assert(trans);
+    g_assert(nfc_transmission_respond_bytes(trans, out,
+        test_basic_transmission_ok, &done));
+    /* Second attempt to respond fails */
+    g_assert(!nfc_transmission_respond_bytes(trans, out,
+        test_transmission_not_reached, NULL));
+    nfc_transmission_unref(trans);
+    g_assert_cmpint(gone, == ,0);
+    g_assert_cmpint(done, == ,2);
+    trans = NULL;
 
     /* This call is wrong but it's ignored */
     nfc_initiator_response_sent(init, NFC_TRANSMIT_STATUS_OK);
@@ -260,6 +290,7 @@ test_basic(
 
     nfc_initiator_remove_all_handlers(init, id);
     nfc_initiator_unref(init);
+    g_bytes_unref(out);
 }
 
 /*==========================================================================*
@@ -537,7 +568,8 @@ test_fail_respond(
 {
     NfcInitiator* init = test_initiator1_new(TEST_INITIATOR_FAIL_RESPONSE);
     NfcTransmission* trans = NULL;
-    int gone = 0, done = 0;
+    GBytes* out = g_bytes_new_static(test_out.bytes, test_out.size);
+    int gone = 0;
     gulong id[2];
 
     /* NOTE: reusing test_basic_transmission_handler */
@@ -552,21 +584,35 @@ test_fail_respond(
     nfc_initiator_transmit(init, test_in.bytes, test_in.size);
     g_assert_cmpint(gone, == ,0);
     g_assert(trans);
-    /* NOTE: reusing test_basic_transmission_ok */
     g_assert(!nfc_transmission_respond(trans, test_out.bytes, test_out.size,
-        test_basic_transmission_ok, &done));
+        test_transmission_not_reached, NULL));
     g_assert_cmpint(gone, == ,0);
-    g_assert_cmpint(done, == ,0);
-
-    /* Second response fails too, albeit in a different way */
-    g_assert(!nfc_transmission_respond(trans, test_out.bytes, test_out.size,
-        test_basic_transmission_ok, &done));
     nfc_transmission_unref(trans);
+    trans = NULL;
+
+    /* The same thing but try to respond with GBytes */
+    nfc_initiator_transmit(init, test_in.bytes, test_in.size);
     g_assert_cmpint(gone, == ,0);
-    g_assert_cmpint(done, == ,0);
+    g_assert(trans);
+    g_assert(!nfc_transmission_respond_bytes(trans, out,
+        test_transmission_not_reached, NULL));
+    g_assert_cmpint(gone, == ,0);
+    nfc_transmission_unref(trans);
+    trans = NULL;
+
+    /* And the same thing but with NULL GBytes */
+    nfc_initiator_transmit(init, test_in.bytes, test_in.size);
+    g_assert_cmpint(gone, == ,0);
+    g_assert(trans);
+    g_assert(!nfc_transmission_respond_bytes(trans, NULL,
+        test_transmission_not_reached, NULL));
+    g_assert_cmpint(gone, == ,0);
+    nfc_transmission_unref(trans);
+    trans = NULL;
 
     nfc_initiator_remove_all_handlers(init, id);
     nfc_initiator_unref(init);
+    g_bytes_unref(out);
 }
 
 /*==========================================================================*
@@ -581,7 +627,7 @@ test_queue_response(
     NfcInitiator* init = test_initiator1_new(TEST_INITIATOR_DONT_COMPLETE);
     NfcTransmission* trans = NULL;
     NfcTransmission* trans1 = NULL;
-    int gone = 0, done = 0;
+    int gone = 0;
     gulong id[2];
 
     /* NOTE: reusing test_basic_transmission_handler */
@@ -599,11 +645,9 @@ test_queue_response(
     trans1 = trans;
     trans = NULL;
 
-    /* NOTE: reusing test_basic_transmission_ok */
     g_assert(nfc_transmission_respond(trans1, test_out.bytes, test_out.size,
-        test_basic_transmission_ok, &done));
+        test_transmission_not_reached, NULL));
     g_assert_cmpint(gone, == ,0);
-    g_assert_cmpint(done, == ,0);
 
     /* Second transmission is queued */
     nfc_initiator_transmit(init, test_in.bytes, test_in.size);
@@ -613,7 +657,6 @@ test_queue_response(
     /* Dropping the first transmission doesnt't deactivate RF interface */
     nfc_transmission_unref(trans1);
     g_assert_cmpint(gone, == ,0);
-    g_assert_cmpint(done, == ,0);
 
     nfc_initiator_remove_all_handlers(init, id);
     nfc_initiator_unref(init);
@@ -630,7 +673,6 @@ test_early_destroy(
 {
     NfcInitiator* init = test_initiator1_new(0);
     NfcTransmission* trans = NULL;
-    int done = 0;
     gulong id;
 
     /* NOTE: reusing test_basic_transmission_handler */
@@ -647,11 +689,45 @@ test_early_destroy(
     nfc_initiator_unref(init);
 
     /* Obviously, respond must fail now */
-    /* NOTE: reusing test_basic_transmission_handler */
     g_assert(!nfc_transmission_respond(trans, test_out.bytes, test_out.size,
-        test_basic_transmission_ok, &done));
-    g_assert_cmpint(done, == ,0);
+        test_transmission_not_reached, NULL));
+
     nfc_transmission_unref(trans);
+}
+
+/*==========================================================================*
+ * early_destroy2
+ *==========================================================================*/
+
+static
+void
+test_early_destroy2(
+    void)
+{
+    NfcInitiator* init = test_initiator1_new(0);
+    NfcTransmission* trans = NULL;
+    GBytes* out = g_bytes_new_static(test_out.bytes, test_out.size);
+    gulong id;
+
+    /* NOTE: reusing test_basic_transmission_handler */
+    id = nfc_initiator_add_transmission_handler(init,
+        test_basic_transmission_handler, &trans);
+    g_assert(id);
+
+    /* Simulate transmission */
+    nfc_initiator_transmit(init, test_in.bytes, test_in.size);
+    g_assert(trans);
+
+    /* Unref the initiator before responding */
+    nfc_initiator_remove_handler(init, id);
+    nfc_initiator_unref(init);
+
+    /* Obviously, respond must fail now */
+    g_assert(!nfc_transmission_respond_bytes(trans, out,
+        test_transmission_not_reached, NULL));
+
+    nfc_transmission_unref(trans);
+    g_bytes_unref(out);
 }
 
 /*==========================================================================*
@@ -677,6 +753,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("fail_respond"), test_fail_respond);
     g_test_add_func(TEST_("queue_response"), test_queue_response);
     g_test_add_func(TEST_("early_destroy"), test_early_destroy);
+    g_test_add_func(TEST_("early_destroy2"), test_early_destroy2);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

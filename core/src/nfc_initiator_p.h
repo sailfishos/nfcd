@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2020-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2020 Jolla Ltd.
- * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -114,6 +114,14 @@ nfc_transmission_respond(
     NfcTransmission* transmission,
     const void* data,
     guint len,
+    NfcTransmissionDoneFunc done,
+    void* user_data)
+    NFCD_INTERNAL;
+
+gboolean
+nfc_transmission_respond_bytes(
+    NfcTransmission* transmission,
+    GBytes* data,
     NfcTransmissionDoneFunc done,
     void* user_data)
     NFCD_INTERNAL;
