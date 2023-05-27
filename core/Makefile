@@ -84,7 +84,7 @@ get_version = $(shell grep -E '^ *\#define +NFC_VERSION_$1 +[0-9]+$$' $(VERSION_
 
 VERSION_MAJOR = $(call get_version,MAJOR)
 VERSION_MINOR = $(call get_version,MINOR)
-VERSION_RELEASE = $(call get_version,NANO)
+VERSION_RELEASE = $(call get_version,RELEASE)
 
 # Version for pkg-config
 PCVERSION = $(VERSION_MAJOR).$(VERSION_MINOR).$(VERSION_RELEASE)

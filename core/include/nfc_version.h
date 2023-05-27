@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -33,28 +33,26 @@
 #ifndef NFC_VERSION_H
 #define NFC_VERSION_H
 
-/*
- * It's a bit weird that the third one is called NANO, although there are
- * definitely more appropriate names for it (e.g. RELEASE or even MICRO),
- * but "fixing" that isn't worth the trouble. Let it stay that way.
- */
-
 #define NFC_VERSION_MAJOR 1
 #define NFC_VERSION_MINOR 1
-#define NFC_VERSION_NANO  14
+#define NFC_VERSION_RELEASE 14
 
 #define NFC_VERSION_WORD(v1,v2,v3) \
     ((((v1) & 0x7f) << 24) | \
      (((v2) & 0xfff) << 12) | \
       ((v3) & 0xfff))
 
-#define NFC_VERSION_GET_MAJOR(v) (((v) >> 24) & 0x7f)
-#define NFC_VERSION_GET_MINOR(v) (((v) >> 12) & 0xfff)
-#define NFC_VERSION_GET_NANO(v)  ((v) & 0xfff)
+#define NFC_VERSION_GET_MAJOR(v)  (((v) >> 24) & 0x7f)
+#define NFC_VERSION_GET_MINOR(v)  (((v) >> 12) & 0xfff)
+#define NFC_VERSION_GET_RELEASE(v) ((v) & 0xfff)
 
 /* Current version as a single word */
 #define NFC_CORE_VERSION NFC_VERSION_WORD\
-    (NFC_VERSION_MAJOR, NFC_VERSION_MINOR, NFC_VERSION_NANO)
+    (NFC_VERSION_MAJOR, NFC_VERSION_MINOR, NFC_VERSION_RELEASE)
+
+/* Compatibility with nfcd <= 1.1.14 (RELEASE was called NANO) */
+#define NFC_VERSION_NANO        NFC_VERSION_RELEASE
+#define NFC_VERSION_GET_NANO(v) NFC_VERSION_GET_RELEASE(v)
 
 #endif /* NFC_VERSION_H */
 
