@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2020-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2020-2021 Jolla Ltd.
- * Copyright (C) 2020-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,8 +30,6 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define GLIB_DISABLE_DEPRECATION_WARNINGS
-
 #include "nfc_initiator_p.h"
 #include "nfc_initiator_impl.h"
 #include "nfc_log.h"
@@ -47,10 +45,12 @@ struct nfc_initiator_priv {
 
 #define THIS(obj) NFC_INITIATOR(obj)
 #define THIS_TYPE NFC_TYPE_INITIATOR
-#define PARENT_CLASS (nfc_initiator_parent_class)
-G_DEFINE_ABSTRACT_TYPE(NfcInitiator, nfc_initiator, G_TYPE_OBJECT)
-#define NFC_INITIATOR_GET_CLASS(obj) G_TYPE_INSTANCE_GET_CLASS((obj), \
-        THIS_TYPE, NfcInitiatorClass)
+#define PARENT_TYPE G_TYPE_OBJECT
+#define PARENT_CLASS nfc_initiator_parent_class
+#define GET_THIS_CLASS(obj) G_TYPE_INSTANCE_GET_CLASS(obj, THIS_TYPE, \
+        NfcInitiatorClass)
+
+G_DEFINE_ABSTRACT_TYPE(NfcInitiator, nfc_initiator, PARENT_TYPE)
 
 enum nfc_initiator_signal {
     SIGNAL_TRANSMISSION,
@@ -91,7 +91,7 @@ nfc_initiator_do_deactivate(
 {
     /* Caller has checked nfc_initiator_can_deactivate() */
     self->priv->deactivated = TRUE;
-    NFC_INITIATOR_GET_CLASS(self)->deactivate(self);
+    GET_THIS_CLASS(self)->deactivate(self);
 }
 
 /*==========================================================================*
@@ -175,7 +175,7 @@ nfc_transmission_respond(
             self->done = done;
             self->user_data = user_data;
             nfc_transmission_ref(self);
-            if (NFC_INITIATOR_GET_CLASS(owner)->respond(owner, data, len)) {
+            if (GET_THIS_CLASS(owner)->respond(owner, data, len)) {
                 nfc_transmission_unref(self);
                 return TRUE;
             }
@@ -379,7 +379,7 @@ nfc_initiator_gone(
 {
     if (G_LIKELY(self) && self->present) {
         self->present = FALSE;
-        NFC_INITIATOR_GET_CLASS(self)->gone(self);
+        GET_THIS_CLASS(self)->gone(self);
     }
 }
 

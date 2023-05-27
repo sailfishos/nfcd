@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -29,8 +29,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
-
-#define GLIB_DISABLE_DEPRECATION_WARNINGS
 
 #include "nfc_adapter_p.h"
 #include "nfc_adapter_impl.h"
@@ -72,9 +70,13 @@ struct nfc_adapter_priv {
     gboolean power_pending;
 };
 
+#define THIS(obj) NFC_ADAPTER(obj)
+#define THIS_TYPE NFC_TYPE_ADAPTER
+#define PARENT_CLASS nfc_adapter_parent_class
+#define GET_THIS_CLASS(obj) G_TYPE_INSTANCE_GET_CLASS(obj, THIS_TYPE, \
+        NfcAdapterClass)
+
 G_DEFINE_ABSTRACT_TYPE(NfcAdapter, nfc_adapter, G_TYPE_OBJECT)
-#define NFC_ADAPTER_GET_CLASS(obj) G_TYPE_INSTANCE_GET_CLASS((obj), \
-        NFC_TYPE_ADAPTER, NfcAdapterClass)
 
 enum nfc_adapter_signal {
     SIGNAL_TAG_ADDED,
@@ -258,7 +260,7 @@ void
 nfc_adapter_update_power(
     NfcAdapter* self)
 {
-    NfcAdapterClass* c = NFC_ADAPTER_GET_CLASS(self);
+    NfcAdapterClass* c = GET_THIS_CLASS(self);
     NfcAdapterPriv* priv = self->priv;
     const gboolean on = (self->power_requested && self->enabled);
 
@@ -295,7 +297,7 @@ nfc_adapter_update_mode(
     NfcAdapter* self)
 {
     NfcAdapterPriv* priv = self->priv;
-    NfcAdapterClass* c = NFC_ADAPTER_GET_CLASS(self);
+    NfcAdapterClass* c = GET_THIS_CLASS(self);
 
     if (!self->powered) {
         /* Assume no polling when power is off */
@@ -364,7 +366,7 @@ nfc_adapter_tag_gone(
     NfcTag* tag,
     void* adapter)
 {
-    nfc_adapter_remove_tag(NFC_ADAPTER(adapter), tag->name);
+    nfc_adapter_remove_tag(THIS(adapter), tag->name);
 }
 
 static
@@ -415,7 +417,7 @@ nfc_adapter_peer_gone(
     NfcPeer* peer,
     void* adapter)
 {
-    nfc_adapter_remove_peer(NFC_ADAPTER(adapter), peer->name);
+    nfc_adapter_remove_peer(THIS(adapter), peer->name);
 }
 
 static
@@ -497,7 +499,7 @@ nfc_adapter_ref(
     NfcAdapter* self)
 {
     if (G_LIKELY(self)) {
-        g_object_ref(NFC_ADAPTER(self));
+        g_object_ref(THIS(self));
     }
     return self;
 }
@@ -507,7 +509,7 @@ nfc_adapter_unref(
     NfcAdapter* self)
 {
     if (G_LIKELY(self)) {
-        g_object_unref(NFC_ADAPTER(self));
+        g_object_unref(THIS(self));
     }
 }
 
@@ -986,7 +988,7 @@ void
 nfc_adapter_init(
     NfcAdapter* self)
 {
-    NfcAdapterPriv* priv = G_TYPE_INSTANCE_GET_PRIVATE(self, NFC_TYPE_ADAPTER,
+    NfcAdapterPriv* priv = G_TYPE_INSTANCE_GET_PRIVATE(self, THIS_TYPE,
         NfcAdapterPriv);
 
     self->priv = priv;
@@ -1003,8 +1005,8 @@ void
 nfc_adapter_dispose(
     GObject* object)
 {
-    NfcAdapter* self = NFC_ADAPTER(object);
-    NfcAdapterClass* c = NFC_ADAPTER_GET_CLASS(object);
+    NfcAdapter* self = THIS(object);
+    NfcAdapterClass* c = GET_THIS_CLASS(object);
     NfcAdapterPriv* priv = self->priv;
 
     if (priv->mode_pending) {
@@ -1016,7 +1018,7 @@ nfc_adapter_dispose(
         c->cancel_power_request(self);
     }
     g_hash_table_remove_all(priv->tag_table);
-    G_OBJECT_CLASS(nfc_adapter_parent_class)->dispose(object);
+    G_OBJECT_CLASS(PARENT_CLASS)->dispose(object);
 }
 
 static
@@ -1024,7 +1026,7 @@ void
 nfc_adapter_finalize(
     GObject* object)
 {
-    NfcAdapter* self = NFC_ADAPTER(object);
+    NfcAdapter* self = THIS(object);
     NfcAdapterPriv* priv = self->priv;
 
     nfc_peer_services_unref(priv->services);
@@ -1033,7 +1035,7 @@ nfc_adapter_finalize(
     g_free(priv->peers);
     g_free(self->tags);
     g_free(priv->name);
-    G_OBJECT_CLASS(nfc_adapter_parent_class)->finalize(object);
+    G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }
 
 static

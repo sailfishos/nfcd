@@ -8,7 +8,7 @@ URL: https://github.com/sailfishos/nfcd
 Source: %{name}-%{version}.tar.bz2
 
 %define libglibutil_version 1.0.52
-%define glib_version 2.32
+%define glib_version 2.38
 
 BuildRequires: pkgconfig
 BuildRequires: pkgconfig(glib-2.0) >= %{glib_version}

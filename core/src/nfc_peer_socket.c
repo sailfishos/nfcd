@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2020-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2020 Jolla Ltd.
- * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -29,8 +29,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
-
-#define GLIB_DISABLE_DEPRECATION_WARNINGS
 
 #include "nfc_llc.h"
 #include "nfc_peer_service.h"
@@ -64,7 +62,7 @@ struct nfc_peer_socket_priv {
 #define THIS(obj) NFC_PEER_SOCKET(obj)
 #define THIS_TYPE NFC_TYPE_PEER_SOCKET
 #define PARENT_TYPE NFC_TYPE_PEER_CONNECTION
-#define PARENT_CLASS (nfc_peer_socket_parent_class)
+#define PARENT_CLASS nfc_peer_socket_parent_class
 
 G_DEFINE_TYPE(NfcPeerSocket, nfc_peer_socket, PARENT_TYPE)
 

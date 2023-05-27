@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2019-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2019-2022 Jolla Ltd.
- * Copyright (C) 2019-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,8 +30,6 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define GLIB_DISABLE_DEPRECATION_WARNINGS
-
 #include "nfc_ndef_p.h"
 #include "nfc_log.h"
 #include "nfc_system.h"
@@ -54,8 +52,13 @@ struct nfc_ndef_rec_sp_priv {
     NfcNdefMediaPriv* icon;
 };
 
+#define THIS(obj) NFC_NDEF_REC_SP(obj)
+#define THIS_TYPE NFC_TYPE_NDEF_REC_SP
+#define PARENT_TYPE NFC_TYPE_NDEF_REC
+#define PARENT_CLASS nfc_ndef_rec_sp_parent_class
+
 typedef NfcNdefRecClass NfcNdefRecSpClass;
-G_DEFINE_TYPE(NfcNdefRecSp, nfc_ndef_rec_sp, NFC_TYPE_NDEF_REC)
+G_DEFINE_TYPE(NfcNdefRecSp, nfc_ndef_rec_sp, PARENT_TYPE)
 
 const GUtilData nfc_ndef_rec_type_sp = { (const guint8*) "Sp", 2 };
 
@@ -86,7 +89,7 @@ nfc_ndef_rec_sp_append_well_known(
     const GUtilData* type,
     const GUtilData* data)
 {
-    NfcNdefRec* rec = nfc_ndef_rec_new_well_known(NFC_TYPE_NDEF_REC_T,
+    NfcNdefRec* rec = nfc_ndef_rec_new_well_known(THIS_TYPE,
         NFC_NDEF_RTD_UNKNOWN, type, data);
     nfc_ndef_rec_clear_flags(rec, NFC_NDEF_REC_FLAG_FIRST);
     nfc_ndef_rec_clear_flags(last, NFC_NDEF_REC_FLAG_LAST);
@@ -338,7 +341,7 @@ nfc_ndef_rec_sp_new_from_data(
     GUtilData payload;
 
     if (nfc_ndef_payload(ndef, &payload)) {
-        NfcNdefRecSp* self = g_object_new(NFC_TYPE_NDEF_REC_SP, NULL);
+        NfcNdefRecSp* self = g_object_new(THIS_TYPE, NULL);
         NfcNdefRec* rec = &self->rec;
 
         nfc_ndef_rec_initialize(rec, NFC_NDEF_RTD_SMART_POSTER, ndef);
@@ -369,7 +372,7 @@ nfc_ndef_rec_sp_new(
         memset(&priv, 0, sizeof(priv));
         payload_bytes = nfc_ndef_rec_sp_payload_new(&priv, uri,
             title, lang, type, size, act, icon);
-        self = NFC_NDEF_REC_SP(nfc_ndef_rec_new_well_known(NFC_TYPE_NDEF_REC_SP,
+        self = THIS(nfc_ndef_rec_new_well_known(THIS_TYPE,
             NFC_NDEF_RTD_SMART_POSTER, &nfc_ndef_rec_type_sp,
             gutil_data_from_bytes(&payload, payload_bytes)));
 
@@ -398,7 +401,7 @@ void
 nfc_ndef_rec_sp_init(
     NfcNdefRecSp* self)
 {
-    self->priv = G_TYPE_INSTANCE_GET_PRIVATE(self, NFC_TYPE_NDEF_REC_SP,
+    self->priv = G_TYPE_INSTANCE_GET_PRIVATE(self, THIS_TYPE,
         NfcNdefRecSpPriv);
     self->act = NFC_NDEF_SP_ACT_DEFAULT;
 }
@@ -408,7 +411,7 @@ void
 nfc_ndef_rec_sp_finalize(
     GObject* object)
 {
-    NfcNdefRecSp* self = NFC_NDEF_REC_SP(object);
+    NfcNdefRecSp* self = THIS(object);
     NfcNdefRecSpPriv* priv = self->priv;
     NfcNdefMediaPriv* icon = priv->icon;
 
@@ -421,7 +424,7 @@ nfc_ndef_rec_sp_finalize(
         g_free(icon->data);
         g_slice_free1(sizeof(*icon), icon);
     }
-    G_OBJECT_CLASS(nfc_ndef_rec_sp_parent_class)->finalize(object);
+    G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }
 
 static

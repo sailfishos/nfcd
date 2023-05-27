@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2019-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2019-2020 Jolla Ltd.
- * Copyright (C) 2019-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,8 +30,6 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define GLIB_DISABLE_DEPRECATION_WARNINGS
-
 #include "nfc_ndef_p.h"
 #include "nfc_util.h"
 #include "nfc_system.h"
@@ -46,8 +44,13 @@ struct nfc_ndef_rec_t_priv {
     char* text;
 };
 
+#define THIS(obj) NFC_NDEF_REC_T(obj)
+#define THIS_TYPE NFC_TYPE_NDEF_REC_T
+#define PARENT_TYPE NFC_TYPE_NDEF_REC
+#define PARENT_CLASS (nfc_ndef_rec_t_parent_class)
+
 typedef NfcNdefRecClass NfcNdefRecTClass;
-G_DEFINE_TYPE(NfcNdefRecT, nfc_ndef_rec_t, NFC_TYPE_NDEF_REC)
+G_DEFINE_TYPE(NfcNdefRecT, nfc_ndef_rec_t, PARENT_TYPE)
 
 const GUtilData nfc_ndef_rec_type_t = { (const guint8*) "T", 1 };
 
@@ -182,7 +185,7 @@ nfc_ndef_rec_t_new_from_data(
             }
 
             if (utf8) {
-                NfcNdefRecT* self = g_object_new(NFC_TYPE_NDEF_REC_T, NULL);
+                NfcNdefRecT* self = g_object_new(THIS_TYPE, NULL);
                 NfcNdefRecTPriv* priv = self->priv;
 
                 nfc_ndef_rec_initialize(&self->rec, NFC_NDEF_RTD_TEXT, ndef);
@@ -227,9 +230,9 @@ nfc_ndef_rec_t_new_enc(
         lang ? lang : lang_default, enc);
     if (payload_bytes) {
         GUtilData payload;
-        NfcNdefRecT* self = NFC_NDEF_REC_T(nfc_ndef_rec_new_well_known
-            (NFC_TYPE_NDEF_REC_T, NFC_NDEF_RTD_TEXT, &nfc_ndef_rec_type_t,
-                 gutil_data_from_bytes(&payload, payload_bytes)));
+        NfcNdefRecT* self = THIS(nfc_ndef_rec_new_well_known(THIS_TYPE,
+            NFC_NDEF_RTD_TEXT, &nfc_ndef_rec_type_t,
+            gutil_data_from_bytes(&payload, payload_bytes)));
         NfcNdefRecTPriv* priv = self->priv;
 
         /* Avoid unnecessary allocations */
@@ -292,8 +295,8 @@ nfc_ndef_rec_t_lang_compare(
      * first element comes before the second, or a positive value if
      * the first element comes after the second.
      */
-    NfcNdefRecT* t1 = NFC_NDEF_REC_T(a);
-    NfcNdefRecT* t2 = NFC_NDEF_REC_T(b);
+    NfcNdefRecT* t1 = THIS(a);
+    NfcNdefRecT* t2 = THIS(b);
     const NfcLanguage* system = user_data;
     NFC_LANG_MATCH match1 = nfc_ndef_rec_t_lang_match(t1, system);
     NFC_LANG_MATCH match2 = nfc_ndef_rec_t_lang_match(t2, system);
@@ -357,8 +360,7 @@ void
 nfc_ndef_rec_t_init(
     NfcNdefRecT* self)
 {
-    self->priv = G_TYPE_INSTANCE_GET_PRIVATE(self, NFC_TYPE_NDEF_REC_T,
-        NfcNdefRecTPriv);
+    self->priv = G_TYPE_INSTANCE_GET_PRIVATE(self, THIS_TYPE, NfcNdefRecTPriv);
 }
 
 static
@@ -366,12 +368,12 @@ void
 nfc_ndef_rec_t_finalize(
     GObject* object)
 {
-    NfcNdefRecT* self = NFC_NDEF_REC_T(object);
+    NfcNdefRecT* self = THIS(object);
     NfcNdefRecTPriv* priv = self->priv;
 
     g_free(priv->lang);
     g_free(priv->text);
-    G_OBJECT_CLASS(nfc_ndef_rec_t_parent_class)->finalize(object);
+    G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }
 
 static

@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2020-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2020 Jolla Ltd.
- * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -29,8 +29,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
-
-#define GLIB_DISABLE_DEPRECATION_WARNINGS
 
 #include "nfc_llc.h"
 #include "nfc_llc_param.h"
@@ -62,11 +60,12 @@ struct nfc_peer_connection_priv {
 
 #define THIS(obj) NFC_PEER_CONNECTION(obj)
 #define THIS_TYPE NFC_TYPE_PEER_CONNECTION
-#define PARENT_CLASS (nfc_peer_connection_parent_class)
+#define PARENT_TYPE G_TYPE_OBJECT
+#define PARENT_CLASS nfc_peer_connection_parent_class
+#define GET_THIS_CLASS(obj) G_TYPE_INSTANCE_GET_CLASS(obj, THIS_TYPE, \
+        NfcPeerConnectionClass)
 
-G_DEFINE_ABSTRACT_TYPE(NfcPeerConnection, nfc_peer_connection, G_TYPE_OBJECT)
-#define NFC_PEER_CONNECTION_GET_CLASS(obj) G_TYPE_INSTANCE_GET_CLASS((obj), \
-        THIS_TYPE, NfcPeerConnectionClass)
+G_DEFINE_ABSTRACT_TYPE(NfcPeerConnection, nfc_peer_connection, PARENT_TYPE)
 
 enum nfc_peer_connection_signal {
     SIGNAL_STATE_CHANGED,
@@ -163,7 +162,7 @@ void
 nfc_peer_connection_data_dequeued(
     NfcPeerConnection* self)
 {
-    NFC_PEER_CONNECTION_GET_CLASS(self)->data_dequeued(self);
+    GET_THIS_CLASS(self)->data_dequeued(self);
 }
 
 static
@@ -185,7 +184,7 @@ nfc_peer_connection_disconnect_internal(
     case NFC_LLC_CO_ACCEPTING:
         GDEBUG("Connection %u:%u cancelled", service->sap, self->rsap);
         data_dropped = nfc_peer_connection_drop_queued_data(self);
-        NFC_PEER_CONNECTION_GET_CLASS(self)->accept_cancelled(self);
+        GET_THIS_CLASS(self)->accept_cancelled(self);
         nfc_peer_connection_set_state(self, NFC_LLC_CO_DEAD);
         break;
     case NFC_LLC_CO_ACTIVE:
@@ -427,7 +426,7 @@ void
 nfc_peer_connection_accept(
     NfcPeerConnection* self)
 {
-    NFC_PEER_CONNECTION_GET_CLASS(self)->accept(self);
+    GET_THIS_CLASS(self)->accept(self);
 }
 
 void
@@ -437,7 +436,7 @@ nfc_peer_connection_data_received(
     guint len)
 {
     self->bytes_received += len;
-    NFC_PEER_CONNECTION_GET_CLASS(self)->data_received(self, data, len);
+    GET_THIS_CLASS(self)->data_received(self, data, len);
 }
 
 void
@@ -452,7 +451,7 @@ nfc_peer_connection_set_state(
             nfc_peer_connection_state_name(self->priv, self->state),
             nfc_peer_connection_state_name(self->priv, state));
         self->state = state;
-        NFC_PEER_CONNECTION_GET_CLASS(self)->state_changed(self);
+        GET_THIS_CLASS(self)->state_changed(self);
         nfc_peer_connection_unref(self);
     }
 }

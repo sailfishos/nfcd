@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,8 +30,6 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define GLIB_DISABLE_DEPRECATION_WARNINGS
-
 #include "nfc_ndef_p.h"
 #include "nfc_log.h"
 
@@ -43,8 +41,13 @@ struct nfc_ndef_rec_u_priv {
     char* uri;
 };
 
+#define THIS(obj) NFC_NDEF_REC_U(obj)
+#define THIS_TYPE NFC_TYPE_NDEF_REC_U
+#define PARENT_TYPE NFC_TYPE_NDEF_REC
+#define PARENT_CLASS nfc_ndef_rec_u_parent_class
+
 typedef NfcNdefRecClass NfcNdefRecUClass;
-G_DEFINE_TYPE(NfcNdefRecU, nfc_ndef_rec_u, NFC_TYPE_NDEF_REC)
+G_DEFINE_TYPE(NfcNdefRecU, nfc_ndef_rec_u, PARENT_TYPE)
 
 const GUtilData nfc_ndef_rec_type_u = { (const guint8*) "U", 1 };
 
@@ -159,7 +162,7 @@ nfc_ndef_rec_u_new_from_data(
         char* uri = nfc_ndef_rec_u_parse(&payload);
 
         if (uri) {
-            NfcNdefRecU* self = g_object_new(NFC_TYPE_NDEF_REC_U, NULL);
+            NfcNdefRecU* self = g_object_new(THIS_TYPE, NULL);
             NfcNdefRecUPriv* priv = self->priv;
 
             nfc_ndef_rec_initialize(&self->rec, NFC_NDEF_RTD_URI, ndef);
@@ -177,9 +180,9 @@ nfc_ndef_rec_u_new(
     if (G_LIKELY(uri)) {
         GUtilData payload;
         GBytes* payload_bytes = nfc_ndef_rec_u_build(uri);
-        NfcNdefRecU* self = NFC_NDEF_REC_U(nfc_ndef_rec_new_well_known
-            (NFC_TYPE_NDEF_REC_U, NFC_NDEF_RTD_URI, &nfc_ndef_rec_type_u,
-                 gutil_data_from_bytes(&payload, payload_bytes)));
+        NfcNdefRecU* self = THIS(nfc_ndef_rec_new_well_known(THIS_TYPE,
+            NFC_NDEF_RTD_URI, &nfc_ndef_rec_type_u,
+            gutil_data_from_bytes(&payload, payload_bytes)));
         NfcNdefRecUPriv* priv = self->priv;
 
         self->uri = priv->uri = g_strdup(uri);
@@ -213,8 +216,7 @@ void
 nfc_ndef_rec_u_init(
     NfcNdefRecU* self)
 {
-    self->priv = G_TYPE_INSTANCE_GET_PRIVATE(self, NFC_TYPE_NDEF_REC_U,
-        NfcNdefRecUPriv);
+    self->priv = G_TYPE_INSTANCE_GET_PRIVATE(self, THIS_TYPE, NfcNdefRecUPriv);
 }
 
 static
@@ -222,11 +224,11 @@ void
 nfc_ndef_rec_u_finalize(
     GObject* object)
 {
-    NfcNdefRecU* self = NFC_NDEF_REC_U(object);
+    NfcNdefRecU* self = THIS(object);
     NfcNdefRecUPriv* priv = self->priv;
 
     g_free(priv->uri);
-    G_OBJECT_CLASS(nfc_ndef_rec_u_parent_class)->finalize(object);
+    G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }
 
 static

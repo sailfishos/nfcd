@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
@@ -31,8 +31,6 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define GLIB_DISABLE_DEPRECATION_WARNINGS
-
 #include "nfc_tag_p.h"
 #include "nfc_target_p.h"
 #include "nfc_ndef.h"
@@ -47,9 +45,14 @@ struct nfc_tag_priv {
     NfcParamPoll* param;
 };
 
-G_DEFINE_TYPE(NfcTag, nfc_tag, G_TYPE_OBJECT)
-#define NFC_TAG_GET_CLASS(obj) G_TYPE_INSTANCE_GET_CLASS((obj), \
-        NFC_TYPE_TAG, NfcTagClass)
+#define THIS(obj) NFC_TAG(obj)
+#define THIS_TYPE NFC_TYPE_TAG
+#define PARENT_TYPE G_TYPE_OBJECT
+#define PARENT_CLASS (nfc_tag_parent_class)
+#define GET_THIS_CLASS(obj) G_TYPE_INSTANCE_GET_CLASS(obj, THIS_TYPE, \
+        NfcTagClass)
+
+G_DEFINE_TYPE(NfcTag, nfc_tag, PARENT_TYPE)
 
 enum nfc_tag_signal {
     SIGNAL_INITIALIZED,
@@ -68,10 +71,10 @@ nfc_tag_gone(
     NfcTarget* target,
     void* user_data)
 {
-    NfcTag* self = NFC_TAG(user_data);
+    NfcTag* self = THIS(user_data);
 
     /* NfcTarget makes sure that this signal is only issued once */
-    NFC_TAG_GET_CLASS(self)->gone(self);
+    GET_THIS_CLASS(self)->gone(self);
 }
 
 /*==========================================================================*
@@ -84,7 +87,7 @@ nfc_tag_new(
     const NfcParamPoll* poll)
 {
     if (G_LIKELY(target)) {
-        NfcTag* self = g_object_new(NFC_TYPE_TAG, NULL);
+        NfcTag* self = g_object_new(THIS_TYPE, NULL);
 
         nfc_tag_init_base(self, target, poll);
         return self;
@@ -97,7 +100,7 @@ nfc_tag_ref(
     NfcTag* self)
 {
     if (G_LIKELY(self)) {
-        g_object_ref(NFC_TAG(self));
+        g_object_ref(THIS(self));
     }
     return self;
 }
@@ -107,7 +110,7 @@ nfc_tag_unref(
     NfcTag* self)
 {
     if (G_LIKELY(self)) {
-        g_object_unref(NFC_TAG(self));
+        g_object_unref(THIS(self));
     }
 }
 
@@ -281,7 +284,7 @@ void
 nfc_tag_init(
     NfcTag* self)
 {
-    self->priv = G_TYPE_INSTANCE_GET_PRIVATE(self, NFC_TYPE_TAG, NfcTagPriv);
+    self->priv = G_TYPE_INSTANCE_GET_PRIVATE(self, THIS_TYPE, NfcTagPriv);
 }
 
 static
@@ -289,7 +292,7 @@ void
 nfc_tag_finalize(
     GObject* object)
 {
-    NfcTag* self = NFC_TAG(object);
+    NfcTag* self = THIS(object);
     NfcTagPriv* priv = self->priv;
 
     nfc_target_remove_handler(self->target, priv->gone_id);
@@ -297,7 +300,7 @@ nfc_tag_finalize(
     nfc_ndef_rec_unref(self->ndef);
     g_free(priv->name);
     g_free(priv->param);
-    G_OBJECT_CLASS(nfc_tag_parent_class)->finalize(object);
+    G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }
 
 static

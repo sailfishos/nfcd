@@ -261,6 +261,8 @@ LD = $(CC)
 WARNINGS = -Wall -Wstrict-aliasing -Wunused-result
 INCLUDES = -I. -I../core/include -I$(GEN_DIR)
 FULL_CFLAGS = -fPIC $(CFLAGS) $(DEFINES) $(WARNINGS) $(INCLUDES) \
+  -DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_2_38 \
+  -DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_MAX_ALLOWED \
   -MMD -MP $(shell pkg-config --cflags $(PKGS))
 DEBUG_FLAGS = -g
 RELEASE_FLAGS =

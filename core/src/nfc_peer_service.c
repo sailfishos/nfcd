@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2020-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2020-2021 Jolla Ltd.
- * Copyright (C) 2020-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,8 +30,6 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define GLIB_DISABLE_DEPRECATION_WARNINGS
-
 #include "nfc_peer_connection_p.h"
 #include "nfc_peer_service_impl.h"
 #include "nfc_peer_service_p.h"
@@ -47,11 +45,12 @@ struct nfc_peer_service_priv {
 
 #define THIS(obj) NFC_PEER_SERVICE(obj)
 #define THIS_TYPE NFC_TYPE_PEER_SERVICE
-#define PARENT_CLASS (nfc_peer_service_parent_class)
+#define PARENT_TYPE G_TYPE_OBJECT
+#define PARENT_CLASS nfc_peer_service_parent_class
+#define GET_THIS_CLASS(obj) G_TYPE_INSTANCE_GET_CLASS(obj, THIS_TYPE, \
+        NfcPeerServiceClass)
 
-G_DEFINE_ABSTRACT_TYPE(NfcPeerService, nfc_peer_service, G_TYPE_OBJECT)
-#define NFC_PEER_SERVICE_GET_CLASS(obj) G_TYPE_INSTANCE_GET_CLASS((obj), \
-        THIS_TYPE, NfcPeerServiceClass)
+G_DEFINE_ABSTRACT_TYPE(NfcPeerService, nfc_peer_service, PARENT_TYPE)
 
 /*==========================================================================*
  * Interface
@@ -135,8 +134,8 @@ nfc_peer_service_new_connect(
     guint8 rsap,
     const char* name)
 {
-    NfcPeerConnection* pc = NFC_PEER_SERVICE_GET_CLASS(self)->
-        new_connect(self, rsap, name);
+    NfcPeerConnection* pc = GET_THIS_CLASS(self)->new_connect(self,
+        rsap, name);
 
     /* Make sure the state is right */
     nfc_peer_connection_set_state(pc, NFC_LLC_CO_CONNECTING);
@@ -148,8 +147,7 @@ nfc_peer_service_new_accept(
     NfcPeerService* self,
     guint8 rsap)
 {
-    NfcPeerConnection* pc = NFC_PEER_SERVICE_GET_CLASS(self)->
-        new_accept(self, rsap);
+    NfcPeerConnection* pc = GET_THIS_CLASS(self)->new_accept(self, rsap);
 
     /* Make sure the state is right */
     nfc_peer_connection_set_state(pc, NFC_LLC_CO_ACCEPTING);
@@ -208,7 +206,7 @@ nfc_peer_service_peer_arrived(
     NfcPeerService* self,
     NfcPeer* peer)
 {
-    NFC_PEER_SERVICE_GET_CLASS(self)->peer_arrived(self, peer);
+    GET_THIS_CLASS(self)->peer_arrived(self, peer);
 }
 
 void
@@ -216,7 +214,7 @@ nfc_peer_service_peer_left(
     NfcPeerService* self,
     NfcPeer* peer)
 {
-    NFC_PEER_SERVICE_GET_CLASS(self)->peer_left(self, peer);
+    GET_THIS_CLASS(self)->peer_left(self, peer);
 }
 
 void
@@ -226,7 +224,7 @@ nfc_peer_service_datagram_received(
     const void* data,
     guint len)
 {
-    NFC_PEER_SERVICE_GET_CLASS(self)->datagram_received(self, ssap, data, len);
+    GET_THIS_CLASS(self)->datagram_received(self, ssap, data, len);
 }
 
 /*==========================================================================*

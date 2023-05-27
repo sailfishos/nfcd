@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2020-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2020 Jolla Ltd.
- * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -29,8 +29,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
-
-#define GLIB_DISABLE_DEPRECATION_WARNINGS
 
 #include "nfc_peer_p.h"
 #include "nfc_llc.h"
@@ -78,11 +76,11 @@ struct nfc_peer_priv {
 #define THIS(obj) NFC_PEER(obj)
 #define THIS_TYPE NFC_TYPE_PEER
 #define PARENT_TYPE G_TYPE_OBJECT
-#define PARENT_CLASS (nfc_peer_parent_class)
-G_DEFINE_ABSTRACT_TYPE(NfcPeer, nfc_peer, PARENT_TYPE)
+#define PARENT_CLASS nfc_peer_parent_class
+#define GET_THIS_CLASS(obj) G_TYPE_INSTANCE_GET_CLASS(obj, NFC_TYPE_PEER, \
+        NfcPeerClass)
 
-#define NFC_PEER_GET_CLASS(obj) G_TYPE_INSTANCE_GET_CLASS((obj), \
-        NFC_TYPE_PEER, NfcPeerClass)
+G_DEFINE_ABSTRACT_TYPE(NfcPeer, nfc_peer, PARENT_TYPE)
 
 enum nfc_peer_signal {
     SIGNAL_WKS_CHANGED,
@@ -313,7 +311,7 @@ nfc_peer_deactivate(
     NfcPeer* self)
 {
     if (G_LIKELY(self)) {
-        NFC_PEER_GET_CLASS(self)->deactivate(self);
+        GET_THIS_CLASS(self)->deactivate(self);
     }
 }
 
@@ -532,7 +530,7 @@ nfc_peer_gone(
     NfcPeer* self)
 {
     nfc_peer_ref(self);
-    NFC_PEER_GET_CLASS(self)->gone(self);
+    GET_THIS_CLASS(self)->gone(self);
     nfc_peer_unref(self);
 }
 

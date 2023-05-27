@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
@@ -30,8 +30,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
-
-#define GLIB_DISABLE_DEPRECATION_WARNINGS
 
 #include "nfc_target_p.h"
 #include "nfc_target_impl.h"
@@ -110,9 +108,14 @@ struct nfc_target_priv {
     gboolean reactivating;
 };
 
-G_DEFINE_ABSTRACT_TYPE(NfcTarget, nfc_target, G_TYPE_OBJECT)
-#define NFC_TARGET_GET_CLASS(obj) G_TYPE_INSTANCE_GET_CLASS((obj), \
-        NFC_TYPE_TARGET, NfcTargetClass)
+#define THIS(obj) NFC_TARGET(obj)
+#define THIS_TYPE NFC_TYPE_TARGET
+#define PARENT_TYPE G_TYPE_OBJECT
+#define PARENT_CLASS nfc_target_parent_class
+#define GET_THIS_CLASS(obj) G_TYPE_INSTANCE_GET_CLASS(obj, THIS_TYPE, \
+        NfcTargetClass)
+
+G_DEFINE_ABSTRACT_TYPE(NfcTarget, nfc_target, PARENT_TYPE)
 
 enum nfc_target_signal {
     SIGNAL_SEQUENCE,
@@ -156,7 +159,7 @@ nfc_target_transmit_request_submit(
     NfcTarget* target = req->target;
     NfcTargetTransmitRequest* tx = nfc_target_transmit_request_cast(req);
 
-    return NFC_TARGET_GET_CLASS(target)->transmit(target, tx->data, tx->len);
+    return GET_THIS_CLASS(target)->transmit(target, tx->data, tx->len);
 }
 
 static
@@ -164,7 +167,7 @@ void
 nfc_target_transmit_request_cancel(
     NfcTargetRequest* req)
 {
-    NFC_TARGET_GET_CLASS(req->target)->cancel_transmit(req->target);
+    GET_THIS_CLASS(req->target)->cancel_transmit(req->target);
 }
 
 static
@@ -296,7 +299,7 @@ nfc_target_reactivate_request_submit(
 {
     NfcTarget* target = req->target;
 
-    if (NFC_TARGET_GET_CLASS(target)->reactivate(target)) {
+    if (GET_THIS_CLASS(target)->reactivate(target)) {
         NfcTargetPriv* priv = target->priv;
 
         GASSERT(!priv->reactivating);
@@ -370,7 +373,7 @@ nfc_target_reactivate_request_timed_out(
     NfcTargetRequest* req)
 {
     nfc_target_reactivate_request_done(req, NFC_REACTIVATE_STATUS_TIMEOUT);
-    NFC_TARGET_GET_CLASS(req->target)->deactivate(req->target);
+    GET_THIS_CLASS(req->target)->deactivate(req->target);
 }
 
 static
@@ -519,7 +522,7 @@ nfc_target_set_sequence(
     if (self->sequence != seq) {
         self->sequence = seq;
         nfc_target_sequence_ref(seq);
-        NFC_TARGET_GET_CLASS(self)->sequence_changed(self);
+        GET_THIS_CLASS(self)->sequence_changed(self);
         nfc_target_sequence_unref(seq);
     }
 }
@@ -744,7 +747,7 @@ gboolean
 nfc_target_next_transmit(
     gpointer user_data)
 {
-    NfcTarget* self = NFC_TARGET(user_data);
+    NfcTarget* self = THIS(user_data);
     NfcTargetPriv* priv = self->priv;
 
     priv->continue_id = 0;
@@ -773,7 +776,7 @@ nfc_target_ref(
     NfcTarget* self)
 {
     if (G_LIKELY(self)) {
-        g_object_ref(NFC_TARGET(self));
+        g_object_ref(THIS(self));
     }
     return self;
 }
@@ -783,7 +786,7 @@ nfc_target_unref(
     NfcTarget* self)
 {
     if (G_LIKELY(self)) {
-        g_object_unref(NFC_TARGET(self));
+        g_object_unref(THIS(self));
     }
 }
 
@@ -941,7 +944,7 @@ nfc_target_deactivate(
     NfcTarget* self)
 {
     if (G_LIKELY(self) && self->present) {
-        NFC_TARGET_GET_CLASS(self)->deactivate(self);
+        GET_THIS_CLASS(self)->deactivate(self);
     }
 }
 
@@ -950,7 +953,7 @@ nfc_target_can_reactivate(
     NfcTarget* self)
 {
     return G_LIKELY(self) && !self->priv->reactivating &&
-        NFC_TARGET_GET_CLASS(self)->reactivate;
+        GET_THIS_CLASS(self)->reactivate;
 }
 
 gboolean
@@ -963,7 +966,7 @@ nfc_target_reactivate(
 {
     if (G_LIKELY(self)) {
         NfcTargetPriv* priv = self->priv;
-        NfcTargetClass* klass = NFC_TARGET_GET_CLASS(self);
+        NfcTargetClass* klass = GET_THIS_CLASS(self);
 
         if (!priv->reactivating && klass->reactivate) {
             NfcTargetRequest* req = nfc_target_reactivate_request_new(self,
@@ -1083,7 +1086,7 @@ nfc_target_gone(
 {
     if (G_LIKELY(self) && self->present) {
         self->present = FALSE;
-        NFC_TARGET_GET_CLASS(self)->gone(self);
+        GET_THIS_CLASS(self)->gone(self);
     }
 }
 
@@ -1129,7 +1132,7 @@ void
 nfc_target_init(
     NfcTarget* self)
 {
-    NfcTargetPriv* priv = G_TYPE_INSTANCE_GET_PRIVATE(self, NFC_TYPE_TARGET,
+    NfcTargetPriv* priv = G_TYPE_INSTANCE_GET_PRIVATE(self, THIS_TYPE,
         NfcTargetPriv);
 
     /* When target is created, it must be present, right? */
@@ -1144,7 +1147,7 @@ void
 nfc_target_dispose(
     GObject* object)
 {
-    NfcTarget* self = NFC_TARGET(object);
+    NfcTarget* self = THIS(object);
     NfcTargetPriv* priv = self->priv;
     NfcTargetRequestQueue* queue = &priv->req_queue;
 
@@ -1169,7 +1172,7 @@ nfc_target_dispose(
         req->next = NULL;
         nfc_target_fail_request(self, req);
     }
-    G_OBJECT_CLASS(nfc_target_parent_class)->dispose(object);
+    G_OBJECT_CLASS(PARENT_CLASS)->dispose(object);
 }
 
 static
@@ -1177,7 +1180,7 @@ void
 nfc_target_finalize(
     GObject* object)
 {
-    NfcTarget* self = NFC_TARGET(object);
+    NfcTarget* self = THIS(object);
     NfcTargetPriv* priv = self->priv;
     NfcTargetSequenceQueue* queue = &priv->seq_queue;
     NfcTargetSequence* seq = queue->first;
@@ -1194,7 +1197,7 @@ nfc_target_finalize(
         seq = next;
     }
     queue->first = queue->last = NULL;
-    G_OBJECT_CLASS(nfc_target_parent_class)->finalize(object);
+    G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }
 
 static

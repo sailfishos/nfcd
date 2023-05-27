@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -29,8 +29,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
-
-#define GLIB_DISABLE_DEPRECATION_WARNINGS
 
 #include "nfc_manager_p.h"
 #include "internal/nfc_manager_i.h"
@@ -67,8 +65,13 @@ struct nfc_manager_priv {
     NfcModeRequest* mode_requests;
 };
 
+#define THIS(obj) NFC_MANAGER(obj)
+#define THIS_TYPE NFC_TYPE_MANAGER
+#define PARENT_TYPE G_TYPE_OBJECT
+#define PARENT_CLASS nfc_manager_parent_class
+
 typedef GObjectClass NfcManagerClass;
-G_DEFINE_TYPE(NfcManager, nfc_manager, G_TYPE_OBJECT)
+G_DEFINE_TYPE(NfcManager, nfc_manager, PARENT_TYPE)
 
 enum nfc_manager_signal {
     SIGNAL_ADAPTER_ADDED,
@@ -286,7 +289,7 @@ nfc_manager_ref(
     NfcManager* self)
 {
     if (G_LIKELY(self)) {
-        g_object_ref(NFC_MANAGER(self));
+        g_object_ref(THIS(self));
     }
     return self;
 }
@@ -296,7 +299,7 @@ nfc_manager_unref(
     NfcManager* self)
 {
     if (G_LIKELY(self)) {
-        g_object_unref(NFC_MANAGER(self));
+        g_object_unref(THIS(self));
     }
 }
 
@@ -626,7 +629,7 @@ NfcManager*
 nfc_manager_new(
     const NfcPluginsInfo* pi)
 {
-    NfcManager* self = g_object_new(NFC_TYPE_MANAGER, NULL);
+    NfcManager* self = g_object_new(THIS_TYPE, NULL);
     NfcManagerPriv* priv = self->priv;
 
     priv->plugins = nfc_plugins_new(pi);
@@ -654,7 +657,7 @@ void
 nfc_manager_init(
     NfcManager* self)
 {
-    NfcManagerPriv* priv = G_TYPE_INSTANCE_GET_PRIVATE(self, NFC_TYPE_MANAGER,
+    NfcManagerPriv* priv = G_TYPE_INSTANCE_GET_PRIVATE(self, THIS_TYPE,
         NfcManagerPriv);
 
     priv->services = nfc_peer_services_new();
@@ -673,7 +676,7 @@ void
 nfc_manager_finalize(
     GObject* object)
 {
-    NfcManager* self = NFC_MANAGER(object);
+    NfcManager* self = THIS(object);
     NfcManagerPriv* priv = self->priv;
 
     nfc_manager_release_p2p_mode_request(self);

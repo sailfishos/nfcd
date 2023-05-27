@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,8 +30,6 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define GLIB_DISABLE_DEPRECATION_WARNINGS
-
 #include "nfc_ndef_p.h"
 #include "nfc_util.h"
 #include "nfc_tlv.h"
@@ -43,7 +41,12 @@ struct nfc_ndef_rec_priv {
     guint8* data;
 };
 
-G_DEFINE_TYPE(NfcNdefRec, nfc_ndef_rec, G_TYPE_OBJECT)
+#define THIS(obj) NFC_NDEF_REC(obj)
+#define THIS_TYPE NFC_TYPE_NDEF_REC
+#define PARENT_TYPE G_TYPE_OBJECT
+#define PARENT_CLASS (nfc_ndef_rec_parent_class)
+
+G_DEFINE_TYPE(NfcNdefRec, nfc_ndef_rec, PARENT_TYPE)
 
 static
 NfcNdefRec*
@@ -64,7 +67,7 @@ nfc_ndef_rec_alloc(
                 if (uri_rec) {
                     /* URI Record */
                     GDEBUG("URI Record: %s", uri_rec->uri);
-                    return NFC_NDEF_REC(uri_rec);
+                    return THIS(uri_rec);
                 }
             } else if (gutil_data_equal(&type, &nfc_ndef_rec_type_t)) {
                 NfcNdefRecT* text_rec = nfc_ndef_rec_t_new_from_data(ndef);
@@ -74,7 +77,7 @@ nfc_ndef_rec_alloc(
                     GVERBOSE("Locale: %s", nfc_system_locale());
                     GVERBOSE("Language: %s", text_rec->lang);
                     GDEBUG("Text Record: %s", text_rec->text);
-                    return NFC_NDEF_REC(text_rec);
+                    return THIS(text_rec);
                 }
             } else if (gutil_data_equal(&type, &nfc_ndef_rec_type_sp)) {
                 NfcNdefRecSp* sp_rec = nfc_ndef_rec_sp_new_from_data(ndef);
@@ -82,17 +85,17 @@ nfc_ndef_rec_alloc(
                 if (sp_rec) {
                     /* SmartPoster Record */
                     GVERBOSE("SmartPoster URI: %s", sp_rec->uri);
-                    return NFC_NDEF_REC(sp_rec);
+                    return THIS(sp_rec);
                 }
             }
         }
 
         /* Generic record */
-        return nfc_ndef_rec_initialize(g_object_new(NFC_TYPE_NDEF_REC, NULL),
+        return nfc_ndef_rec_initialize(g_object_new(THIS_TYPE, NULL),
             NFC_NDEF_RTD_UNKNOWN, ndef);
     } else {
         /* Special case - Empty NDEF */
-        return g_object_new(NFC_TYPE_NDEF_REC, NULL);
+        return g_object_new(THIS_TYPE, NULL);
     }
 }
 
@@ -260,7 +263,7 @@ nfc_ndef_rec_ref(
     NfcNdefRec* self)
 {
     if (G_LIKELY(self)) {
-        g_object_ref(NFC_NDEF_REC(self));
+        g_object_ref(THIS(self));
     }
     return self;
 }
@@ -270,7 +273,7 @@ nfc_ndef_rec_unref(
     NfcNdefRec* self)
 {
     if (G_LIKELY(self)) {
-        g_object_unref(NFC_NDEF_REC(self));
+        g_object_unref(THIS(self));
     }
 }
 
@@ -437,8 +440,8 @@ nfc_ndef_rec_new_media(
     const GUtilData* type,
     const GUtilData* payload)
 {
-    return nfc_ndef_rec_new_from_data(NFC_TYPE_NDEF_REC,
-        NFC_NDEF_TNF_MEDIA_TYPE, NFC_NDEF_RTD_UNKNOWN, type, payload);
+    return nfc_ndef_rec_new_from_data(THIS_TYPE, NFC_NDEF_TNF_MEDIA_TYPE,
+        NFC_NDEF_RTD_UNKNOWN, type, payload);
 }
 
 NfcNdefRec*
@@ -498,8 +501,7 @@ void
 nfc_ndef_rec_init(
     NfcNdefRec* self)
 {
-    self->priv = G_TYPE_INSTANCE_GET_PRIVATE(self, NFC_TYPE_NDEF_REC,
-        NfcNdefRecPriv);
+    self->priv = G_TYPE_INSTANCE_GET_PRIVATE(self, THIS_TYPE, NfcNdefRecPriv);
 }
 
 static
@@ -507,12 +509,12 @@ void
 nfc_ndef_rec_finalize(
     GObject* object)
 {
-    NfcNdefRec* self = NFC_NDEF_REC(object);
+    NfcNdefRec* self = THIS(object);
     NfcNdefRecPriv* priv = self->priv;
 
     g_free(priv->data);
     nfc_ndef_rec_unref(self->next);
-    G_OBJECT_CLASS(nfc_ndef_rec_parent_class)->finalize(object);
+    G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }
 
 static

@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -30,8 +30,6 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define GLIB_DISABLE_DEPRECATION_WARNINGS
-
 #include "nfc_plugin_p.h"
 #include "nfc_plugin_impl.h"
 
@@ -39,10 +37,14 @@ struct nfc_plugin_priv {
     gboolean started;
 };
 
-G_DEFINE_ABSTRACT_TYPE(NfcPlugin, nfc_plugin, G_TYPE_OBJECT)
-#define NFC_PLUGIN_GET_CLASS(obj) \
-        G_TYPE_INSTANCE_GET_CLASS((obj), NFC_TYPE_PLUGIN, \
+#define THIS(obj) NFC_PLUGIN(obj)
+#define THIS_TYPE NFC_TYPE_PLUGIN
+#define PARENT_TYPE G_TYPE_OBJECT
+#define PARENT_CLASS nfc_plugin_parent_class
+#define GET_THIS_CLASS(obj) G_TYPE_INSTANCE_GET_CLASS(obj, THIS_TYPE, \
         NfcPluginClass)
+
+G_DEFINE_ABSTRACT_TYPE(NfcPlugin, nfc_plugin, PARENT_TYPE)
 
 /*==========================================================================*
  * Interface
@@ -53,7 +55,7 @@ nfc_plugin_ref(
     NfcPlugin* self)
 {
     if (G_LIKELY(self)) {
-        g_object_ref(NFC_PLUGIN(self));
+        g_object_ref(THIS(self));
     }
     return self;
 }
@@ -63,7 +65,7 @@ nfc_plugin_unref(
     NfcPlugin* self)
 {
     if (G_LIKELY(self)) {
-        g_object_unref(NFC_PLUGIN(self));
+        g_object_unref(THIS(self));
     }
 }
 
@@ -83,7 +85,7 @@ nfc_plugin_start(
     if (priv->started) {
         /* Already started */
         return TRUE;
-    } else if (NFC_PLUGIN_GET_CLASS(self)->start(self, manager)) {
+    } else if (GET_THIS_CLASS(self)->start(self, manager)) {
         /* Started successfully */
         priv->started = TRUE;
         return TRUE;
@@ -101,7 +103,7 @@ nfc_plugin_stop(
 
     /* Only stop if started */
     if (priv->started) {
-        NFC_PLUGIN_GET_CLASS(self)->stop(self);
+        GET_THIS_CLASS(self)->stop(self);
         priv->started = FALSE;
     }
 }
@@ -111,7 +113,7 @@ nfc_plugin_started(
     NfcPlugin* self)
 {
     /* Caller checks plugin pointer for NULL */
-    NFC_PLUGIN_GET_CLASS(self)->started(self);
+    GET_THIS_CLASS(self)->started(self);
 }
 
 /*==========================================================================*
@@ -139,8 +141,7 @@ void
 nfc_plugin_init(
     NfcPlugin* self)
 {
-    self->priv = G_TYPE_INSTANCE_GET_PRIVATE(self, NFC_TYPE_PLUGIN,
-        NfcPluginPriv);
+    self->priv = G_TYPE_INSTANCE_GET_PRIVATE(self, THIS_TYPE, NfcPluginPriv);
 }
 
 static
@@ -148,10 +149,10 @@ void
 nfc_plugin_dispose(
     GObject* object)
 {
-    NfcPlugin* self = NFC_PLUGIN(object);
+    NfcPlugin* self = THIS(object);
 
     nfc_plugin_stop(self);
-    G_OBJECT_CLASS(nfc_plugin_parent_class)->dispose(object);
+    G_OBJECT_CLASS(PARENT_CLASS)->dispose(object);
 }
 
 static

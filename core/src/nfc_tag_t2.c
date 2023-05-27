@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2020 Open Mobile Platform LLC.
  *
  * You may use this file under the terms of BSD license as follows:
@@ -30,8 +30,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
-
-#define GLIB_DISABLE_DEPRECATION_WARNINGS
 
 #include "nfc_tag_p.h"
 #include "nfc_tag_t2.h"
@@ -125,7 +123,12 @@ typedef struct nfc_tag_t2_class {
     NfcTagClass parent;
 } NfcTagType2Class;
 
-G_DEFINE_TYPE(NfcTagType2, nfc_tag_t2, NFC_TYPE_TAG)
+#define THIS(obj) NFC_TAG_T2(obj)
+#define THIS_TYPE NFC_TYPE_TAG_T2
+#define PARENT_TYPE NFC_TYPE_TAG
+#define PARENT_CLASS nfc_tag_t2_parent_class
+
+G_DEFINE_TYPE(NfcTagType2, nfc_tag_t2, PARENT_TYPE)
 
 static
 NfcTagType2Sector*
@@ -990,7 +993,7 @@ nfc_tag_t2_new(
     const NfcParamPollA* param)
 {
     if (G_LIKELY(target) && G_LIKELY(param)) {
-        NfcTagType2* self = g_object_new(NFC_TYPE_TAG_T2, NULL);
+        NfcTagType2* self = g_object_new(THIS_TYPE, NULL);
         NfcTagType2Priv* priv = self->priv;
         NfcTag* tag = &self->tag;
         const char* desc = "";
@@ -1389,8 +1392,7 @@ nfc_tag_t2_init(
     NfcTagType2* self)
 {
     self->block_size = NFC_TAG_T2_BLOCK_SIZE;
-    self->priv = G_TYPE_INSTANCE_GET_PRIVATE(self, NFC_TYPE_TAG_T2,
-        NfcTagType2Priv);
+    self->priv = G_TYPE_INSTANCE_GET_PRIVATE(self, THIS_TYPE, NfcTagType2Priv);
 }
 
 static
@@ -1398,7 +1400,7 @@ void
 nfc_tag_t2_finalize(
     GObject* object)
 {
-    NfcTagType2* self = NFC_TAG_T2(object);
+    NfcTagType2* self = THIS(object);
     NfcTagType2Priv* priv = self->priv;
 
     if (priv->reads) {
@@ -1417,7 +1419,7 @@ nfc_tag_t2_finalize(
     }
     nfc_target_cancel_transmit(self->tag.target, priv->init_id);
     nfc_target_sequence_unref(priv->init_seq);
-    G_OBJECT_CLASS(nfc_tag_t2_parent_class)->finalize(object);
+    G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }
 
 static
