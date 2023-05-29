@@ -486,6 +486,7 @@ settings_plugin_set_nfc_enabled(
         GINFO("NFC %s", enabled ? "enabled" : "disabled");
         org_sailfishos_nfc_settings_emit_enabled_changed(self->iface, enabled);
         nfc_manager_set_enabled(self->manager, enabled);
+        nfc_manager_request_power(self->manager, enabled);
     }
 }
 
