@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2020 Jolla Ltd.
- * Copyright (C) 2018-2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -56,7 +56,6 @@ enum {
 
 enum {
     CALL_GET_ALL,
-    CALL_GET_ALL2,
     CALL_GET_INTERFACE_VERSION,
     CALL_GET_ENABLED,
     CALL_GET_POWERED,
@@ -64,6 +63,7 @@ enum {
     CALL_GET_MODE,
     CALL_GET_TARGET_PRESENT,
     CALL_GET_TAGS,
+    CALL_GET_ALL2,
     CALL_GET_PEERS,
     CALL_COUNT
 };
@@ -569,9 +569,6 @@ dbus_service_adapter_new(
     self->call_id[CALL_GET_ALL] =
         g_signal_connect(self->iface, "handle-get-all",
         G_CALLBACK(dbus_service_adapter_handle_get_all), self);
-    self->call_id[CALL_GET_ALL] =
-        g_signal_connect(self->iface, "handle-get-all2",
-        G_CALLBACK(dbus_service_adapter_handle_get_all2), self);
     self->call_id[CALL_GET_INTERFACE_VERSION] =
         g_signal_connect(self->iface, "handle-get-interface-version",
         G_CALLBACK(dbus_service_adapter_handle_get_interface_version), self);
@@ -593,6 +590,9 @@ dbus_service_adapter_new(
     self->call_id[CALL_GET_TAGS] =
         g_signal_connect(self->iface, "handle-get-tags",
         G_CALLBACK(dbus_service_adapter_handle_get_tags), self);
+    self->call_id[CALL_GET_ALL2] =
+        g_signal_connect(self->iface, "handle-get-all2",
+        G_CALLBACK(dbus_service_adapter_handle_get_all2), self);
     self->call_id[CALL_GET_PEERS] =
         g_signal_connect(self->iface, "handle-get-peers",
         G_CALLBACK(dbus_service_adapter_handle_get_peers), self);

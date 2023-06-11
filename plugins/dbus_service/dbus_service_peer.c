@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2020-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2020 Jolla Ltd.
- * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -125,11 +125,10 @@ typedef struct dbus_service_peer_client {
     NfcPeerService service;
 } DBusServicePeerClient;
 
-G_DEFINE_TYPE(DBusServicePeerClient, dbus_service_peer_client, \
-        NFC_TYPE_PEER_SERVICE)
-#define DBUS_SERVICE_TYPE_PEER_CLIENT dbus_service_peer_client_get_type()
-#define DBUS_SERVICE_PEER_CLIENT(obj) (G_TYPE_CHECK_INSTANCE_CAST(obj, \
-        DBUS_SERVICE_TYPE_PEER_CLIENT, DBusServicePeerClient))
+#define PARENT_TYPE NFC_TYPE_PEER_SERVICE
+#define THIS_TYPE dbus_service_peer_client_get_type()
+
+G_DEFINE_TYPE(DBusServicePeerClient, dbus_service_peer_client, PARENT_TYPE)
 
 static
 NfcPeerConnection*
@@ -162,8 +161,7 @@ dbus_service_peer_client_get(
     DBusServicePeerPriv* self)
 {
     if (!self->peer_client) {
-        DBusServicePeerClient* client = g_object_new
-            (DBUS_SERVICE_TYPE_PEER_CLIENT, NULL);
+        DBusServicePeerClient* client = g_object_new(THIS_TYPE, NULL);
 
         self->peer_client = NFC_PEER_SERVICE(client);
         nfc_peer_service_init_base(self->peer_client, NULL);

@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2020-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2020-2021 Jolla Ltd.
- * Copyright (C) 2020-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -37,7 +37,6 @@
 #include <nfc_peer_connection_impl.h>
 #include <nfc_peer_service_impl.h>
 #include <nfc_peer_socket_impl.h>
-#include <nfc_tag.h>
 
 typedef NfcPeerServiceClass DBusServiceLocalObjectClass;
 typedef struct dbus_service_local_object {
@@ -46,7 +45,6 @@ typedef struct dbus_service_local_object {
     char* peer_path;
     char* dbus_name;
     char* obj_path;
-    guint watch_id;
 } DBusServiceLocalObject;
 
 #define DBUS_SERVICE_TYPE_LOCAL_OBJECT (dbus_service_local_object_get_type())
@@ -326,9 +324,6 @@ dbus_service_local_finalize(
 {
     DBusServiceLocalObject* self = DBUS_SERVICE_LOCAL_OBJECT(object);
 
-    if (self->watch_id) {
-        g_bus_unwatch_name(self->watch_id);
-    }
     g_free(self->peer_path);
     g_free(self->obj_path);
     g_free(self->dbus_name);

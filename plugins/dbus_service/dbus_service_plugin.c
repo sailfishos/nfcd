@@ -1,6 +1,6 @@
 /*
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
  * You may use this file under the terms of BSD license as follows:
  *
@@ -93,10 +93,12 @@ struct dbus_service_plugin {
     gulong call_id[CALL_COUNT];
 };
 
-G_DEFINE_TYPE(DBusServicePlugin, dbus_service_plugin, NFC_TYPE_PLUGIN)
-#define DBUS_SERVICE_TYPE_PLUGIN (dbus_service_plugin_get_type())
-#define DBUS_SERVICE_PLUGIN(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
-        DBUS_SERVICE_TYPE_PLUGIN, DBusServicePlugin))
+#define PARENT_TYPE NFC_TYPE_PLUGIN
+#define PARENT_CLASS dbus_service_plugin_parent_class
+#define THIS_TYPE dbus_service_plugin_get_type()
+#define THIS(obj) G_TYPE_CHECK_INSTANCE_CAST(obj, THIS_TYPE, DBusServicePlugin)
+
+G_DEFINE_TYPE(DBusServicePlugin, dbus_service_plugin, PARENT_TYPE)
 
 #define NFC_SERVICE     "org.sailfishos.nfc.daemon"
 #define NFC_DAEMON_PATH "/"
@@ -208,7 +210,7 @@ dbus_service_plugin_client_gone(
     const char* name,
     gpointer plugin)
 {
-    DBusServicePlugin* self = DBUS_SERVICE_PLUGIN(plugin);
+    DBusServicePlugin* self = THIS(plugin);
 
     GDEBUG("Name '%s' has disappeared", name);
     g_hash_table_remove(self->clients, name);
@@ -294,7 +296,7 @@ dbus_service_plugin_event_adapter_added(
     NfcAdapter* adapter,
     void* plugin)
 {
-    DBusServicePlugin* self = DBUS_SERVICE_PLUGIN(plugin);
+    DBusServicePlugin* self = THIS(plugin);
 
     if (self->connection) {
         if (dbus_service_plugin_create_adapter(self, adapter)) {
@@ -310,7 +312,7 @@ dbus_service_plugin_event_adapter_removed(
     NfcAdapter* adapter,
     void* plugin)
 {
-    DBusServicePlugin* self = DBUS_SERVICE_PLUGIN(plugin);
+    DBusServicePlugin* self = THIS(plugin);
 
     if (g_hash_table_remove(self->adapters, (void*)adapter->name)) {
         dbus_service_plugin_adapters_changed(self);
@@ -323,7 +325,7 @@ dbus_service_plugin_event_mode_changed(
     NfcManager* manager,
     void* plugin)
 {
-    DBusServicePlugin* self = DBUS_SERVICE_PLUGIN(plugin);
+    DBusServicePlugin* self = THIS(plugin);
 
     org_sailfishos_nfc_daemon_emit_mode_changed(self->iface,
         self->manager->mode);
@@ -572,7 +574,7 @@ dbus_service_plugin_bus_connected(
     const gchar* name,
     gpointer plugin)
 {
-    DBusServicePlugin* self = DBUS_SERVICE_PLUGIN(plugin);
+    DBusServicePlugin* self = THIS(plugin);
     GError* error = NULL;
 
     if (g_dbus_interface_skeleton_export(G_DBUS_INTERFACE_SKELETON(self->iface),
@@ -609,7 +611,7 @@ dbus_service_plugin_name_lost(
     const gchar* name,
     gpointer plugin)
 {
-    DBusServicePlugin* self = DBUS_SERVICE_PLUGIN(plugin);
+    DBusServicePlugin* self = THIS(plugin);
 
     GERR("'%s' service already running or access denied", name);
     /* Tell daemon to exit */
@@ -626,7 +628,7 @@ dbus_service_plugin_start(
     NfcPlugin* plugin,
     NfcManager* manager)
 {
-    DBusServicePlugin* self = DBUS_SERVICE_PLUGIN(plugin);
+    DBusServicePlugin* self = THIS(plugin);
 
     GVERBOSE("Starting");
     self->manager = nfc_manager_ref(manager);
@@ -689,7 +691,7 @@ void
 dbus_service_plugin_stop(
     NfcPlugin* plugin)
 {
-    DBusServicePlugin* self = DBUS_SERVICE_PLUGIN(plugin);
+    DBusServicePlugin* self = THIS(plugin);
 
     GVERBOSE("Stopping");
     gutil_disconnect_handlers(self->iface, self->call_id, CALL_COUNT);
@@ -744,14 +746,14 @@ void
 dbus_service_plugin_finalize(
     GObject* plugin)
 {
-    DBusServicePlugin* self = DBUS_SERVICE_PLUGIN(plugin);
+    DBusServicePlugin* self = THIS(plugin);
 
     if (self->clients) {
         g_hash_table_destroy(self->clients);
     }
     g_hash_table_destroy(self->adapters);
     gutil_idle_pool_destroy(self->pool);
-    G_OBJECT_CLASS(dbus_service_plugin_parent_class)->finalize(plugin);
+    G_OBJECT_CLASS(PARENT_CLASS)->finalize(plugin);
 }
 
 static
@@ -770,7 +772,7 @@ dbus_service_plugin_create(
     void)
 {
     GDEBUG("Plugin loaded");
-    return g_object_new(DBUS_SERVICE_TYPE_PLUGIN, NULL);
+    return g_object_new(THIS_TYPE, NULL);
 }
 
 NFC_PLUGIN_DEFINE(dbus_service, "org.sailfishos.nfc D-Bus interface",
