@@ -1,6 +1,7 @@
 # -*- Mode: makefile-gmake -*-
 
 .PHONY: debug_plugins_lib release_plugins_lib coverage_plugins_lib
+.DEFAULT_GOAL := all
 
 #
 # Required packages
