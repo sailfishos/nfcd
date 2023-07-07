@@ -606,7 +606,6 @@ nfc_target_free_request(
 static
 void
 nfc_target_fail_request(
-    NfcTarget* self,
     NfcTargetRequest* req)
 {
     const NfcTargetRequestType* rt = req->type;
@@ -735,7 +734,7 @@ nfc_target_submit_next_request(
                 nfc_target_unref(self);
                 return;
             }
-            nfc_target_fail_request(self, req);
+            nfc_target_fail_request(req);
             req = nfc_target_transmit_dequeue_req(self);
         }
         nfc_target_unref(self);
@@ -764,6 +763,32 @@ nfc_target_schedule_next_request(
 
     if (priv->req_queue.first && !priv->continue_id) {
         priv->continue_id = g_idle_add(nfc_target_next_transmit, self);
+    }
+}
+
+static
+void
+nfc_target_fail_requests(
+    NfcTarget* self)
+{
+    NfcTargetPriv* priv = self->priv;
+    NfcTargetRequestQueue* queue = &priv->req_queue;
+
+    if (priv->req_active) {
+        NfcTargetRequest* req = priv->req_active;
+        const NfcTargetRequestType* rt = req->type;
+
+        priv->req_active = NULL;
+        rt->cancel(req);
+        nfc_target_fail_request(req);
+    }
+    while (queue->first) {
+        NfcTargetRequest* req = queue->first;
+
+        if (!(queue->first = req->next)) {
+            queue->last = NULL;
+        }
+        nfc_target_fail_request(req);
     }
 }
 
@@ -1124,6 +1149,7 @@ void
 nfc_target_gone_handler(
     NfcTarget* self)
 {
+    nfc_target_fail_requests(self);
     g_signal_emit(self, nfc_target_signals[SIGNAL_GONE], 0);
 }
 
@@ -1149,29 +1175,12 @@ nfc_target_dispose(
 {
     NfcTarget* self = THIS(object);
     NfcTargetPriv* priv = self->priv;
-    NfcTargetRequestQueue* queue = &priv->req_queue;
 
     if (priv->continue_id) {
         g_source_remove(priv->continue_id);
         priv->continue_id = 0;
     }
-    if (priv->req_active) {
-        NfcTargetRequest* req = priv->req_active;
-        const NfcTargetRequestType* rt = req->type;
-
-        priv->req_active = NULL;
-        rt->cancel(req);
-        nfc_target_fail_request(self, req);
-    }
-    while (queue->first) {
-        NfcTargetRequest* req = queue->first;
-
-        if (!(queue->first = req->next)) {
-            queue->last = NULL;
-        }
-        req->next = NULL;
-        nfc_target_fail_request(self, req);
-    }
+    nfc_target_fail_requests(self);
     G_OBJECT_CLASS(PARENT_CLASS)->dispose(object);
 }
 
