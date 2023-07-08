@@ -207,7 +207,7 @@ $(PKGCONFIG): $(PKGCONFIG_TEMPLATE) $(VERSION_FILE)
 # Install
 #
 
-LIBDIR ?= usr/lib
+LIBDIR ?= $(shell pkg-config --variable=libdir glib-2.0)
 ABS_LIBDIR := $(shell echo /$(LIBDIR) | sed -r 's|/+|/|g')
 
 INSTALL = install

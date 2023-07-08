@@ -42,7 +42,7 @@ BUILD_DIR = build
 DEBUG_BUILD_DIR = $(BUILD_DIR)/debug
 RELEASE_BUILD_DIR = $(BUILD_DIR)/release
 
-LIBDIR ?= usr/lib
+LIBDIR ?= $(shell pkg-config --variable=libdir glib-2.0)
 ABS_LIBDIR := $(shell echo /$(LIBDIR) | sed -r 's|/+|/|g')
 DEFAULT_PLUGIN_DIR := $(ABS_LIBDIR)/nfcd/plugins
 
