@@ -167,7 +167,7 @@ test: test_banner debug
 	@$(DEBUG_EXE)
 
 valgrind: test_banner debug
-	@G_DEBUG=gc-friendly G_SLICE=always-malloc valgrind --tool=memcheck --leak-check=full --show-possibly-lost=no $(DEBUG_EXE)
+	@G_DEBUG=gc-friendly G_SLICE=always-malloc valgrind --tool=memcheck --leak-check=full --num-callers=40 --show-possibly-lost=no $(DEBUG_EXE)
 
 $(GEN_DIR):
 	mkdir -p $@
