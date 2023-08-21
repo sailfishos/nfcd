@@ -100,122 +100,9 @@ static const GUtilData ndef_cc_ef_data = { ndef_cc_ef, sizeof(ndef_cc_ef) };
 #define NDEF_CC_LEN (15)
 #define NDEF_DATA_OFFSET (2)
 
-/* ISO/IEC 7816-4 */
-
-#define ISO_MF (0x3F00)
-
-#define ISO_CLA (0x00) /* Basic channel */
-
-#define ISO_SHORT_FID_MASK (0x1f) /* Short File ID mask */
-
-/* Instruction byte */
-#define ISO_INS_SELECT (0xA4)
-#define ISO_INS_READ_BINARY (0xB0)
-
-/* Selection by file identifier */
-#define ISO_P1_SELECT_BY_ID (0x00)      /* Select MF, DF or EF */
-#define ISO_P1_SELECT_CHILD_DF (0x01)   /* Select child DF */
-#define ISO_P1_SELECT_CHILD_EF (0x02)   /* Select EF under current DF */
-#define ISO_P1_SELECT_PARENT_DF (0x03)  /* Select parent DF of current DF */
-/* Selection by DF name */
-#define ISO_P1_SELECT_DF_BY_NAME (0x04) /* Select by DF name */
-/* Selection by path */
-#define ISO_P1_SELECT_ABS_PATH (0x08)   /* Select from the MF */
-#define ISO_P1_SELECT_REL_PATH (0x09)   /* Select from the current DF */
-
-/* File occurrence */
-#define ISO_P2_SELECT_FILE_FIRST (0x00) /* First or only occurrence */
-#define ISO_P2_SELECT_FILE_LAST (0x01)  /* Last occurrence */
-#define ISO_P2_SELECT_FILE_NEXT (0x02)  /* Next occurrence */
-#define ISO_P2_SELECT_FILE_PREV (0x03)  /* Previous occurrence */
-/* File control information */
-#define ISO_P2_RESPONSE_FCI (0x00)      /* Return FCI template */
-#define ISO_P2_RESPONSE_FCP (0x04)      /* Return FCP template */
-#define ISO_P2_RESPONSE_FMD (0x08)      /* Return FMD template */
-#define ISO_P2_RESPONSE_NONE (0x0C)     /* No response data */
-
 /*==========================================================================*
  * Implementation
  *==========================================================================*/
-
-gboolean
-nfc_tag_t4_build_apdu(
-    GByteArray* buf,
-    guint8 cla,          /* Class byte */
-    guint8 ins,          /* Instruction byte */
-    guint8 p1,           /* Parameter byte 1 */
-    guint8 p2,           /* Parameter byte 2 */
-    guint len,           /* Command data length */
-    const void* data,    /* Command data */
-    guint exp)           /* Expected length */
-{
-    /*
-     * Command APDU encoding options (ISO/IEC 7816-4):
-     *
-     * Case 1:  |CLA|INS|P1|P2|                                n = 4
-     * Case 2s: |CLA|INS|P1|P2|LE|                             n = 5
-     * Case 3s: |CLA|INS|P1|P2|LC|...BODY...|                  n = 6..260
-     * Case 4s: |CLA|INS|P1|P2|LC|...BODY...|LE |              n = 7..261
-     * Case 2e: |CLA|INS|P1|P2|00|LE1|LE2|                     n = 7
-     * Case 3e: |CLA|INS|P1|P2|00|LC1|LC2|...BODY...|          n = 8..65542
-     * Case 4e: |CLA|INS|P1|P2|00|LC1|LC2|...BODY...|LE1|LE2|  n = 10..65544
-     *
-     * LE, LE1, LE2 may be 0x00, 0x00|0x00 (means the maximum, 256 or 65536)
-     * LC must not be 0x00 and LC1|LC2 must not be 0x00|0x00
-     */
-    if (len <= 0xffff && exp <= 0x10000) {
-        g_byte_array_set_size(buf, 4);
-        buf->data[0] = cla;
-        buf->data[1] = ins;
-        buf->data[2] = p1;
-        buf->data[3] = p2;
-        if (len > 0) {
-            if (len <= 0xff) {
-                /* Cases 3s and 4s */
-                guint8 lc = (guint8)len;
-
-                g_byte_array_append(buf, &lc, 1);
-            } else {
-                /* Cases 3e and 4e */
-                guint8 lc[3];
-
-                lc[0] = 0;
-                lc[1] = (guint8)(len >> 8);
-                lc[2] = (guint8)len;
-                g_byte_array_append(buf, lc, sizeof(lc));
-            }
-            g_byte_array_append(buf, data, len);
-        }
-        if (exp > 0) {
-            if (exp <= 0x100 && len <= 0xff) {
-                /* Cases 2s and 4s */
-                guint8 le = (exp == 0x100) ? 0 : ((guint8)exp);
-
-                g_byte_array_append(buf, &le, 1);
-            } else {
-                /* Cases 4e and 2e */
-                guint8 le[2];
-
-                if (exp == 0x10000) {
-                    le[0] = le[1] = 0;
-                } else {
-                    le[0] = (guint8)(exp >> 8);
-                    le[1] = (guint8)exp;
-                }
-                if (!len) {
-                    /* Case 2e */
-                    g_byte_array_set_size(buf, 5);
-                    buf->data[4] = 0;
-                }
-                g_byte_array_append(buf, le, sizeof(le));
-            }
-        }
-        return TRUE;
-    } else {
-        g_byte_array_set_size(buf, 0);
-        return FALSE;
-    }
-}
 
 static
 void
@@ -285,18 +172,20 @@ nfc_isodep_submit(
 {
     NfcTagType4Priv* priv = self->priv;
     GByteArray* buf = priv->buf;
-    const void* bytes;
-    guint len;
+    NfcApdu apdu;
 
+    apdu.cla = cla;
+    apdu.ins = ins;
+    apdu.p1 = p1;
+    apdu.p2 = p2;
+    apdu.le = le;
     if (data) {
-        bytes = data->bytes;
-        len = data->size;
+        apdu.data = *data;
     } else {
-        bytes = NULL;
-        len = 0;
+        memset(&apdu.data, 0, sizeof(apdu.data));
     }
 
-    if (nfc_tag_t4_build_apdu(buf, cla, ins, p1, p2, len, bytes, le)) {
+    if (nfc_apdu_encode(buf, &apdu)) {
         NfcTag* tag = &self->tag;
         NfcIsoDepTx* tx = g_slice_new0(NfcIsoDepTx);
         guint id;

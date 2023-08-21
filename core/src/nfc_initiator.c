@@ -10,23 +10,27 @@
  *
  *  1. Redistributions of source code must retain the above copyright
  *     notice, this list of conditions and the following disclaimer.
+ *
  *  2. Redistributions in binary form must reproduce the above copyright
  *     notice, this list of conditions and the following disclaimer
  *     in the documentation and/or other materials provided with the
  *     distribution.
+ *
  *  3. Neither the names of the copyright holders nor the names of its
  *     contributors may be used to endorse or promote products derived
  *     from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) ARISING
- * IN ANY WAY OUT OF THE USE OR INABILITY TO USE THIS SOFTWARE, EVEN
- * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * The views and conclusions contained in the software and documentation
  * are those of the authors and should not be interpreted as representing
@@ -57,11 +61,13 @@ struct nfc_initiator_priv {
 G_DEFINE_ABSTRACT_TYPE(NfcInitiator, nfc_initiator, PARENT_TYPE)
 
 enum nfc_initiator_signal {
+    SIGNAL_REACTIVATED,
     SIGNAL_TRANSMISSION,
     SIGNAL_GONE,
     SIGNAL_COUNT
 };
 
+#define SIGNAL_REACTIVATED_NAME   "nfc-initiator-reactivated"
 #define SIGNAL_TRANSMISSION_NAME  "nfc-initiator-transmission"
 #define SIGNAL_GONE_NAME          "nfc-initiator-gone"
 
@@ -305,6 +311,16 @@ nfc_initiator_add_gone_handler(
         SIGNAL_GONE_NAME, G_CALLBACK(func), user_data) : 0;
 }
 
+gulong
+nfc_initiator_add_reactivated_handler(
+    NfcInitiator* self,
+    NfcInitiatorFunc func,
+    void* user_data)
+{
+    return (G_LIKELY(self) && G_LIKELY(func)) ? g_signal_connect(self,
+        SIGNAL_REACTIVATED_NAME, G_CALLBACK(func), user_data) : 0;
+}
+
 void
 nfc_initiator_remove_handler(
     NfcInitiator* self,
@@ -457,6 +473,17 @@ nfc_initiator_gone(
     }
 }
 
+void
+nfc_initiator_reactivated(
+    NfcInitiator* self) /* Since 1.2.0 */
+{
+    if (G_LIKELY(self) && self->present) {
+        nfc_initiator_ref(self);
+        g_signal_emit(self, nfc_initiator_signals[SIGNAL_REACTIVATED], 0);
+        nfc_initiator_unref(self);
+    }
+}
+
 /*==========================================================================*
  * Methods
  *==========================================================================*/
@@ -541,6 +568,9 @@ nfc_initiator_class_init(
     klass->deactivate = nfc_initiator_nop;
     klass->gone = nfc_initiator_default_gone;
     G_OBJECT_CLASS(klass)->finalize = nfc_initiator_finalize;
+    nfc_initiator_signals[SIGNAL_REACTIVATED] =
+        g_signal_new(SIGNAL_REACTIVATED_NAME, type, G_SIGNAL_RUN_FIRST, 0,
+            NULL, NULL, NULL, G_TYPE_NONE, 0);
     nfc_initiator_signals[SIGNAL_TRANSMISSION] =
         g_signal_new(SIGNAL_TRANSMISSION_NAME, type, G_SIGNAL_RUN_LAST, 0,
             g_signal_accumulator_true_handled, NULL, NULL,

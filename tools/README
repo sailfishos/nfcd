@@ -25,3 +25,9 @@ ndef-write
 Writes an NDEF record to a writeable Type 2 tag. The tool can
 either format a URI, Text or SmartPoster record by itself, or
 read a pre-formatted one from the file.
+
+ndef-share
+==========
+
+Shares some content over NFC as an NDEF record by emulating a
+Type 4 tag.

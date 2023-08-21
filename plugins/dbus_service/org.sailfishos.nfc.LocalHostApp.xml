@@ -1,0 +1,58 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.sailfishos.nfc.LocalHostApp">
+    <!-- Interface version 1 -->
+    <method name="GetInterfaceVersion">
+      <arg name="version" type="i" direction="out"/>
+    </method>
+    <method name="Start">
+      <arg name="host" type="o" direction="in"/>
+      <!-- Failure is indicated with a D-Bus error -->
+    </method>
+    <method name="Restart">
+      <arg name="host" type="o" direction="in"/>
+      <!-- Failure is indicated with a D-Bus error -->
+    </method>
+    <method name="Stop">
+      <arg name="path" type="o" direction="in"/>
+      <!-- No reply expected -->
+    </method>
+    <method name="ImplicitSelect">
+      <arg name="host" type="o" direction="in"/>
+       <!-- Failure is indicated with a D-Bus error -->
+   </method>
+    <method name="Select">
+      <arg name="host" type="o" direction="in"/>
+      <!-- Failure is indicated with a D-Bus error -->
+    </method>
+    <method name="Deselect">
+      <arg name="path" type="o" direction="in"/>
+      <!-- No reply expected -->
+    </method>
+    <method name="Process">
+      <arg name="host" type="o" direction="in"/>
+      <arg name="CLA" type="y" direction="in"/>
+      <arg name="INS" type="y" direction="in"/>
+      <arg name="P1" type="y" direction="in"/>
+      <arg name="P2" type="y" direction="in"/>
+      <arg name="data" type="ay" direction="in">
+        <annotation name="org.gtk.GDBus.C.ForceGVariant" value="true"/>
+      </arg>
+      <arg name="Le" type="u" direction="in"/>
+      <!-- Failure is indicated with a D-Bus error -->
+      <arg name="response" type="ay" direction="out">
+        <annotation name="org.gtk.GDBus.C.ForceGVariant" value="true"/>
+      </arg>
+      <arg name="SW1" type="y" direction="out"/>
+      <arg name="SW2" type="y" direction="out"/>
+      <!-- Non-zero response_id will result in ResponseStatus call later -->
+      <arg name="response_id" type="u" direction="out"/>
+    </method>
+    <method name="ResponseStatus">
+      <arg name="response_id" type="u" direction="in"/>
+      <arg name="ok" type="b" direction="in"/>
+      <!-- No reply expected -->
+    </method>
+  </interface>
+</node>
