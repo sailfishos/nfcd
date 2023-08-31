@@ -77,7 +77,9 @@ make -C "$TOP_DIR" clean
 for t in $TESTS ; do
     pushd "$TEST_DIR/$t"
     make -j -C "$TEST_DIR/$t" coverage || exit 1
+    # Run the same test with and without debug trace to maximize coverage
     build/coverage/test_$t || exit 1
+    build/coverage/test_$t -v || exit 1
     popd
 done
 
