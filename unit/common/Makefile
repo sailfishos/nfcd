@@ -164,10 +164,10 @@ test_banner:
 	@echo "===========" $(EXE) "=========== "
 
 test: test_banner debug 
-	@$(DEBUG_EXE)
+	@$(DEBUG_EXE) $(TEST_OPTS)
 
 valgrind: test_banner debug
-	@G_DEBUG=gc-friendly G_SLICE=always-malloc valgrind --tool=memcheck --leak-check=full --num-callers=40 --show-possibly-lost=no $(DEBUG_EXE)
+	@G_DEBUG=gc-friendly G_SLICE=always-malloc valgrind --tool=memcheck --leak-check=full --num-callers=40 --show-possibly-lost=no $(DEBUG_EXE) $(TEST_OPTS)
 
 $(GEN_DIR):
 	mkdir -p $@
