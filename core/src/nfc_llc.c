@@ -1,33 +1,36 @@
 /*
+ * Copyright (C) 2020-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2020 Jolla Ltd.
- * Copyright (C) 2020 Slava Monich <slava.monich@jolla.com>
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  *
- *   1. Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *   2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in the
- *      documentation and/or other materials provided with the distribution.
- *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived
- *      from this software without specific prior written permission.
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer
+ *     in the documentation and/or other materials provided with the
+ *     distribution.
+ *  3. Neither the names of the copyright holders nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) ARISING
+ * IN ANY WAY OUT OF THE USE OR INABILITY TO USE THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation
+ * are those of the authors and should not be interpreted as representing
+ * any official policies, either expressed or implied.
  */
 
 #include "nfc_llc.h"
@@ -112,10 +115,12 @@ typedef struct nfc_llc_object {
 } NfcLlcObject;
 
 typedef GObjectClass NfcLlcObjectClass;
+GType nfc_llc_object_get_type(void) NFCD_INTERNAL;
 G_DEFINE_TYPE(NfcLlcObject, nfc_llc_object, G_TYPE_OBJECT)
-#define NFC_TYPE_LLC (nfc_llc_object_get_type())
-#define NFC_LLC(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
-        NFC_TYPE_LLC, NfcLlcObject))
+
+#define THIS(obj) G_TYPE_CHECK_INSTANCE_CAST(obj, THIS_TYPE, NfcLlcObject)
+#define THIS_TYPE nfc_llc_object_get_type()
+#define PARENT_CLASS nfc_llc_object_parent_class
 
 typedef enum nfc_llc_signal {
     SIGNAL_STATE_CHANGED,
@@ -161,7 +166,7 @@ NfcLlcObject*
 nfc_llc_object_cast(
     NfcLlc* llc)
 {
-    return llc ? NFC_LLC(G_CAST(llc,NfcLlcObject,pub)) : NULL;
+    return llc ? THIS(G_CAST(llc,NfcLlcObject,pub)) : NULL;
 }
 
 static
@@ -1320,7 +1325,7 @@ nfc_llc_can_send(
     NfcLlcIo* io,
     gpointer user_data)
 {
-    nfc_llc_send_next_pdu(NFC_LLC(user_data));
+    nfc_llc_send_next_pdu(THIS(user_data));
 }
 
 static
@@ -1330,7 +1335,7 @@ nfc_llc_receive(
     const GUtilData* data,
     gpointer user_data)
 {
-    NfcLlcObject* self = NFC_LLC(user_data);
+    NfcLlcObject* self = THIS(user_data);
     const guint packets_handled = self->packets_handled;
 
     GASSERT(self->pub.state < NFC_LLC_STATE_ERROR);
@@ -1366,7 +1371,7 @@ nfc_llc_error(
     gpointer user_data)
 {
     GDEBUG("LLC transmit failed");
-    nfc_llc_set_state(NFC_LLC(user_data), NFC_LLC_STATE_PEER_LOST);
+    nfc_llc_set_state(THIS(user_data), NFC_LLC_STATE_PEER_LOST);
 }
 
 static
@@ -1385,7 +1390,7 @@ nfc_llc_send_next_pdu(
         if (GLOG_ENABLED(GLOG_LEVEL_DEBUG)) {
             const guint8 dsap = LLCP_GET_DSAP(hdr);
             const guint8 ssap = LLCP_GET_SSAP(hdr);
-        
+
             switch (LLCP_GET_PTYPE(hdr)) {
             case LLCP_PTYPE_SYMM:
                 /* These are actually sent (and logged) by NfcLlcIo */
@@ -1463,7 +1468,7 @@ nfc_llc_new(
     NfcLlc* llc = NULL;
 
     if (G_LIKELY(io)) {
-        NfcLlcObject* self = g_object_new(NFC_TYPE_LLC, NULL);
+        NfcLlcObject* self = g_object_new(THIS_TYPE, NULL);
 
         GDEBUG("Initializing");
         llc = &self->pub;
@@ -1812,7 +1817,7 @@ void
 nfc_llc_object_finalize(
     GObject* object)
 {
-    NfcLlcObject* self = NFC_LLC(object);
+    NfcLlcObject* self = THIS(object);
 
     nfc_llc_abort_all_connections(self);
     nfc_peer_services_unref(self->services);
@@ -1823,7 +1828,7 @@ nfc_llc_object_finalize(
     g_slist_free_full(self->connect_queue, (GDestroyNotify)
         nfc_llc_connect_req_free);
     gutil_idle_pool_destroy(self->pool);
-    G_OBJECT_CLASS(nfc_llc_object_parent_class)->finalize(object);
+    G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }
 
 static
