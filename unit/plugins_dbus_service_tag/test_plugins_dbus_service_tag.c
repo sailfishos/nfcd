@@ -1,34 +1,37 @@
 /*
+ * Copyright (C) 2019-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2019-2022 Jolla Ltd.
- * Copyright (C) 2019-2022 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2020 Open Mobile Platform LLC.
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  *
- *   1. Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *   2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in the
- *      documentation and/or other materials provided with the distribution.
- *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived
- *      from this software without specific prior written permission.
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer
+ *     in the documentation and/or other materials provided with the
+ *     distribution.
+ *  3. Neither the names of the copyright holders nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) ARISING
+ * IN ANY WAY OUT OF THE USE OR INABILITY TO USE THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation
+ * are those of the authors and should not be interpreted as representing
+ * any official policies, either expressed or implied.
  */
 
 #include "nfc_adapter_p.h"
@@ -1768,14 +1771,17 @@ test_get_all3_done(
     g_assert(ifaces);
     g_assert(records);
     g_assert(prot_params);
-    g_assert(!g_variant_iter_init (&iter, prot_params));
+
     GDEBUG("version=%d, present=%d, tech=%u, protocol=%u, type=%u, "
         "%u interface(s), %u record(s)", version, present, tech, protocol,
            type, g_strv_length(ifaces), g_strv_length(records));
-    while (g_variant_iter_loop (&iter, "{sv}", &key, &value)) {
-        GDEBUG("Item '%s' has type '%s'\n", key,
-            g_variant_get_type_string (value));
+
+    g_variant_iter_init(&iter, prot_params);
+    while (g_variant_iter_loop(&iter, "{sv}", &key, &value)) {
+        GDEBUG("Param '%s' has type '%s'", key,
+            g_variant_get_type_string(value));
     }
+
     g_assert(version >= MIN_INTERFACE_VERSION);
     g_assert(present);
     g_assert(tech == NFC_TECHNOLOGY_UNKNOWN);
@@ -1838,10 +1844,11 @@ test_get_poll_parameters_done(
     g_assert(var);
     g_variant_get(var, "(@a{sv})", &prot_params);
     g_assert(prot_params);
-    g_assert(!g_variant_iter_init (&iter, prot_params));
+
+    g_variant_iter_init(&iter, prot_params);
     while (g_variant_iter_loop (&iter, "{sv}", &key, &value)) {
-        GDEBUG("Item '%s' has type '%s'\n", key,
-            g_variant_get_type_string (value));
+        GDEBUG("Param '%s' has type '%s'", key,
+            g_variant_get_type_string(value));
     }
     g_assert(!key || !value);
     g_variant_unref(prot_params);
@@ -1933,7 +1940,6 @@ test_get_all3_tag_b_done(
     GVariantIter iter;
     GVariant* value = NULL;
     gchar* key = NULL;
-    const guint8* value_ptr = NULL;
     GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
         result, NULL);
 
@@ -1943,37 +1949,37 @@ test_get_all3_tag_b_done(
     g_assert(ifaces);
     g_assert(records);
     g_assert(prot_params);
-    g_assert_cmpuint(g_variant_iter_init(&iter, prot_params), ==, 3);
+
     GDEBUG("version=%d, present=%d, tech=%u, protocol=%u, type=%u, "
         "%u interface(s), %u record(s)", version, present, tech, protocol,
            type, g_strv_length(ifaces), g_strv_length(records));
-    while (g_variant_iter_loop (&iter, "{sv}", &key, &value)) {
-        GDEBUG("Item '%s' has type '%s'\n", key,
-            g_variant_get_type_string (value));
-        g_assert(!g_strcmp0(key, "PROTINFO") || !g_strcmp0(key, "APPDATA") ||
-            !g_strcmp0(key, "NFCID0"));
 
+    g_assert_cmpuint(g_variant_iter_init(&iter, prot_params), >=, 3);
+    while (g_variant_iter_loop(&iter, "{sv}", &key, &value)) {
         if (!g_strcmp0(key, "NFCID0")) {
-            value_ptr = (guint8*)g_variant_get_data(value);
-            g_assert(value_ptr);
-            g_assert(sizeof(nfcid0) == g_variant_get_size(value));
-            g_assert(!memcmp(value_ptr, nfcid0, sizeof(nfcid0)));
-        }
-
-        if (!g_strcmp0(key, "PROTINFO")) {
-            value_ptr = (guint8*)g_variant_get_data(value);
-            g_assert(value_ptr);
-            g_assert(sizeof(prot_info) == g_variant_get_size(value));
-            g_assert(!memcmp(value_ptr, prot_info, sizeof(prot_info)));
-        }
-
-        if (!g_strcmp0(key, "APPDATA")) {
-            value_ptr = (guint8*)g_variant_get_data(value);
-            g_assert(value_ptr);
-            g_assert(sizeof(app_data) == g_variant_get_size(value));
-            g_assert(!memcmp(value_ptr, app_data, sizeof(app_data)));
+            g_assert_cmpstr(g_variant_get_type_string(value), == ,"ay");
+            g_assert_cmpuint(g_variant_get_size(value), == ,sizeof(nfcid0));
+            g_assert(!memcmp(g_variant_get_data(value), nfcid0,
+                sizeof(nfcid0)));
+            GDEBUG("Param '%s' ok", key);
+        } else if (!g_strcmp0(key, "PROTINFO")) {
+            g_assert_cmpstr(g_variant_get_type_string(value), == ,"ay");
+            g_assert_cmpuint(g_variant_get_size(value), == ,sizeof(prot_info));
+            g_assert(!memcmp(g_variant_get_data(value), prot_info,
+                sizeof(prot_info)));
+            GDEBUG("Param '%s' ok", key);
+        } else if (!g_strcmp0(key, "APPDATA")) {
+            g_assert_cmpstr(g_variant_get_type_string(value), == ,"ay");
+            g_assert_cmpuint(g_variant_get_size(value), == ,sizeof(app_data));
+            g_assert(!memcmp(g_variant_get_data(value), app_data,
+                sizeof(app_data)));
+            GDEBUG("Param '%s' ok", key);
+        } else {
+            GDEBUG("Param '%s' param has type '%s'", key,
+                g_variant_get_type_string(value));
         }
     }
+
     g_assert(version >= MIN_INTERFACE_VERSION);
     g_assert(present);
     g_assert(tech == NFC_TECHNOLOGY_B);
@@ -2066,7 +2072,6 @@ test_get_all3_tag_a_done(
     GVariantIter iter;
     GVariant* value = NULL;
     gchar* key = NULL;
-    const guint8* value_ptr = NULL;
     GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
         result, NULL);
 
@@ -2076,28 +2081,29 @@ test_get_all3_tag_a_done(
     g_assert(ifaces);
     g_assert(records);
     g_assert(prot_params);
-    g_assert_cmpuint(g_variant_iter_init(&iter, prot_params), ==, 2);
+
     GDEBUG("version=%d, present=%d, tech=%u, protocol=%u, type=%u, "
         "%u interface(s), %u record(s)", version, present, tech, protocol,
            type, g_strv_length(ifaces), g_strv_length(records));
-    while (g_variant_iter_loop (&iter, "{sv}", &key, &value)) {
-        GDEBUG("Item '%s' has type '%s'\n", key,
-            g_variant_get_type_string (value));
-        g_assert(!g_strcmp0(key, "SEL_RES") || !g_strcmp0(key, "NFCID1"));
 
+    g_assert_cmpuint(g_variant_iter_init(&iter, prot_params), >=, 2);
+    while (g_variant_iter_loop(&iter, "{sv}", &key, &value)) {
         if (!g_strcmp0(key, "SEL_RES")) {
-            guint8 sel_res_value = g_variant_get_byte(value);
-            g_assert(sel_res_value);
-            g_assert(sel_res_value == 1);
-        }
-
-        if (!g_strcmp0(key, "NFCID1")) {
-            value_ptr = (guint8*)g_variant_get_data(value);
-            g_assert(value_ptr);
-            g_assert(sizeof(nfcid1) == g_variant_get_size(value));
-            g_assert(!memcmp(value_ptr, nfcid1, sizeof(nfcid1)));
+            g_assert_cmpstr(g_variant_get_type_string(value), == ,"y");
+            g_assert_cmpint(g_variant_get_byte(value), == ,1);
+            GDEBUG("Param '%s' ok", key);
+        } else if (!g_strcmp0(key, "NFCID1")) {
+            g_assert_cmpstr(g_variant_get_type_string(value), == ,"ay");
+            g_assert_cmpuint(g_variant_get_size(value), == ,sizeof(nfcid1));
+            g_assert(!memcmp(g_variant_get_data(value), nfcid1,
+                sizeof(nfcid1)));
+            GDEBUG("Param '%s' ok", key);
+        } else {
+            GDEBUG("Param '%s' param has type '%s'", key,
+                g_variant_get_type_string(value));
         }
     }
+
     g_assert(version >= MIN_INTERFACE_VERSION);
     g_assert(present);
     g_assert(tech == NFC_TECHNOLOGY_A);
