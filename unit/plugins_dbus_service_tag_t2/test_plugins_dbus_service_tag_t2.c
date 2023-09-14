@@ -1,33 +1,36 @@
 /*
+ * Copyright (C) 2022-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2022 Jolla Ltd.
- * Copyright (C) 2022 Slava Monich <slava.monich@jolla.com>
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  *
- *   1. Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *   2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in the
- *      documentation and/or other materials provided with the distribution.
- *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived
- *      from this software without specific prior written permission.
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer
+ *     in the documentation and/or other materials provided with the
+ *     distribution.
+ *  3. Neither the names of the copyright holders nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) ARISING
+ * IN ANY WAY OUT OF THE USE OR INABILITY TO USE THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation
+ * are those of the authors and should not be interpreted as representing
+ * any official policies, either expressed or implied.
  */
 
 #include "nfc_tag_p.h"
@@ -43,7 +46,7 @@
 #include "test_adapter.h"
 #include "test_target_t2.h"
 #include "test_dbus.h"
-#include "test_name_watch.h"
+#include "test_dbus_name.h"
 
 #include <gutil_idlepool.h>
 
@@ -53,6 +56,8 @@
 #define TEST_DATA_SIZE (sizeof(test_tag_data) - TEST_TARGET_T2_DATA_OFFSET)
 #define TEST_DUMP_VARIANT_DATA(v) \
     GDEBUG_DUMP(g_variant_get_data(v), g_variant_get_size(v))
+#define TEST_DBUS_TIMEOUT \
+    ((test_opt.flags & TEST_FLAG_DEBUG) ? -1 : TEST_TIMEOUT_MS)
 
 static TestOpt test_opt;
 static const char test_sender[] = ":1.1";
@@ -217,8 +222,8 @@ test_call_no_args(
 {
     g_assert(test->connection);
     g_dbus_connection_call(test->connection, NULL, test_tag_path(test),
-        NFC_TAG_T2_INTERFACE, method, NULL, NULL, G_DBUS_CALL_FLAGS_NONE, -1,
-        NULL, callback, test);
+        NFC_TAG_T2_INTERFACE, method, NULL, NULL, G_DBUS_CALL_FLAGS_NONE,
+        TEST_DBUS_TIMEOUT, NULL, callback, test);
 }
 
 static
@@ -232,7 +237,7 @@ test_call_read(
     g_assert(test->connection);
     g_dbus_connection_call(test->connection, NULL, test_tag_path(test),
         NFC_TAG_T2_INTERFACE, "Read", g_variant_new("(uu)", sector, block),
-        NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL, callback, test);
+        NULL, G_DBUS_CALL_FLAGS_NONE, TEST_DBUS_TIMEOUT, NULL, callback, test);
 }
 
 static
@@ -246,7 +251,7 @@ test_call_read_data(
     g_assert(test->connection);
     g_dbus_connection_call(test->connection, NULL, test_tag_path(test),
         NFC_TAG_T2_INTERFACE, "ReadData", g_variant_new("(uu)", offset, size),
-        NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL, callback, test);
+        NULL, G_DBUS_CALL_FLAGS_NONE, TEST_DBUS_TIMEOUT, NULL, callback, test);
 }
 
 static
@@ -263,7 +268,7 @@ test_call_write(
     g_dbus_connection_call(test->connection, NULL, test_tag_path(test),
         NFC_TAG_T2_INTERFACE, "Write", g_variant_new("(uu@ay)", sector, block,
         dbus_service_dup_byte_array_as_variant(data, size)), NULL,
-        G_DBUS_CALL_FLAGS_NONE, -1, NULL, callback, test);
+        G_DBUS_CALL_FLAGS_NONE, TEST_DBUS_TIMEOUT, NULL, callback, test);
 }
 
 static
@@ -279,7 +284,7 @@ test_call_write_data(
     g_dbus_connection_call(test->connection, NULL, test_tag_path(test),
         NFC_TAG_T2_INTERFACE, "WriteData", g_variant_new("(u@ay)", offset,
         dbus_service_dup_byte_array_as_variant(data, size)), NULL,
-        G_DBUS_CALL_FLAGS_NONE, -1, NULL, callback, test);
+        G_DBUS_CALL_FLAGS_NONE, TEST_DBUS_TIMEOUT, NULL, callback, test);
 }
 
 static

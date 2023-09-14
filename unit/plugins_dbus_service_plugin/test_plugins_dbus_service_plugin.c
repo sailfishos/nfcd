@@ -1,33 +1,36 @@
 /*
+ * Copyright (C) 2019-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2019-2021 Jolla Ltd.
- * Copyright (C) 2019-2021 Slava Monich <slava.monich@jolla.com>
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  *
- *   1. Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *   2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in the
- *      documentation and/or other materials provided with the distribution.
- *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived
- *      from this software without specific prior written permission.
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer
+ *     in the documentation and/or other materials provided with the
+ *     distribution.
+ *  3. Neither the names of the copyright holders nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) ARISING
+ * IN ANY WAY OUT OF THE USE OR INABILITY TO USE THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation
+ * are those of the authors and should not be interpreted as representing
+ * any official policies, either expressed or implied.
  */
 
 #include "nfc_types_p.h"
@@ -41,15 +44,19 @@
 #include "test_common.h"
 #include "test_adapter.h"
 #include "test_dbus.h"
+#include "test_dbus_name.h"
+
+#include <gutil_misc.h>
 
 #define NFC_DAEMON_PATH "/"
 #define NFC_DAEMON_INTERFACE "org.sailfishos.nfc.Daemon"
 #define NFC_DAEMON_INTERFACE_VERSION  (3)
 
 static TestOpt test_opt;
-static GDBusConnection* test_server;
-static DBusServicePlugin* test_plugin;
 static const char* dbus_sender = ":1.0";
+
+#define TEST_DBUS_TIMEOUT \
+    ((test_opt.flags & TEST_FLAG_DEBUG) ? -1 : TEST_TIMEOUT_MS)
 
 typedef struct test_data {
     GMainLoop* loop;
@@ -109,141 +116,70 @@ test_start(
 {
     TestData* test = user_data;
 
-    test_server = server;
+    test_name_own_set_connection(server);
+    test->client = client;
     g_assert(nfc_manager_start(test->manager));
+}
+
+static
+DBusServicePlugin*
+test_dbus_service_plugin(
+    TestData* test)
+{
+    NfcPlugin* const* plugins = nfc_manager_plugins(test->manager);
+
+    g_assert_cmpuint(gutil_ptrv_length(plugins), == ,1);
+    return (DBusServicePlugin*) plugins[0];
 }
 
 static
 void
 test_call(
     TestData* test,
-    GDBusConnection* client,
     const char* method,
+    GVariant* args,
     GAsyncReadyCallback callback)
 {
-    g_dbus_connection_call(client, NULL, NFC_DAEMON_PATH, NFC_DAEMON_INTERFACE,
-        method, NULL, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL, callback, test);
+    /* Generic call without arguments */
+    g_dbus_connection_call(test->client, NULL,
+        NFC_DAEMON_PATH, NFC_DAEMON_INTERFACE, method, args, NULL,
+        G_DBUS_CALL_FLAGS_NONE, TEST_DBUS_TIMEOUT, NULL, callback, test);
 }
 
 static
 void
 test_call_register_local_service(
-    GDBusConnection* client,
+    TestData* test,
     const char* path,
     const char* name,
-    GAsyncReadyCallback callback,
-    TestData* test)
+    GAsyncReadyCallback callback)
 {
-    g_dbus_connection_call(client, NULL, NFC_DAEMON_PATH, NFC_DAEMON_INTERFACE,
-        "RegisterLocalService", g_variant_new ("(os)", path, name), NULL,
-        G_DBUS_CALL_FLAGS_NONE, -1, NULL, callback, test);
+    test_call(test, "RegisterLocalService",
+        g_variant_new ("(os)", path, name),
+        callback);
 }
 
 static
 void
 test_call_unregister_local_service(
-    GDBusConnection* client,
+    TestData* test,
     const char* path,
-    GAsyncReadyCallback callback,
-    TestData* test)
+    GAsyncReadyCallback callback)
 {
-    g_dbus_connection_call(client, NULL, NFC_DAEMON_PATH, NFC_DAEMON_INTERFACE,
-        "UnregisterLocalService", g_variant_new ("(o)", path), NULL,
-        G_DBUS_CALL_FLAGS_NONE, -1, NULL, callback, test);
+    test_call(test, "UnregisterLocalService",
+        g_variant_new ("(o)", path),
+        callback);
 }
 
 /*==========================================================================*
  * Stubs
  *==========================================================================*/
 
-#define TEST_NAME_OWN_ID (1)
-#define TEST_NAME_WATCH_ID (2)
-
-typedef struct test_bus_acquired_data {
-    char* name;
-    DBusServicePlugin* plugin;
-    GBusAcquiredCallback bus_acquired;
-    GBusNameAcquiredCallback name_acquired;
-} TestBusAcquiredData;
-
-static
-gboolean
-test_bus_acquired(
-    gpointer user_data)
-{
-    TestBusAcquiredData* data = user_data;
-
-    data->bus_acquired(test_server, data->name, data->plugin);
-    data->name_acquired(test_server, data->name, data->plugin);
-    return G_SOURCE_REMOVE;
-}
-
-static
-void
-test_bus_acquired_free(
-    gpointer user_data)
-{
-    TestBusAcquiredData* data = user_data;
-
-    g_assert(data->plugin == test_plugin);
-    g_free(data->name);
-    g_free(data);
-}
-
-guint
-dbus_service_name_own(
-    DBusServicePlugin* plugin,
-    const char* name,
-    GBusAcquiredCallback bus_acquired,
-    GBusNameAcquiredCallback name_acquired,
-    GBusNameLostCallback name_lost)
-{
-    TestBusAcquiredData* data = g_new(TestBusAcquiredData, 1);
-
-    data->plugin = test_plugin = plugin;
-    data->name = g_strdup(name);
-    data->bus_acquired = bus_acquired;
-    data->name_acquired = name_acquired;
-    g_idle_add_full(G_PRIORITY_HIGH_IDLE, test_bus_acquired, data,
-        test_bus_acquired_free);
-    return TEST_NAME_OWN_ID;
-}
-
-void
-dbus_service_name_unown(
-    guint id)
-{
-    g_assert(test_plugin);
-    test_plugin = NULL;
-    g_assert(id == TEST_NAME_OWN_ID);
-}
-
 const gchar*
 g_dbus_method_invocation_get_sender(
     GDBusMethodInvocation* call)
 {
     return dbus_sender;
-}
-
-guint
-g_bus_watch_name_on_connection(
-    GDBusConnection* connection,
-    const gchar* name,
-    GBusNameWatcherFlags flags,
-    GBusNameAppearedCallback name_appeared_handler,
-    GBusNameVanishedCallback name_vanished_handler,
-    gpointer user_data,
-    GDestroyNotify user_data_free_func)
-{
-    g_assert_cmpstr(name, == ,dbus_sender);
-    return TEST_NAME_WATCH_ID;
-}
-
-void
-g_bus_unwatch_name(
-    guint watcher_id)
-{
-    g_assert_cmpuint(watcher_id, == ,TEST_NAME_WATCH_ID);
 }
 
 /*==========================================================================*
@@ -258,8 +194,8 @@ test_no_peers_start(
     void* user_data)
 {
     TestData* test = user_data;
+    DBusServicePlugin* test_plugin = test_dbus_service_plugin(test);
 
-    g_assert(test_plugin);
     g_assert(!dbus_service_plugin_find_peer(test_plugin, NULL));
     test_quit_later(test->loop);
 }
@@ -277,7 +213,6 @@ test_no_peers(
     test_run(&test_opt, test.loop);
     test_data_cleanup(&test);
     test_dbus_free(dbus);
-    test_server = NULL;
 }
 
 /*==========================================================================*
@@ -316,7 +251,7 @@ test_get_all_start(
     GDBusConnection* server,
     void* test)
 {
-    test_call((TestData*)test, client, "GetAll", test_get_all_done);
+    test_call((TestData*)test, "GetAll", NULL, test_get_all_done);
 }
 
 static
@@ -332,7 +267,6 @@ test_get_all(
     test_run(&test_opt, test.loop);
     test_data_cleanup(&test);
     test_dbus_free(dbus);
-    test_server = NULL;
 }
 
 /*==========================================================================*
@@ -368,7 +302,7 @@ test_get_interface_version_start(
     GDBusConnection* server,
     void* test)
 {
-    test_call((TestData*)test, client, "GetInterfaceVersion",
+    test_call((TestData*)test, "GetInterfaceVersion", NULL,
         test_get_interface_version_done);
 }
 
@@ -421,7 +355,7 @@ test_get_adapters_start(
     GDBusConnection* server,
     void* test)
 {
-    test_call((TestData*)test, client, "GetAdapters",
+    test_call((TestData*)test, "GetAdapters", NULL,
         test_get_adapters_done);
 }
 
@@ -438,7 +372,6 @@ test_get_adapters(
     test_run(&test_opt, test.loop);
     test_data_cleanup(&test);
     test_dbus_free(dbus);
-    test_server = NULL;
 }
 
 /*==========================================================================*
@@ -479,7 +412,7 @@ test_get_all2_start(
     GDBusConnection* server,
     void* test)
 {
-    test_call((TestData*)test, client, "GetAll2", test_get_all2_done);
+    test_call((TestData*)test, "GetAll2", NULL, test_get_all2_done);
 }
 
 static
@@ -495,7 +428,6 @@ test_get_all2(
     test_run(&test_opt, test.loop);
     test_data_cleanup(&test);
     test_dbus_free(dbus);
-    test_server = NULL;
 }
 
 /*==========================================================================*
@@ -531,7 +463,7 @@ test_get_daemon_version_start(
     GDBusConnection* server,
     void* test)
 {
-    test_call((TestData*)test, client, "GetDaemonVersion",
+    test_call((TestData*)test, "GetDaemonVersion", NULL,
         test_get_daemon_version_done);
 }
 
@@ -591,8 +523,8 @@ test_register_service_fail(
     g_error_free(error);
 
     /* Unregister it */
-    test_call_unregister_local_service(test->client, test_register_service_path,
-        test_register_service_unregister_done, test);
+    test_call_unregister_local_service(test, test_register_service_path,
+        test_register_service_unregister_done);
 }
 
 static
@@ -615,8 +547,8 @@ test_register_service_done(
     g_assert(sap);
 
     /* Second call will fail */
-    test_call_register_local_service(test->client, test_register_service_path,
-        test_register_service_name, test_register_service_fail, test);
+    test_call_register_local_service(test, test_register_service_path,
+        test_register_service_name, test_register_service_fail);
 }
 
 static
@@ -629,8 +561,8 @@ test_register_service_start(
     TestData* test = user_data;
 
     test->client = client;
-    test_call_register_local_service(client, test_register_service_path,
-        test_register_service_name, test_register_service_done, test);
+    test_call_register_local_service(test, test_register_service_path,
+        test_register_service_name, test_register_service_done);
 }
 
 static
@@ -677,8 +609,8 @@ test_unregister_svc_err_start(
     GDBusConnection* server,
     void* test)
 {
-    test_call_unregister_local_service(client, "/none",
-        test_unregister_svc_err_done, test);
+    test_call_unregister_local_service((TestData*) test, "/none",
+        test_unregister_svc_err_done);
 }
 
 static

@@ -49,7 +49,7 @@
 #include "test_adapter.h"
 #include "test_target.h"
 #include "test_dbus.h"
-#include "test_name_watch.h"
+#include "test_dbus_name.h"
 
 #include <gutil_idlepool.h>
 
@@ -60,6 +60,9 @@ static TestOpt test_opt;
 static const char test_sender_1[] = ":1.1";
 static const char test_sender_2[] = ":1.2";
 static const char* test_sender = test_sender_1;
+
+#define TEST_DBUS_TIMEOUT \
+    ((test_opt.flags & TEST_FLAG_DEBUG) ? -1 : TEST_TIMEOUT_MS)
 
 typedef struct test_data {
     GMainLoop* loop;
@@ -139,8 +142,8 @@ test_call_get(
 
     g_assert(test->connection);
     g_dbus_connection_call(test->connection, NULL, test_tag_path(test, tag),
-        NFC_TAG_INTERFACE, method, NULL, NULL, G_DBUS_CALL_FLAGS_NONE, -1,
-        NULL, callback, test);
+        NFC_TAG_INTERFACE, method, NULL, NULL, G_DBUS_CALL_FLAGS_NONE,
+        TEST_DBUS_TIMEOUT, NULL, callback, test);
 }
 
 static
@@ -154,7 +157,7 @@ test_call_acquire(
     g_dbus_connection_call(test->connection, NULL,
         test_tag_path(test, test->adapter->tags[0]), NFC_TAG_INTERFACE,
         "Acquire", g_variant_new("(b)", wait), NULL, G_DBUS_CALL_FLAGS_NONE,
-        -1, NULL, callback, test);
+        TEST_DBUS_TIMEOUT, NULL, callback, test);
 }
 
 static
@@ -168,7 +171,7 @@ test_call_acquire2(
     g_dbus_connection_call(test->connection, NULL,
         test_tag_path(test, test->adapter->tags[0]), NFC_TAG_INTERFACE,
         "Acquire2", g_variant_new("(b)", wait), NULL, G_DBUS_CALL_FLAGS_NONE,
-        -1, NULL, callback, test);
+        TEST_DBUS_TIMEOUT, NULL, callback, test);
 }
 
 static
@@ -180,8 +183,8 @@ test_call_release(
     g_assert(test->connection);
     g_dbus_connection_call(test->connection, NULL,
         test_tag_path(test, test->adapter->tags[0]), NFC_TAG_INTERFACE,
-        "Release", NULL, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,
-        callback, test);
+        "Release", NULL, NULL, G_DBUS_CALL_FLAGS_NONE, TEST_DBUS_TIMEOUT,
+        NULL, callback, test);
 }
 
 static
@@ -193,8 +196,8 @@ test_call_release2(
     g_assert(test->connection);
     g_dbus_connection_call(test->connection, NULL,
         test_tag_path(test, test->adapter->tags[0]), NFC_TAG_INTERFACE,
-        "Release2", NULL, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,
-        callback, test);
+        "Release2", NULL, NULL, G_DBUS_CALL_FLAGS_NONE, TEST_DBUS_TIMEOUT,
+        NULL, callback, test);
 }
 
 static
@@ -1051,8 +1054,8 @@ test_deactivate_start(
         test, NULL));
     /* Deactivation call will (eventually) cause Removed signal */
     g_dbus_connection_call(client, NULL, tag_path, NFC_TAG_INTERFACE,
-        "Deactivate", NULL, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,
-        NULL, test);
+        "Deactivate", NULL, NULL, G_DBUS_CALL_FLAGS_NONE, TEST_DBUS_TIMEOUT,
+        NULL, NULL, test);
 }
 
 static
@@ -2194,7 +2197,7 @@ test_transceive_ok_start(
         NFC_TAG_INTERFACE, "Transceive", g_variant_new("(@ay)",
         dbus_service_dup_byte_array_as_variant(
         TEST_ARRAY_AND_SIZE(test_transceive_in))),
-        NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+        NULL, G_DBUS_CALL_FLAGS_NONE, TEST_DBUS_TIMEOUT, NULL,
         test_transceive_ok_done, test);
 }
 
@@ -2252,7 +2255,7 @@ test_transceive_error_start(
         NFC_TAG_INTERFACE, "Transceive", g_variant_new("(@ay)",
         dbus_service_dup_byte_array_as_variant(
         TEST_ARRAY_AND_SIZE(test_transceive_in))),
-        NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+        NULL, G_DBUS_CALL_FLAGS_NONE, TEST_DBUS_TIMEOUT, NULL,
         test_transceive_error_done, test);
 }
 

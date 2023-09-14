@@ -2,32 +2,35 @@
  * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  *
- *   1. Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *   2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in the
- *      documentation and/or other materials provided with the distribution.
- *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived
- *      from this software without specific prior written permission.
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer
+ *     in the documentation and/or other materials provided with the
+ *     distribution.
+ *  3. Neither the names of the copyright holders nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) ARISING
+ * IN ANY WAY OUT OF THE USE OR INABILITY TO USE THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation
+ * are those of the authors and should not be interpreted as representing
+ * any official policies, either expressed or implied.
  */
 
 #include "dbus_service.h"
@@ -100,6 +103,7 @@ struct dbus_service_plugin {
 
 G_DEFINE_TYPE(DBusServicePlugin, dbus_service_plugin, PARENT_TYPE)
 
+#define NFC_BUS         G_BUS_TYPE_SYSTEM
 #define NFC_SERVICE     "org.sailfishos.nfc.daemon"
 #define NFC_DAEMON_PATH "/"
 
@@ -633,9 +637,10 @@ dbus_service_plugin_start(
     GVERBOSE("Starting");
     self->manager = nfc_manager_ref(manager);
     self->iface = org_sailfishos_nfc_daemon_skeleton_new();
-    self->own_name_id = dbus_service_name_own(self, NFC_SERVICE,
-        dbus_service_plugin_bus_connected, dbus_service_plugin_name_acquired,
-        dbus_service_plugin_name_lost);
+    self->own_name_id = g_bus_own_name(NFC_BUS, NFC_SERVICE,
+        G_BUS_NAME_OWNER_FLAGS_REPLACE, dbus_service_plugin_bus_connected,
+        dbus_service_plugin_name_acquired, dbus_service_plugin_name_lost,
+        self, NULL);
 
     /* NfcManager events */
     self->event_id[EVENT_ADAPTER_ADDED] =
@@ -695,16 +700,17 @@ dbus_service_plugin_stop(
 
     GVERBOSE("Stopping");
     gutil_disconnect_handlers(self->iface, self->call_id, CALL_COUNT);
-    g_dbus_interface_skeleton_unexport(G_DBUS_INTERFACE_SKELETON(self->iface));
     g_hash_table_remove_all(self->adapters);
-    g_object_unref(self->iface);
-    dbus_service_name_unown(self->own_name_id);
-    nfc_manager_remove_all_handlers(self->manager, self->event_id);
-    nfc_manager_unref(self->manager);
+    g_bus_unown_name(self->own_name_id);
     if (self->connection) {
+        g_dbus_interface_skeleton_unexport
+            (G_DBUS_INTERFACE_SKELETON(self->iface));
         g_object_unref(self->connection);
         self->connection = NULL;
     }
+    g_object_unref(self->iface);
+    nfc_manager_remove_all_handlers(self->manager, self->event_id);
+    nfc_manager_unref(self->manager);
 }
 
 DBusServicePeer*
