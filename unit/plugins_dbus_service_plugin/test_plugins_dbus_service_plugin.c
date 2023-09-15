@@ -183,12 +183,12 @@ g_dbus_method_invocation_get_sender(
 }
 
 /*==========================================================================*
- * no_peers
+ * basic
  *==========================================================================*/
 
 static
 void
-test_no_peers_start(
+test_basic_start(
     GDBusConnection* client,
     GDBusConnection* server,
     void* user_data)
@@ -202,14 +202,56 @@ test_no_peers_start(
 
 static
 void
-test_no_peers(
+test_basic(
     void)
 {
     TestData test;
     TestDBus* dbus;
 
     test_data_init(&test);
-    dbus = test_dbus_new2(test_start, test_no_peers_start, &test);
+    dbus = test_dbus_new2(test_start, test_basic_start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+/*==========================================================================*
+ * stop
+ *==========================================================================*/
+
+static
+void
+test_stop_done(
+    NfcManager* self,
+    void* loop)
+{
+    test_quit_later((GMainLoop*)loop);
+}
+
+static
+void
+test_stop_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+
+    g_assert(nfc_manager_add_stopped_handler(test->manager, test_stop_done,
+        test->loop));
+    test_name_own_set_connection(NULL);
+}
+
+static
+void
+test_stop(
+    void)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_data_init(&test);
+    dbus = test_dbus_new2(test_start, test_stop_start, &test);
     test_run(&test_opt, test.loop);
     test_data_cleanup(&test);
     test_dbus_free(dbus);
@@ -754,7 +796,8 @@ int main(int argc, char* argv[])
     g_type_init();
     G_GNUC_END_IGNORE_DEPRECATIONS;
     g_test_init(&argc, &argv, NULL);
-    g_test_add_func(TEST_("no_peers"), test_no_peers);
+    g_test_add_func(TEST_("basic"), test_basic);
+    g_test_add_func(TEST_("stop"), test_stop);
     g_test_add_func(TEST_("get_all"), test_get_all);
     g_test_add_func(TEST_("get_interface_version"), test_get_interface_version);
     g_test_add_func(TEST_("get_adapters"), test_get_adapters);
