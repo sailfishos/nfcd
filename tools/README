@@ -1,0 +1,19 @@
+Command line tools
+
+These tools require nfcd to be running and functional. They
+don't do much by themselves, the real work is delegated to
+nfcd via D-Bus.
+
+ndef-read
+=========
+
+Waits for the touch and reads an NDEF record from anything
+that supports and contains it. Typically that would be a
+Type 2 or Type 4 tag.
+
+ndef-write
+==========
+
+Writes an NDEF record to a writeable Type 2 tag. The tool can
+either format a URI, Text or SmartPoster record by itself, or
+read a pre-formatted one from the file.
