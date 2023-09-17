@@ -4,6 +4,14 @@ These tools require nfcd to be running and functional. They
 don't do much by themselves, the real work is delegated to
 nfcd via D-Bus.
 
+All tools have -h (--help) option.
+
+iso-dep
+=======
+
+A tool for communicating with ISO-DEP (Type 4) tags. Can send
+arbitrary APDUs to the card and receive responses.
+
 ndef-read
 =========
 
