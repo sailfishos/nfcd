@@ -1,33 +1,36 @@
 /*
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  *
- *   1. Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *   2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in the
- *      documentation and/or other materials provided with the distribution.
- *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived
- *      from this software without specific prior written permission.
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer
+ *     in the documentation and/or other materials provided with the
+ *     distribution.
+ *  3. Neither the names of the copyright holders nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) ARISING
+ * IN ANY WAY OUT OF THE USE OR INABILITY TO USE THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation
+ * are those of the authors and should not be interpreted as representing
+ * any official policies, either expressed or implied.
  */
 
 #include "nfc_adapter_p.h"
@@ -337,7 +340,7 @@ test_enabled(
         test_adapter_inc, &enabled_changed_count);
 
     nfc_adapter_set_name(adapter, "test");
-    
+
     nfc_adapter_set_enabled(adapter, TRUE);
     g_assert(enabled_changed_count == 1);
 
@@ -367,7 +370,7 @@ test_power(
     gulong id[2];
 
     nfc_adapter_set_name(adapter, "test");
-    
+
     id[0] = nfc_adapter_add_power_requested_handler(adapter,
         test_adapter_inc, &power_requested_count);
     id[1] = nfc_adapter_add_powered_changed_handler(adapter,
@@ -493,7 +496,7 @@ test_mode(
     gulong id[2];
 
     nfc_adapter_set_name(adapter, "test");
-    
+
     id[0] = nfc_adapter_add_mode_requested_handler(adapter,
         test_adapter_inc, &mode_requested_count);
     id[1] = nfc_adapter_add_mode_changed_handler(adapter,
@@ -507,9 +510,9 @@ test_mode(
 
     /* Successful switch to NFC_MODE_READER_WRITER */
     adapter->supported_modes = NFC_MODE_READER_WRITER | NFC_MODE_P2P_INITIATOR;
-    g_assert(!nfc_adapter_request_mode(adapter, NFC_MODE_CARD_EMILATION));
+    g_assert(!nfc_adapter_request_mode(adapter, NFC_MODE_CARD_EMULATION));
     g_assert(nfc_adapter_request_mode(adapter, NFC_MODE_READER_WRITER |
-        NFC_MODE_CARD_EMILATION));
+        NFC_MODE_CARD_EMULATION));
     g_assert(!mode_changed_count);
     g_assert(mode_requested_count == 1);
     mode_requested_count = 0;
@@ -640,7 +643,7 @@ test_tags(
     adapter->supported_modes = NFC_MODE_READER_WRITER;
     nfc_adapter_power_notify(adapter, TRUE, FALSE);
     nfc_adapter_mode_notify(adapter, NFC_MODE_READER_WRITER, FALSE);
-    
+
     /* Test "presence_changed" signal */
     nfc_adapter_target_notify(adapter, TRUE);
     g_assert(!adapter->target_present);
