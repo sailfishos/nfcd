@@ -1,34 +1,37 @@
 /*
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2022 Jolla Ltd.
- * Copyright (C) 2018-2022 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2020 Open Mobile Platform LLC.
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  *
- *   1. Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *   2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in the
- *      documentation and/or other materials provided with the distribution.
- *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived
- *      from this software without specific prior written permission.
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer
+ *     in the documentation and/or other materials provided with the
+ *     distribution.
+ *  3. Neither the names of the copyright holders nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) ARISING
+ * IN ANY WAY OUT OF THE USE OR INABILITY TO USE THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation
+ * are those of the authors and should not be interpreted as representing
+ * any official policies, either expressed or implied.
  */
 
 #include "test_common.h"
@@ -278,6 +281,7 @@ test_target_class_init(
 typedef enum test_reactivate_mode {
     TEST_REACTIVATE_MODE_OK,
     TEST_REACTIVATE_MODE_FAIL,
+    TEST_REACTIVATE_MODE_GONE,
     TEST_REACTIVATE_MODE_TIMEOUT
 } TEST_REACTIVATE_MODE;
 
@@ -327,6 +331,9 @@ test_target2_reactivate(
         return TRUE;
     case TEST_REACTIVATE_MODE_FAIL:
         break;
+    case TEST_REACTIVATE_MODE_GONE:
+        nfc_target_gone(target);
+        return TRUE;
     case TEST_REACTIVATE_MODE_TIMEOUT:
         return TRUE;
     }
@@ -946,6 +953,42 @@ test_reactivate_ok(
 }
 
 /*==========================================================================*
+ * reactivate_gone
+ *==========================================================================*/
+
+static
+void
+test_reactivate_gone_done(
+    NfcTarget* target,
+    NFC_REACTIVATE_STATUS status,
+    void* user_data)
+{
+    gboolean* done = user_data;
+
+    GDEBUG("Reactivation done");
+    g_assert_cmpint(status, == ,NFC_REACTIVATE_STATUS_GONE);
+    g_assert(!*done);
+    *done = TRUE;
+}
+
+static
+void
+test_reactivate_gone(
+    void)
+{
+    TestTarget2* test = test_target2_new();
+    NfcTarget* target = NFC_TARGET(test);
+    gboolean done = FALSE;
+
+    test->mode = TEST_REACTIVATE_MODE_GONE;
+    g_assert(nfc_target_can_reactivate(target));
+    g_assert(nfc_target_reactivate(target, NULL,
+        test_reactivate_gone_done, NULL, &done));
+    g_assert(done);
+    nfc_target_unref(target);
+}
+
+/*==========================================================================*
  * reactivate_timeout
  *==========================================================================*/
 
@@ -1016,6 +1059,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("sequence2"), test_sequence2);
     g_test_add_func(TEST_("reactivate"), test_reactivate);
     g_test_add_func(TEST_("reactivate_ok"), test_reactivate_ok);
+    g_test_add_func(TEST_("reactivate_gone"), test_reactivate_gone);
     g_test_add_func(TEST_("reactivate_timeout"), test_reactivate_timeout);
     test_init(&test_opt, argc, argv);
     return g_test_run();
