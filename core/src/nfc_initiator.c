@@ -2,38 +2,42 @@
  * Copyright (C) 2020-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2020-2021 Jolla Ltd.
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  *
- *   1. Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *   2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in the
- *      documentation and/or other materials provided with the distribution.
- *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived
- *      from this software without specific prior written permission.
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer
+ *     in the documentation and/or other materials provided with the
+ *     distribution.
+ *  3. Neither the names of the copyright holders nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) ARISING
+ * IN ANY WAY OUT OF THE USE OR INABILITY TO USE THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation
+ * are those of the authors and should not be interpreted as representing
+ * any official policies, either expressed or implied.
  */
 
 #include "nfc_initiator_p.h"
 #include "nfc_initiator_impl.h"
 #include "nfc_log.h"
 
+#include <gutil_macros.h>
 #include <gutil_misc.h>
 
 struct nfc_initiator_priv {
@@ -94,6 +98,39 @@ nfc_initiator_do_deactivate(
     GET_THIS_CLASS(self)->deactivate(self);
 }
 
+static
+void
+nfc_initiator_drop_transactions(
+    NfcInitiatorPriv* priv)
+{
+    if (priv->next_data) {
+        g_bytes_unref(priv->next_data);
+        priv->next_data = NULL;
+    }
+    if (priv->next) {
+        priv->next->owner = NULL;
+        /* This is a reference */
+        nfc_transmission_unref(priv->next);
+        priv->next = NULL;
+    }
+    if (priv->current) {
+        NfcTransmission* current = priv->current;
+
+        /* And this is just a pointer */
+        priv->current = NULL;
+        current->owner = NULL;
+        if (current->responded && current->done) {
+            NfcTransmissionDoneFunc done = current->done;
+
+            /* Make sure completion callback is not invoked twice */
+            current->done = NULL;
+            nfc_transmission_ref(current);
+            done(current, FALSE, current->user_data);
+            nfc_transmission_unref(current);
+        }
+    }
+}
+
 /*==========================================================================*
  * Transmission API
  *==========================================================================*/
@@ -135,7 +172,7 @@ nfc_transmission_free(
             }
         }
     }
-    g_slice_free1(sizeof(*self), self);
+    gutil_slice_free(self);
 }
 
 NfcTransmission*
@@ -291,6 +328,24 @@ nfc_initiator_remove_handlers(
  * Internal interface
  *==========================================================================*/
 
+static
+void
+nfc_initiator_handle_transmission(
+    NfcInitiator* self,
+    NfcTransmission* tx,
+    const GUtilData* data)
+{
+    gboolean handled = FALSE;
+
+    g_signal_emit(self, nfc_initiator_signals[SIGNAL_TRANSMISSION], 0, tx,
+        data, &handled);
+    if (!handled && nfc_initiator_can_deactivate(self)) {
+        /* Signal wasn't handled, drop the link */
+        GDEBUG("Incoming transmission not handled, deactivating");
+        nfc_initiator_do_deactivate(self);
+    }
+}
+
 void
 nfc_initiator_transmit(
     NfcInitiator* self,
@@ -327,26 +382,22 @@ nfc_initiator_transmit(
                 priv->next_data = g_bytes_new(bytes, size); /* Copy the data */
             }
         } else {
-            gboolean handled = FALSE;
             GUtilData data;
+            NfcTransmission* tx = nfc_transmission_new(self);
 
             /* Fresh new transmission coming in, notify the handler */
-            priv->current = nfc_transmission_new(self);
+            priv->current = tx;
             data.bytes = bytes;
             data.size = size;
-            g_signal_emit(self, nfc_initiator_signals[SIGNAL_TRANSMISSION], 0,
-                priv->current, &data, &handled);
-            if (!handled && nfc_initiator_can_deactivate(self)) {
-                /* Signal wasn't handled, drop the link */
-                GDEBUG("Incoming transmission not handled, deactivating");
-                nfc_initiator_do_deactivate(self);
-            }
+            nfc_initiator_handle_transmission(self, priv->current, &data);
 
             /*
-             * If the handler doesn't reference it, this will deallocate the
-             * transmission and wipe the pointer.
+             * If the handler doesn't reference it, this will deallocate
+             * the transmission and wipe the priv->current pointer. On the
+             * other hand, priv->current can already be NULL if we have
+             * been deactivated by now.
              */
-            nfc_transmission_unref(priv->current);
+            nfc_transmission_unref(tx);
         }
     }
 }
@@ -359,42 +410,36 @@ nfc_initiator_response_sent(
     if (G_LIKELY(self)) {
         NfcInitiatorPriv* priv = self->priv;
         NfcTransmission* t = priv->current;
+        NfcTransmission* next = priv->next; /* This was a reference */
+        GBytes* bytes = priv->next_data;
 
-        GASSERT(t);
-        if (t) {
+        /* The next transmission (if any) becomes the current one */
+        priv->current = next;
+        priv->next_data= NULL;
+        priv->next = NULL;
+
+        if (t && t->done) {
             NfcTransmissionDoneFunc done = t->done;
-            NfcTransmission* next = priv->next; /* This was a reference */
-            GBytes* bytes = priv->next_data;
 
             /* Make sure completion callback is not invoked twice */
             t->done = NULL;
 
-            /* The next transmission (if any) becomes the current one */
-            priv->current = next;
-            priv->next_data= NULL;
-            priv->next = NULL;
-            if (done) {
-                /* Let the handler know that response has been sent */
-                done(t, status == NFC_TRANSMIT_STATUS_OK, t->user_data);
-            }
-            if (next) {
-                gboolean handled = FALSE;
-                GUtilData data;
+            /* Let the handler know that response has been sent */
+            nfc_transmission_ref(t);
+            done(t, status == NFC_TRANSMIT_STATUS_OK, t->user_data);
+            nfc_transmission_unref(t);
+        }
 
-                data.bytes = g_bytes_get_data(bytes, &data.size);
-                g_signal_emit(self, nfc_initiator_signals
-                    [SIGNAL_TRANSMISSION], 0, next, &data, &handled);
-                if (!handled && nfc_initiator_can_deactivate(self)) {
-                    /* Signal wasn't handled, drop the link */
-                    GDEBUG("Incoming transmission not handled, deactivating");
-                    nfc_initiator_do_deactivate(self);
-                }
-                /* Release our reference */
-                nfc_transmission_unref(next);
-            }
-            if (bytes) {
-                g_bytes_unref(bytes);
-            }
+        if (next) {
+            GUtilData data;
+
+            data.bytes = g_bytes_get_data(bytes, &data.size);
+            nfc_initiator_handle_transmission(self, next, &data);
+            nfc_transmission_unref(next); /* Release our reference */
+        }
+
+        if (bytes) {
+            g_bytes_unref(bytes);
         }
     }
 }
@@ -405,7 +450,10 @@ nfc_initiator_gone(
 {
     if (G_LIKELY(self) && self->present) {
         self->present = FALSE;
+        nfc_initiator_ref(self);
+        nfc_initiator_drop_transactions(self->priv);
         GET_THIS_CLASS(self)->gone(self);
+        nfc_initiator_unref(self);
     }
 }
 
@@ -476,21 +524,7 @@ void
 nfc_initiator_finalize(
     GObject* object)
 {
-    NfcInitiator* self = THIS(object);
-    NfcInitiatorPriv* priv = self->priv;
-
-    if (priv->next) {
-        priv->next->owner = NULL;
-        /* This is a reference */
-        nfc_transmission_unref(priv->next);
-    }
-    if (priv->current) {
-        priv->current->owner = NULL;
-        /* And this is just a pointer */
-    }
-    if (priv->next_data) {
-        g_bytes_unref(priv->next_data);
-    }
+    nfc_initiator_drop_transactions(THIS(object)->priv);
     G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }
 
