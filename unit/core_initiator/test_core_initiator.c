@@ -2,32 +2,35 @@
  * Copyright (C) 2020-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2020 Jolla Ltd.
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  *
- *   1. Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *   2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in the
- *      documentation and/or other materials provided with the distribution.
- *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived
- *      from this software without specific prior written permission.
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer
+ *     in the documentation and/or other materials provided with the
+ *     distribution.
+ *  3. Neither the names of the copyright holders nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) ARISING
+ * IN ANY WAY OUT OF THE USE OR INABILITY TO USE THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation
+ * are those of the authors and should not be interpreted as representing
+ * any official policies, either expressed or implied.
  */
 
 #include "test_common.h"
@@ -59,6 +62,28 @@ test_transmission_not_reached(
     void* user_data)
 {
     g_assert_not_reached();
+}
+
+static
+void
+test_transmission_ok(
+    NfcTransmission* t,
+    gboolean ok,
+    void* user_data)
+{
+    g_assert(ok);
+    (*(int*)user_data)++;
+}
+
+static
+void
+test_transmission_error(
+    NfcTransmission* t,
+    gboolean ok,
+    void* user_data)
+{
+    g_assert(!ok);
+    (*(int*)user_data)++;
 }
 
 /*==========================================================================*
@@ -198,17 +223,6 @@ test_null(
  *==========================================================================*/
 
 static
-void
-test_basic_transmission_ok(
-    NfcTransmission* t,
-    gboolean ok,
-    void* user_data)
-{
-    g_assert(ok);
-    (*(int*)user_data)++;
-}
-
-static
 gboolean
 test_basic_transmission_handler(
     NfcInitiator* init,
@@ -252,7 +266,7 @@ test_basic(
     g_assert_cmpint(gone, == ,0);
     g_assert(trans);
     g_assert(nfc_transmission_respond(trans, test_out.bytes, test_out.size,
-        test_basic_transmission_ok, &done));
+        test_transmission_ok, &done));
     /* Second attempt to respond fails */
     g_assert(!nfc_transmission_respond(trans, test_out.bytes, test_out.size,
         test_transmission_not_reached, NULL));
@@ -266,7 +280,7 @@ test_basic(
     g_assert_cmpint(gone, == ,0);
     g_assert(trans);
     g_assert(nfc_transmission_respond_bytes(trans, out,
-        test_basic_transmission_ok, &done));
+        test_transmission_ok, &done));
     /* Second attempt to respond fails */
     g_assert(!nfc_transmission_respond_bytes(trans, out,
         test_transmission_not_reached, NULL));
@@ -389,9 +403,8 @@ test_drop_transmission2(
     g_assert_cmpint(gone, == ,0);
     g_assert(trans);
 
-    /* NOTE: reusing test_basic_transmission_ok */
     g_assert(nfc_transmission_respond(trans, test_out.bytes, test_out.size,
-        test_basic_transmission_ok, &done));
+        test_transmission_ok, &done));
     g_assert_cmpint(gone, == ,0);
     g_assert_cmpint(done, == ,0);
 
@@ -481,7 +494,7 @@ test_stray_transmission2(
 
     /* Respond to it (but don't complete it yet) */
     g_assert(nfc_transmission_respond(trans, test_out.bytes, test_out.size,
-        test_basic_transmission_ok, &done));
+        test_transmission_error, &done));
     g_assert_cmpint(gone, == ,0);
     g_assert_cmpint(done, == ,0);
 
@@ -494,7 +507,7 @@ test_stray_transmission2(
     nfc_initiator_transmit(init, test_in.bytes, test_in.size);
     g_assert(!init->present);
     g_assert_cmpint(gone, == ,1);
-    g_assert_cmpint(done, == ,0);
+    g_assert_cmpint(done, == ,1);
 
     nfc_transmission_unref(trans);
     nfc_initiator_remove_all_handlers(init, id);
@@ -531,9 +544,8 @@ test_queued_transmission(
     trans1 = trans;
     trans = NULL;
 
-    /* NOTE: reusing test_basic_transmission_ok */
     g_assert(nfc_transmission_respond(trans1, test_out.bytes, test_out.size,
-        test_basic_transmission_ok, &done));
+        test_transmission_ok, &done));
     g_assert_cmpint(gone, == ,0);
     g_assert_cmpint(done, == ,0);
 
