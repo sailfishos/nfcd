@@ -1,34 +1,37 @@
 /*
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2019 Open Mobile Platform LLC.
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  *
- *   1. Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *   2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in the
- *      documentation and/or other materials provided with the distribution.
- *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived
- *      from this software without specific prior written permission.
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer
+ *     in the documentation and/or other materials provided with the
+ *     distribution.
+ *  3. Neither the names of the copyright holders nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) ARISING
+ * IN ANY WAY OUT OF THE USE OR INABILITY TO USE THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation
+ * are those of the authors and should not be interpreted as representing
+ * any official policies, either expressed or implied.
  */
 
 #include "org.sailfishos.nfc.Daemon.h"
@@ -60,6 +63,11 @@ typedef struct app_data {
     GMainLoop* loop;
     gboolean stopped;
 } AppData;
+
+typedef struct app_opts {
+    char* media_type;
+    gboolean media_type_rec;
+} AppOpts;
 
 static
 gboolean
@@ -374,7 +382,8 @@ write_ndef(
 static
 NfcNdefRec*
 ndef_uri_proc(
-    const char* uri)
+    const char* uri,
+    const GUtilData* data)
 {
     NfcNdefRecU* u = nfc_ndef_rec_u_new(uri);
 
@@ -384,7 +393,8 @@ ndef_uri_proc(
 static
 NfcNdefRec*
 ndef_text_proc(
-    const char* text)
+    const char* text,
+    const GUtilData* data)
 {
     NfcNdefRecT* t = nfc_ndef_rec_t_new(text, NULL);
 
@@ -394,7 +404,8 @@ ndef_text_proc(
 static
 NfcNdefRec*
 ndef_sp_proc(
-    const char* spec)
+    const char* spec,
+    const GUtilData* data)
 {
     NfcNdefRec* rec = NULL;
     const char* ptr = spec;
@@ -476,15 +487,16 @@ ndef_sp_proc(
             
             icon_map = g_mapped_file_new(fname, FALSE, &error);
             if (icon_map) {
+                media.data.bytes = (void*)g_mapped_file_get_contents(icon_map);
+                media.data.size = g_mapped_file_get_length(icon_map);
                 magic = magic_open(MAGIC_MIME_TYPE);
                 if (magic) {
                     if (magic_load(magic, NULL) == 0) {
-                        media.type = magic_file(magic, fname);
+                        media.type = magic_buffer(magic, media.data.bytes,
+                            media.data.size);
                         GDEBUG("Detected type %s", media.type);
                     }
                 }
-                media.data.bytes = (void*)g_mapped_file_get_contents(icon_map);
-                media.data.size = g_mapped_file_get_length(icon_map);
                 icon = &media;
             } else {
                 fprintf(stderr, "%s\n", GERRMSG(error));
@@ -515,6 +527,67 @@ ndef_sp_proc(
     return rec;
 }
 
+static
+NfcNdefRec*
+ndef_mt_proc(
+    const char* type,
+    const GUtilData* data)
+{
+    NfcNdefRec* rec = NULL;
+    magic_t magic = (magic_t)0;
+
+    if (!type) {
+        magic = magic_open(MAGIC_MIME_TYPE);
+        if (magic) {
+            if (magic_load(magic, NULL) == 0) {
+                type = magic_buffer(magic, data->bytes, data->size);
+                if (type) {
+                    GDEBUG("Detected type %s", type);
+                } else {
+                    fprintf(stderr, "Failed to generate media type\n");
+                }
+            }
+        }
+    }
+    if (type) {
+        GUtilData mediatype;
+
+        rec = nfc_ndef_rec_new_mediatype(gutil_data_from_string(&mediatype,
+            type), data);
+    }
+    if (magic) {
+        magic_close(magic);
+    }
+    return rec;
+}
+
+static
+gboolean
+parse_media_type(
+    const char* name,
+    const char* value,
+    gpointer data,
+    GError** error)
+{
+    AppOpts* opts = data;
+
+    if (value && value[0]) {
+        GUtilData mediatype;
+
+        if (!nfc_ndef_valid_mediatype(gutil_data_from_string(&mediatype,
+            value), FALSE)) {
+            g_propagate_error(error, g_error_new(G_OPTION_ERROR,
+                G_OPTION_ERROR_BAD_VALUE, "Invalid media type '%s'", value));
+            return FALSE;
+        }
+        g_free(opts->media_type);
+        opts->media_type = g_strdup(value);
+        /* Fall through to return TRUE */
+    }
+    opts->media_type_rec = TRUE;
+    return TRUE;
+}
+
 int main(int argc, char* argv[])
 {
     int ret = RET_ERR;
@@ -534,21 +607,34 @@ int main(int argc, char* argv[])
           "Write Text record", "TEXT" },
         { "sp", 's', 0, G_OPTION_ARG_STRING, &sp,
           "Write SmartPoster record", "SPEC" },
+        { "media", 'm', G_OPTION_FLAG_OPTIONAL_ARG,
+          G_OPTION_ARG_CALLBACK, &parse_media_type,
+          "Write MediaType record containing FILE", "TYPE" },
         { NULL }
     };
+    AppOpts opts;
     GOptionContext* options = g_option_context_new("[FILE]");
+    GOptionGroup* group = g_option_group_new("", "", "", &opts, NULL);
     GError* error = NULL;
 
-    g_option_context_add_main_entries(options, entries, NULL);
+    memset(&opts, 0, sizeof(opts));
+    g_option_group_add_entries(group, entries);
+    g_option_context_set_main_group(options, group);
     g_option_context_set_summary(options, "Writes NDEF record to a tag.\n\n"
         "SmartPoster SPEC is a comma-separated sequence of URL, title,\n"
         "action, type, size and path to the icon file. Embedded commas\n"
-        "can be escaped with a backslash.");
-    if (g_option_context_parse(options, &argc, &argv, &error)) {
-        NfcNdefRec* (*ndef_proc)(const char* spec) = NULL;
+        "can be escaped with a backslash.\n\n"
+        "TYPE for a MediaType record can be omitted or left empty, in\n"
+        "which case the program will attempt to automatically determine\n"
+        "media type from the FILE contents.");
+
+    if (g_option_context_parse(options, &argc, &argv, &error) && argc < 3) {
+        NfcNdefRec* (*ndef_proc)(const char*, const GUtilData*) = NULL;
+        const char* file = argc == 2 ? argv[1] : NULL;
         const char* ndef_spec = NULL;
         const char* type = NULL;
         int gen_ndef = empty;
+        int need_file = 0;
 
         if (uri) {
             ndef_proc = ndef_uri_proc;
@@ -568,50 +654,64 @@ int main(int argc, char* argv[])
             type = "SmartPoster";
             gen_ndef++;
         }
+        if (opts.media_type_rec) {
+            ndef_proc = ndef_mt_proc;
+            ndef_spec = opts.media_type;
+            type = "MediaType";
+            gen_ndef++;
+            need_file++;
+        }
 
         /* No spec - need the file. No file - need exactly one spec */
-        if ((!gen_ndef && argc == 2) || (gen_ndef == 1 && argc == 1)) {
-            AppData app;
+        if ((!gen_ndef && file) || (gen_ndef == 1 && need_file == !!file)) {
+            GMappedFile* map = file ? g_mapped_file_new(file, FALSE, &error) :
+                NULL;
 
-            gutil_log_timestamp = FALSE;
-            gutil_log_default.level = verbose ?
-                GLOG_LEVEL_VERBOSE :
-                GLOG_LEVEL_INFO;
+            if (!file || map) {
+                AppData app;
+                GUtilData mapdata;
+                const GUtilData* data;
 
-            memset(&app, 0, sizeof(app));
-            if (ndef_proc) {
-                NfcNdefRec* rec = ndef_proc(ndef_spec);
+                memset(&app, 0, sizeof(app));
+                gutil_log_timestamp = FALSE;
+                gutil_log_default.level = verbose ?
+                    GLOG_LEVEL_VERBOSE :
+                    GLOG_LEVEL_INFO;
 
-                if (rec) {
-                    app.ndef = rec->raw;
-                    ret = write_ndef(&app);
-                    nfc_ndef_rec_unref(rec);
+                if (map) {
+                    mapdata.bytes = (void*) g_mapped_file_get_contents(map);
+                    mapdata.size = g_mapped_file_get_length(map);
+                    data = &mapdata;
                 } else {
-                    fprintf(stderr, "Failed to generate %s record\n", type);
+                    memset(&mapdata, 0, sizeof(mapdata));
+                    data = NULL;
                 }
-            } else if (empty) {
-                ret = write_ndef(&app);
-            } else {
-                const char* file = argv[1];
-                gchar* contents;
-                gsize size;
 
-                if (g_file_get_contents(file, &contents, &size, &error)) {
-                    if (size > 0xffff) {
-                        fprintf(stderr, "File too big (%u bytes)\n",
-                            (guint)size);
-                    } else {
-                        app.ndef.bytes = (void*)contents;
-                        app.ndef.size = size;
+                if (ndef_proc) {
+                    NfcNdefRec* rec = ndef_proc(ndef_spec, data);
+
+                    if (rec) {
+                        app.ndef = rec->raw;
                         ret = write_ndef(&app);
+                        nfc_ndef_rec_unref(rec);
+                    } else {
+                        fprintf(stderr, "Failed to generate %s record\n",
+                            type);
                     }
-                    g_free(contents);
+                } else if (empty) {
+                    ret = write_ndef(&app);
+                } else if (mapdata.size > 0xffff) {
+                    fprintf(stderr, "File too big (%u bytes)\n", (guint)
+                        mapdata.size);
                 } else {
-                    fprintf(stderr, "%s\n", GERRMSG(error));
-                    g_error_free(error);
+                    app.ndef = mapdata;
+                    ret = write_ndef(&app);
                 }
+                g_strfreev(app.tags);
+            } else if (error) {
+                fprintf(stderr, "%s\n", GERRMSG(error));
+                g_error_free(error);
             }
-            g_strfreev(app.tags);
         } else {
             char* help = g_option_context_get_help(options, TRUE, NULL);
             gsize len = strlen(help);
@@ -627,6 +727,7 @@ int main(int argc, char* argv[])
     g_free(uri);
     g_free(text);
     g_free(sp);
+    g_free(opts.media_type);
     g_option_context_free(options);
     return ret;
 }
