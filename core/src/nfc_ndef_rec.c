@@ -2,32 +2,35 @@
  * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2022 Jolla Ltd.
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  *
- *   1. Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *   2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in the
- *      documentation and/or other materials provided with the distribution.
- *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived
- *      from this software without specific prior written permission.
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer
+ *     in the documentation and/or other materials provided with the
+ *     distribution.
+ *  3. Neither the names of the copyright holders nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) ARISING
+ * IN ANY WAY OUT OF THE USE OR INABILITY TO USE THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation
+ * are those of the authors and should not be interpreted as representing
+ * any official policies, either expressed or implied.
  */
 
 #include "nfc_ndef_p.h"
@@ -157,6 +160,98 @@ nfc_ndef_rec_parse(
     }
 }
 
+static
+NfcNdefRec*
+nfc_ndef_rec_new_from_data(
+    GType gtype,
+    NFC_NDEF_TNF tnf,
+    NFC_NDEF_RTD rtd,
+    const GUtilData* type,
+    const GUtilData* payload)
+{
+    /* type and payload pointers are checked by the caller */
+    if (gtype &&
+#if GLIB_SIZEOF_SIZE_T > 4
+        payload->size <= 0xffffffff &&
+#endif
+        type->size <= 0xff) {
+        NfcNdefData ndef;
+        NfcNdefRec* rec;
+        guint8 hdr = NFC_NDEF_HDR_MB | NFC_NDEF_HDR_ME |
+            (tnf & NFC_NDEF_HDR_TNF_MASK);
+        const guint8 type_length = type->size;
+        const gboolean sr = (payload->size <= 0xff); /* Short Record) */
+        GByteArray* buf = g_byte_array_sized_new((sr ? 3 : 6) + type_length +
+            payload->size);
+
+        memset(&ndef, 0, sizeof(ndef));
+        ndef.type_length = type_length;
+        ndef.payload_length = payload->size;
+
+        /* Header, TYPE LENGTH and PAYLOAD LENGTH */
+        if (sr) {
+            guint8 payload_len = (guint8)payload->size;
+
+            /*
+             * If the SR flag is set, the PAYLOAD_LENGTH field is a single
+             * octet representing an 8-bit unsigned integer.
+             */
+            hdr |= NFC_NDEF_HDR_SR;
+            g_byte_array_append(buf, &hdr, 1);
+            g_byte_array_append(buf, &type_length, 1);
+            g_byte_array_append(buf, &payload_len, 1);
+        } else {
+            guint8 payload_length[4];
+
+            /*
+             * If the SR flag is clear, the PAYLOAD_LENGTH field is four
+             * octets representing a 32-bit unsigned integer. Transmission
+             * order of the octets is MSB-first.
+             */
+            payload_length[0] = (guint8)(payload->size >> 24);
+            payload_length[1] = (guint8)(payload->size >> 16);
+            payload_length[2] = (guint8)(payload->size >> 8);
+            payload_length[3] = (guint8)payload->size;
+            g_byte_array_append(buf, &hdr, 1);
+            g_byte_array_append(buf, &type_length, 1);
+            g_byte_array_append(buf, payload_length, 4);
+        }
+
+        /* TYPE */
+        ndef.type_offset = buf->len;
+        g_byte_array_append(buf, type->bytes, type->size);
+
+        /* PAYLOAD */
+        g_byte_array_append(buf, payload->bytes, payload->size);
+
+        /* Allocate the object */
+        ndef.rec.bytes = buf->data;
+        ndef.rec.size = buf->len;
+        rec = nfc_ndef_rec_initialize(g_object_new(gtype, NULL), rtd, &ndef);
+
+        g_byte_array_free(buf, TRUE);
+        return rec;
+    } else {
+        return NULL;
+    }
+}
+
+static
+guint8
+nfc_ndef_rec_map_flags(
+    NFC_NDEF_REC_FLAGS flags)
+{
+    guint8 ndef_flags = 0;
+
+    if (flags & NFC_NDEF_REC_FLAG_FIRST) {
+        ndef_flags |= NFC_NDEF_HDR_MB;
+    }
+    if (flags & NFC_NDEF_REC_FLAG_LAST) {
+        ndef_flags |= NFC_NDEF_HDR_ME;
+    }
+    return ndef_flags;
+}
+
 /* See RFC 2045, section 5.1 "Syntax of the Content-Type Header Field" */
 
 static
@@ -185,7 +280,7 @@ nfc_ndef_is_token_char(
 
 NfcNdefRec*
 nfc_ndef_rec_new(
-   const GUtilData* block)
+    const GUtilData* block)
 {
     NfcNdefRec* first = NULL;
 
@@ -259,6 +354,20 @@ nfc_ndef_rec_new_tlv(
 }
 
 NfcNdefRec*
+nfc_ndef_rec_new_mediatype(
+    const GUtilData* type,
+    const GUtilData* payload) /* Since 1.1.18 */
+{
+    if (nfc_ndef_valid_mediatype(type, FALSE)) {
+        static const GUtilData no_payload = { NULL, 0 };
+
+        return nfc_ndef_rec_new_from_data(THIS_TYPE, NFC_NDEF_TNF_MEDIA_TYPE,
+            NFC_NDEF_RTD_UNKNOWN, type, payload ? payload : &no_payload);
+    }
+    return NULL;
+}
+
+NfcNdefRec*
 nfc_ndef_rec_ref(
     NfcNdefRec* self)
 {
@@ -282,51 +391,39 @@ nfc_ndef_valid_mediatype(
     const GUtilData* type,
     gboolean wildcard) /* Since 1.0.18 */
 {
-    guint i = 0;
+    if (type) {
+        guint i = 0;
 
-    if (type->size > 0) {
-        if (type->bytes[i] == (guint8)'*') {
-            if (wildcard) {
-                i++;
+        if (type->size > 0) {
+            if (type->bytes[i] == (guint8)'*') {
+                if (wildcard) {
+                    i++;
+                } else {
+                    return FALSE;
+                }
             } else {
-                return FALSE;
-            }
-        } else {
-            while (i < type->size && nfc_ndef_is_token_char(type->bytes[i])) {
-                i++;
+                while (i < type->size &&
+                    nfc_ndef_is_token_char(type->bytes[i])) {
+                    i++;
+                }
             }
         }
-    }
-    if (i > 0 && (i + 1) < type->size && type->bytes[i] == (guint8)'/') {
-        i++;
-        if ((i + 1) == type->size && type->bytes[i] == (guint8)'*') {
-            return wildcard;
-        } else {
-            while (i < type->size && nfc_ndef_is_token_char(type->bytes[i])) {
-                i++;
-            }
-            if (i == type->size) {
-                return !wildcard;
+        if (i > 0 && (i + 1) < type->size && type->bytes[i] == (guint8)'/') {
+            i++;
+            if ((i + 1) == type->size && type->bytes[i] == (guint8)'*') {
+                return wildcard;
+            } else {
+                while (i < type->size &&
+                    nfc_ndef_is_token_char(type->bytes[i])) {
+                    i++;
+                }
+                if (i == type->size) {
+                    return !wildcard;
+                }
             }
         }
     }
     return FALSE;
-}
-
-static
-guint8
-nfc_ndef_rec_map_flags(
-    NFC_NDEF_REC_FLAGS flags)
-{
-    guint8 ndef_flags = 0;
-
-    if (flags & NFC_NDEF_REC_FLAG_FIRST) {
-        ndef_flags |= NFC_NDEF_HDR_MB;
-    }
-    if (flags & NFC_NDEF_REC_FLAG_LAST) {
-        ndef_flags |= NFC_NDEF_HDR_ME;
-    }
-    return ndef_flags;
 }
 
 /*==========================================================================*
@@ -366,64 +463,6 @@ nfc_ndef_payload(
     }
 }
 
-static
-NfcNdefRec*
-nfc_ndef_rec_new_from_data(
-    GType gtype,
-    NFC_NDEF_TNF tnf,
-    NFC_NDEF_RTD rtd,
-    const GUtilData* type,
-    const GUtilData* payload)
-{
-    NfcNdefData ndef;
-    NfcNdefRec* rec;
-    guint8 hdr = NFC_NDEF_HDR_MB | NFC_NDEF_HDR_ME |
-        (tnf & NFC_NDEF_HDR_TNF_MASK);
-    const guint8 type_len = type->size;
-    const gboolean short_rec = (payload->size <= 0xff);
-    const guint total_len = type->size + payload->size + (short_rec ? 3 : 6);
-    GByteArray* buf = g_byte_array_sized_new(total_len);
-
-    memset(&ndef, 0, sizeof(ndef));
-    ndef.type_length = type_len;
-    ndef.payload_length = payload->size;
-
-    /* Header, TYPE LENGTH and PAYLOAD LENGTH */
-    if (short_rec) {
-        guint8 payload_len = (guint8)payload->size;
-
-        hdr |= NFC_NDEF_HDR_SR;
-        g_byte_array_append(buf, &hdr, 1);
-        g_byte_array_append(buf, &type_len, 1);
-        g_byte_array_append(buf, &payload_len, 1);
-    } else {
-        guint8 payload_len[4];
-
-        payload_len[0] = (guint8)(payload->size >> 24);
-        payload_len[1] = (guint8)(payload->size >> 16);
-        payload_len[2] = (guint8)(payload->size >> 8);
-        payload_len[3] = (guint8)payload->size;
-        g_byte_array_append(buf, &hdr, 1);
-        g_byte_array_append(buf, &type_len, 1);
-        g_byte_array_append(buf, payload_len, 4);
-    }
-
-    /* TYPE */
-    ndef.type_offset = buf->len;
-    g_byte_array_append(buf, type->bytes, type->size);
-
-    /* PAYLOAD */
-    g_byte_array_append(buf, payload->bytes, payload->size);
-
-    /* Allocate the object */
-    ndef.rec.bytes = buf->data;
-    ndef.rec.size = buf->len;
-    rec = nfc_ndef_rec_initialize(g_object_new(gtype, NULL), rtd, &ndef);
-
-    g_byte_array_free(buf, TRUE);
-    return rec;
-}
-
 NfcNdefRec*
 nfc_ndef_rec_new_well_known(
     GType gtype,
@@ -433,15 +472,6 @@ nfc_ndef_rec_new_well_known(
 {
     return nfc_ndef_rec_new_from_data(gtype, NFC_NDEF_TNF_WELL_KNOWN,
         rtd, type, payload);
-}
-
-NfcNdefRec*
-nfc_ndef_rec_new_media(
-    const GUtilData* type,
-    const GUtilData* payload)
-{
-    return nfc_ndef_rec_new_from_data(THIS_TYPE, NFC_NDEF_TNF_MEDIA_TYPE,
-        NFC_NDEF_RTD_UNKNOWN, type, payload);
 }
 
 NfcNdefRec*

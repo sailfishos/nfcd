@@ -1,33 +1,36 @@
 /*
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  *
- *   1. Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *   2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in the
- *      documentation and/or other materials provided with the distribution.
- *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer
+ *     in the documentation and/or other materials provided with the
+ *     distribution.
+ *  3. Neither the names of the copyright holders nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) ARISING
+ * IN ANY WAY OUT OF THE USE OR INABILITY TO USE THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation
+ * are those of the authors and should not be interpreted as representing
+ * any official policies, either expressed or implied.
  */
 
 #include "test_common.h"
@@ -565,6 +568,79 @@ test_broken_uri(
 }
 
 /*==========================================================================*
+ * mediatype
+ *==========================================================================*/
+
+static
+void
+test_mediatype(
+    void)
+{
+    NfcNdefRec* rec;
+    GUtilData type, data;
+    static const guint8 png[] = {
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+        0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+        0x00, 0x00, 0x00, 0x12, 0x00, 0x00, 0x00, 0x0b,
+        0x01, 0x03, 0x00, 0x00, 0x00, 0x48, 0xd9, 0x4f,
+        0x47, 0x00, 0x00, 0x00, 0x06, 0x50, 0x4c, 0x54,
+        0x45, 0xff, 0xff, 0xff, 0x00, 0x2f, 0x6c, 0x03,
+        0xda, 0xc6, 0x60, 0x00, 0x00, 0x00, 0x15, 0x49,
+        0x44, 0x41, 0x54, 0x08, 0xd7, 0x63, 0x60, 0x67,
+        0x60, 0x60, 0x40, 0xc6, 0xff, 0xff, 0x1f, 0x80,
+        0x63, 0x34, 0x39, 0x00, 0xba, 0xed, 0x08, 0x73,
+        0xdb, 0x0d, 0xbb, 0xd3, 0x00, 0x00, 0x00, 0x00,
+        0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+    };
+    static const guint8 ndef_no_data[] = {
+        0xd2, 0x18, 0x00, 0x61, 0x70, 0x70, 0x6c, 0x69,
+        0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x2f, 0x6f,
+        0x63, 0x74, 0x65, 0x74, 0x2d, 0x73, 0x74, 0x72,
+        0x65, 0x61, 0x6d
+    };
+    static const guint8 ndef_png[] = {
+        0xd2, 0x09, 0x60, 0x69, 0x6d, 0x61, 0x67, 0x65,
+        0x2f, 0x70, 0x6e, 0x67, 0x89, 0x50, 0x4e, 0x47,
+        0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+        0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x12,
+        0x00, 0x00, 0x00, 0x0b, 0x01, 0x03, 0x00, 0x00,
+        0x00, 0x48, 0xd9, 0x4f, 0x47, 0x00, 0x00, 0x00,
+        0x06, 0x50, 0x4c, 0x54, 0x45, 0xff, 0xff, 0xff,
+        0x00, 0x2f, 0x6c, 0x03, 0xda, 0xc6, 0x60, 0x00,
+        0x00, 0x00, 0x15, 0x49, 0x44, 0x41, 0x54, 0x08,
+        0xd7, 0x63, 0x60, 0x67, 0x60, 0x60, 0x40, 0xc6,
+        0xff, 0xff, 0x1f, 0x80, 0x63, 0x34, 0x39, 0x00,
+        0xba, 0xed, 0x08, 0x73, 0xdb, 0x0d, 0xbb, 0xd3,
+        0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44,
+        0xae, 0x42, 0x60, 0x82
+    };
+
+    gutil_data_from_string(&type, "reallyreallyreallyreallyreallyreally"
+        "reallyreallyreallyreallyreallyreallyreallyreallyreallyreally"
+        "reallyreallyreallyreallyreallyreallyreallyreallyreallyreally"
+        "reallyreallyreallyreallyreallyreallyreallyreallyreallyreally"
+        "reallyreallyreallyreallyreallylong/mediatype");
+    g_assert(!nfc_ndef_rec_new_mediatype(NULL, NULL));
+    g_assert(!nfc_ndef_rec_new_mediatype(&type, NULL));
+
+    gutil_data_from_string(&type, "application/octet-stream");
+    rec = nfc_ndef_rec_new_mediatype(&type, NULL);
+    g_assert(rec);
+    g_assert_cmpuint(rec->raw.size, == ,sizeof(ndef_no_data));
+    g_assert(!memcmp(rec->raw.bytes, ndef_no_data, rec->raw.size));
+    nfc_ndef_rec_unref(rec);
+
+    data.bytes = png;
+    data.size = sizeof(png);
+    gutil_data_from_string(&type, "image/png");
+    rec = nfc_ndef_rec_new_mediatype(&type, &data);
+    g_assert(rec);
+    g_assert_cmpuint(rec->raw.size, == ,sizeof(ndef_png));
+    g_assert(!memcmp(rec->raw.bytes, ndef_png, rec->raw.size));
+    nfc_ndef_rec_unref(rec);
+}
+
+/*==========================================================================*
  * id
  *==========================================================================*/
 
@@ -739,6 +815,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("uri"), test_uri);
     g_test_add_func(TEST_("well_known_short"), test_well_known_short);
     g_test_add_func(TEST_("well_known_long"), test_well_known_long);
+    g_test_add_func(TEST_("mediatype"), test_mediatype);
     g_test_add_func(TEST_("broken_uri"), test_broken_uri);
     g_test_add_func(TEST_("id"), test_id);
     g_test_add_func(TEST_("unknown"), test_unknown);
