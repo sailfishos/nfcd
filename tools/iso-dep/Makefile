@@ -111,12 +111,6 @@ release: $(RELEASE_EXE)
 clean:
 	rm -fr $(BUILD_DIR) $(SRC_DIR)/*~
 
-nfc_core_debug_lib:
-	$(MAKE) -C $(NFC_CORE_DIR) debug
-
-nfc_core_release_lib:
-	$(MAKE) -C $(NFC_CORE_DIR) release
-
 $(GEN_DIR)/%.c: $(SPEC_DIR)/%.xml
 	gdbus-codegen --generate-c-code $(@:%.c=%) $<
 

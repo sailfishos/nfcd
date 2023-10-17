@@ -1,33 +1,39 @@
 /*
+ * Copyright (C) 2019-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2019-2021 Jolla Ltd.
- * Copyright (C) 2019-2021 Slava Monich <slava.monich@jolla.com>
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  *
- *   1. Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *   2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in the
- *      documentation and/or other materials provided with the distribution.
- *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived
- *      from this software without specific prior written permission.
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer
+ *     in the documentation and/or other materials provided with the
+ *     distribution.
+ *
+ *  3. Neither the names of the copyright holders nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation
+ * are those of the authors and should not be interpreted as representing
  */
 
 #include "nfc_types_p.h"
@@ -54,7 +60,7 @@ static const guint8 test_ndef_data[] = {
 };
 
 typedef struct test_data {
-    NfcNdefRec* rec;
+    NdefRec* rec;
     GMainLoop* loop;
     DBusHandlers* handlers;
     char* dir;
@@ -63,15 +69,15 @@ typedef struct test_data {
 } TestData;
 
 static
-NfcNdefRec*
+NdefRec*
 test_ndef_record_new(
     void)
 {
     GUtilData bytes;
-    NfcNdefRec* rec;
+    NdefRec* rec;
 
     TEST_BYTES_SET(bytes, test_ndef_data);
-    rec = nfc_ndef_rec_new(&bytes);
+    rec = ndef_rec_new(&bytes);
     g_assert(rec);
     return rec;
 }
@@ -149,7 +155,7 @@ test_data_cleanup(
     g_main_loop_unref(test->loop);
     g_object_unref(test->dbus_handler);
     dbus_handlers_free(test->handlers);
-    nfc_ndef_rec_unref(test->rec);
+    ndef_rec_unref(test->rec);
     g_free(test->fname);
     g_free(test->dir);
 }
@@ -267,7 +273,7 @@ test_handler_handle(
     TestData* test = user_data;
 
     GDEBUG("Handler received %u bytes NDEF message", (guint)size);
-    g_assert(size == sizeof(test_ndef_data));
+    g_assert_cmpuint(size, == ,sizeof(test_ndef_data));
     g_assert(!memcmp(ndef, test_ndef_data, size));
     test_handler_complete_handle(object, call, TRUE);
     test_quit_later_n(test->loop, 100); /* Allow everything to complete */
@@ -318,7 +324,7 @@ test_handler_listener_notify(
 
     GDEBUG("Listener received %u bytes NDEF message", (guint)size);
     g_assert(handled);
-    g_assert(size == sizeof(test_ndef_data));
+    g_assert_cmpuint(size, == ,sizeof(test_ndef_data));
     g_assert(!memcmp(ndef, test_ndef_data, size));
     test_handler_complete_notify(object, call);
     test_quit_later_n(test->loop, 100); /* Allow everything to complete */
@@ -337,7 +343,7 @@ test_handler_listener_handle(
     const guint8* ndef = g_variant_get_fixed_array(data, &size, 1);
 
     GDEBUG("Handler received %u bytes NDEF message", (guint)size);
-    g_assert(size == sizeof(test_ndef_data));
+    g_assert_cmpuint(size, == ,sizeof(test_ndef_data));
     g_assert(!memcmp(ndef, test_ndef_data, size));
     test_handler_complete_handle(object, call, TRUE);
     /* Now wait for listener to be called */
@@ -391,7 +397,7 @@ test_handlers_handle(
     TestData* test = user_data;
 
     GDEBUG("Handler received %u bytes NDEF message", (guint)size);
-    g_assert(size == sizeof(test_ndef_data));
+    g_assert_cmpuint(size, == ,sizeof(test_ndef_data));
     g_assert(!memcmp(ndef, test_ndef_data, size));
     test_handler_complete_handle(object, call, TRUE);
     test_quit_later_n(test->loop, 100); /* Allow everything to complete */
@@ -556,7 +562,7 @@ test_listeners_notify(
     test->count++;
     GDEBUG("Notify %d", test->count);
     g_assert(!handled);
-    g_assert(test->count <= 3);
+    g_assert_cmpint(test->count, <= ,3);
     test_handler_complete_notify(object, call);
     if (test->count == 3) {
         /* Allow everything to complete */
@@ -758,7 +764,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("cancel_handler"), test_cancel_handler);
     g_test_add_func(TEST_("cancel_listener"), test_cancel_listener);
     g_test_add_func(TEST_("handler"), test_handler);
-    g_test_add_func(TEST_("handler_listener"), test_handler_listener); 
+    g_test_add_func(TEST_("handler_listener"), test_handler_listener);
     g_test_add_func(TEST_("handlers"), test_handlers);
     g_test_add_func(TEST_("handlers2"), test_handlers2);
     g_test_add_func(TEST_("listeners"), test_listeners);

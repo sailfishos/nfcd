@@ -24,7 +24,6 @@ all:
 	@$(MAKE) -C core_tag_t2 $*
 	@$(MAKE) -C core_tag_t4 $*
 	@$(MAKE) -C core_target $*
-	@$(MAKE) -C core_tlv $*
 	@$(MAKE) -C core_util $*
 	@$(MAKE) -C plugins_dbus_handlers $*
 	@$(MAKE) -C plugins_dbus_handlers_config $*

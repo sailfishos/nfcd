@@ -1,39 +1,52 @@
 /*
+ * Copyright (C) 2019-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2019 Jolla Ltd.
- * Copyright (C) 2019 Slava Monich <slava.monich@jolla.com>
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  *
- *   1. Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *   2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in the
- *      documentation and/or other materials provided with the distribution.
- *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived
- *      from this software without specific prior written permission.
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer
+ *     in the documentation and/or other materials provided with the
+ *     distribution.
+ *
+ *  3. Neither the names of the copyright holders nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation
+ * are those of the authors and should not be interpreted as representing
+ * any official policies, either expressed or implied.
  */
+
+/* This test intentionally keeps using legacy NfcNdef API */
+#include <glib.h>
+#undef G_DEPRECATED_FOR
+#define G_DEPRECATED_FOR(x)
 
 #include "test_common.h"
 
+#include "nfc_types_p.h"
 #include "nfc_util.h"
-#include "nfc_ndef_p.h"
+#include "nfc_ndef.h"
 #include "nfc_system.h"
 
 #include <gutil_log.h>
@@ -82,11 +95,6 @@ void
 test_null(
     void)
 {
-    NfcNdefData ndef;
-
-    memset(&ndef, 0, sizeof(ndef));
-    g_assert(!nfc_ndef_rec_sp_new_from_data(NULL));
-    g_assert(!nfc_ndef_rec_sp_new_from_data(&ndef));
     g_assert(!nfc_ndef_rec_sp_new(NULL, NULL, NULL, NULL, 0, 0, NULL));
 }
 
@@ -663,34 +671,6 @@ test_valid_check(
 
 static
 void
-test_valid(
-    gconstpointer data)
-{
-    const TestValidData* test = data;
-    NfcNdefData ndef;
-    NfcNdefRecSp* sp;
-    NfcNdefRec* rec;
-
-    memset(&ndef, 0, sizeof(ndef));
-    ndef.rec = test->rec;
-    ndef.payload_length = ndef.rec.bytes[2];
-    ndef.type_offset = 3;
-    ndef.type_length = ndef.rec.bytes[1];
-
-    test_system_locale = test->locale;
-    sp = nfc_ndef_rec_sp_new_from_data(&ndef);
-    test_valid_check(sp, test);
-    nfc_ndef_rec_unref(&sp->rec);
-
-    rec = nfc_ndef_rec_new(&test->rec);
-    g_assert(rec);
-    g_assert(NFC_IS_NDEF_REC_SP(rec));
-    test_valid_check(NFC_NDEF_REC_SP(rec), test);
-    nfc_ndef_rec_unref(rec);
-}
-
-static
-void
 test_encode(
     gconstpointer data)
 {
@@ -768,16 +748,7 @@ test_invalid(
     gconstpointer data)
 {
     const TestInvalidData* test = data;
-    NfcNdefData ndef;
     NfcNdefRec* rec;
-
-    memset(&ndef, 0, sizeof(ndef));
-    ndef.rec = test->rec;
-    ndef.payload_length = ndef.rec.bytes[2];
-    ndef.type_offset = 3;
-    ndef.type_length = ndef.rec.bytes[1];
-
-    g_assert(!nfc_ndef_rec_sp_new_from_data(&ndef));
 
     /* nfc_ndef_rec_new turns it into a generic record */
     rec = nfc_ndef_rec_new(&test->rec);
@@ -800,13 +771,6 @@ int main(int argc, char* argv[])
     G_GNUC_END_IGNORE_DEPRECATIONS;
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("null"), test_null);
-    for (i = 0; i < G_N_ELEMENTS(valid_tests); i++) {
-        const TestValidData* test = valid_tests + i;
-        char* path = g_strconcat(TEST_("/valid/"), test->name, NULL);
-
-        g_test_add_data_func(path, test, test_valid);
-        g_free(path);
-    }
     for (i = 0; i < G_N_ELEMENTS(invalid_tests); i++) {
         const TestInvalidData* test = invalid_tests + i;
         char* path = g_strconcat(TEST_("/invalid/"), test->name, NULL);

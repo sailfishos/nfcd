@@ -1,97 +1,54 @@
 /*
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2018 Bogdan Pankovsky <b.pankovsky@omprussia.ru>
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  *
- *   1. Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *   2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in the
- *      documentation and/or other materials provided with the distribution.
- *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer
+ *     in the documentation and/or other materials provided with the
+ *     distribution.
+ *
+ *  3. Neither the names of the copyright holders nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation
+ * are those of the authors and should not be interpreted as representing
+ * any official policies, either expressed or implied.
  */
+
+/* This test intentionally keeps using legacy NfcNdef API */
+#include <glib.h>
+#undef G_DEPRECATED_FOR
+#define G_DEPRECATED_FOR(x)
 
 #include "test_common.h"
 
-#include "nfc_util.h"
-#include "nfc_ndef_p.h"
-#include "nfc_system.h"
+#include "nfc_types_p.h"
+#include "nfc_ndef.h"
 
 static TestOpt test_opt;
-static const char* test_system_locale = NULL;
-
-/* Stubs */
-
-const char*
-nfc_system_locale(
-    void)
-{
-    return test_system_locale;
-}
-
-/*==========================================================================*
- * null
- *==========================================================================*/
-
-static
-void
-test_null(
-    void)
-{
-    NfcNdefData ndef;
-
-    memset(&ndef, 0, sizeof(ndef));
-    g_assert(!nfc_ndef_rec_t_new_from_data(NULL));
-    g_assert(!nfc_ndef_rec_t_new_from_data(&ndef));
-    g_assert(!nfc_ndef_rec_t_steal_lang(NULL));
-    g_assert(!nfc_ndef_rec_t_steal_text(NULL));
-}
-
-/*==========================================================================*
- * steal
- *==========================================================================*/
-
-static
-void
-test_steal(
-    void)
-{
-    const char* text = "text";
-    const char* lang = "en";
-    NfcNdefRecT* trec = nfc_ndef_rec_t_new(text, lang);
-    char* stolen_text = nfc_ndef_rec_t_steal_text(trec);
-    char* stolen_lang = nfc_ndef_rec_t_steal_lang(trec);
-
-    g_assert(trec);
-    g_assert(!g_strcmp0(stolen_text, text));
-    g_assert(!g_strcmp0(stolen_lang, lang));
-    /* Can't steal the same thing more than once */
-    g_assert(!nfc_ndef_rec_t_steal_text(trec));
-    g_assert(!nfc_ndef_rec_t_steal_lang(trec));
-    g_free(stolen_text);
-    g_free(stolen_lang);
-    nfc_ndef_rec_unref(&trec->rec);
-}
 
 /*==========================================================================*
  * invalid_enc
@@ -118,112 +75,19 @@ test_invalid_text(
 }
 
 /*==========================================================================*
- * default_lang
+ * empty
  *==========================================================================*/
 
 static
 void
-test_default_lang(
+test_empty(
     void)
 {
-    NfcNdefRecT* trec;
+    NfcNdefRecT* trec = nfc_ndef_rec_t_new(NULL, NULL);
 
-    test_system_locale = "C";
-    trec = nfc_ndef_rec_t_new(NULL, NULL);
     g_assert(trec);
-    g_assert(!g_strcmp0(trec->lang, "en"));
-    g_assert(!g_strcmp0(trec->text, ""));
+    g_assert_cmpstr(trec->text, == ,"");
     nfc_ndef_rec_unref(&trec->rec);
-}
-
-/*==========================================================================*
- * locale
- *==========================================================================*/
-
-static
-void
-test_locale(
-    void)
-{
-    NfcNdefRecT* trec;
-
-    test_system_locale = "en_US.UTF-8";
-    trec = nfc_ndef_rec_t_new(NULL, NULL);
-    g_assert(trec);
-    g_assert(!g_strcmp0(trec->lang, "en-US"));
-    g_assert(!g_strcmp0(trec->text, ""));
-    nfc_ndef_rec_unref(&trec->rec);
-
-    test_system_locale = "ru";
-    trec = nfc_ndef_rec_t_new(NULL, NULL);
-    g_assert(trec);
-    g_assert(!g_strcmp0(trec->lang, "ru"));
-    g_assert(!g_strcmp0(trec->text, ""));
-    nfc_ndef_rec_unref(&trec->rec);
-}
-
-/*==========================================================================*
- * lang_match
- *==========================================================================*/
-
-static
-void
-test_lang_match(
-    void)
-{
-    NfcNdefRecT* t;
-    NfcLanguage l;
-
-    test_system_locale = "en_US.UTF-8";
-    t = nfc_ndef_rec_t_new(NULL, NULL);
-    g_assert(t);
-
-    /* Test NULL tolerance */
-    memset(&l, 0, sizeof(l));
-    g_assert(!nfc_ndef_rec_t_lang_match(NULL, NULL));
-    g_assert(!nfc_ndef_rec_t_lang_match(t, NULL));
-    g_assert(!nfc_ndef_rec_t_lang_match(t, &l));
-
-    /* Test matching */
-    l.language = "foo";
-    g_assert(!nfc_ndef_rec_t_lang_match(t, &l));
-
-    l.language = "ru";
-    g_assert(!nfc_ndef_rec_t_lang_match(t, &l));
-
-    l.language = "EN";
-    g_assert(nfc_ndef_rec_t_lang_match(t, &l) == NFC_LANG_MATCH_LANGUAGE);
-
-    l.territory = "";
-    g_assert(nfc_ndef_rec_t_lang_match(t, &l) == NFC_LANG_MATCH_LANGUAGE);
-
-    l.territory = "BR";
-    g_assert(nfc_ndef_rec_t_lang_match(t, &l) == NFC_LANG_MATCH_LANGUAGE);
-
-    l.territory = "US";
-    g_assert(nfc_ndef_rec_t_lang_match(t, &l) == NFC_LANG_MATCH_FULL);
-
-    nfc_ndef_rec_unref(&t->rec);
-
-    /* And again, this time without territory */
-    test_system_locale = "en";
-    t = nfc_ndef_rec_t_new(NULL, NULL);
-    g_assert(t);
-
-    memset(&l, 0, sizeof(l));
-    l.language = "foo";
-    g_assert(!nfc_ndef_rec_t_lang_match(t, &l));
-
-    l.language = "ru";
-    g_assert(!nfc_ndef_rec_t_lang_match(t, &l));
-
-    l.language = "en";
-    g_assert(nfc_ndef_rec_t_lang_match(t, &l) == NFC_LANG_MATCH_LANGUAGE);
-
-    l.territory = "us";
-    g_assert(nfc_ndef_rec_t_lang_match(t, &l) == NFC_LANG_MATCH_LANGUAGE);
-
-    nfc_ndef_rec_unref(&t->rec);
 }
 
 /*==========================================================================*
@@ -357,39 +221,6 @@ test_utf16_encode(
 }
 
 /*==========================================================================*
- * empty
- *==========================================================================*/
-
-static
-void
-test_empty(
-    void)
-{
-    static const guint8 rec[] = {
-        0xd1,           /* NDEF record header (MB=1, ME=1, SR=1, TNF=0x01) */
-        0x01,           /* Length of the record type */
-        0x01,           /* Length of the record payload (1 byte) */
-        'T',            /* Record type: 'T' (TEXT) */
-        0x00            /* encoding "UTF-8" language length 0 */
-    };
-
-    NfcNdefData ndef;
-    NfcNdefRecT* trec;
-
-    memset(&ndef, 0, sizeof(ndef));
-    TEST_BYTES_SET(ndef.rec, rec);
-    ndef.payload_length = rec[2];
-    ndef.type_offset = 3;
-    ndef.type_length = 1;
-
-    trec = nfc_ndef_rec_t_new_from_data(&ndef);
-    g_assert(trec);
-    g_assert(!g_strcmp0(trec->lang, ""));
-    g_assert(!g_strcmp0(trec->text, ""));
-    nfc_ndef_rec_unref(&trec->rec);
-}
-
-/*==========================================================================*
  * invalid
  *==========================================================================*/
 
@@ -455,21 +286,10 @@ void
 test_invalid(
     gconstpointer data)
 {
+    /* These records are interpreted as a generic ones by nfc_ndef_rec_new() */
     const TestInvalid* test = data;
-    const guint payload_offset = 4;
-    NfcNdefData ndef;
-    NfcNdefRec* rec;
+    NfcNdefRec* rec = nfc_ndef_rec_new(&test->rec);
 
-    memset(&ndef, 0, sizeof(ndef));
-    ndef.rec = test->rec;
-    ndef.payload_length = ndef.rec.bytes[2];
-    ndef.type_length = 1;
-    ndef.type_offset = payload_offset - ndef.type_length;
-
-    g_assert(!nfc_ndef_rec_t_new_from_data(&ndef));
-
-    /* It still gets interpreted as a generic record by nfc_ndef_rec_new() */
-    rec = nfc_ndef_rec_new(&test->rec);
     g_assert(rec);
     g_assert(!NFC_IS_NDEF_REC_T(rec));
     nfc_ndef_rec_unref(rec);
@@ -527,25 +347,15 @@ test_utf8(
 {
     const TestUtf8* test = data;
     const GUtilData* rec = &test->rec;
-    NfcNdefData ndef;
     NfcNdefRecT* trec;
     const guint payload_offset = 4;
 
-    memset(&ndef, 0, sizeof(ndef));
-    ndef.rec = *rec;
-    ndef.payload_length = rec->bytes[2];
-    ndef.type_length = 1;
-    ndef.type_offset = payload_offset - ndef.type_length;
-
-    trec = nfc_ndef_rec_t_new_from_data(&ndef);
+    trec = nfc_ndef_rec_t_new(test->text, test->lang);
     g_assert(trec);
     g_assert(trec->rec.tnf == NFC_NDEF_TNF_WELL_KNOWN);
     g_assert(trec->rec.rtd == NFC_NDEF_RTD_TEXT);
     g_assert(!g_strcmp0(trec->lang, test->lang));
     g_assert(!g_strcmp0(trec->text, test->text));
-    nfc_ndef_rec_unref(&trec->rec);
-
-    trec = nfc_ndef_rec_t_new(test->text, test->lang);
     g_assert(test->rec.size == trec->rec.payload.size + payload_offset);
     g_assert(!memcmp(trec->rec.payload.bytes, rec->bytes + payload_offset,
         rec->size - payload_offset));
@@ -570,14 +380,9 @@ int main(int argc, char* argv[])
     g_type_init();
     G_GNUC_END_IGNORE_DEPRECATIONS;
     g_test_init(&argc, &argv, NULL);
-    g_test_add_func(TEST_("null"), test_null);
-    g_test_add_func(TEST_("empty"), test_empty);
-    g_test_add_func(TEST_("steal"), test_steal);
     g_test_add_func(TEST_("invalid_enc"), test_invalid_enc);
     g_test_add_func(TEST_("invalid_text"), test_invalid_text);
-    g_test_add_func(TEST_("default_lang"), test_default_lang);
-    g_test_add_func(TEST_("locale"), test_locale);
-    g_test_add_func(TEST_("lang_match"), test_lang_match);
+    g_test_add_func(TEST_("empty"), test_empty);
 
     for (i = 0; i < G_N_ELEMENTS(tests_invalid); i++) {
         const TestInvalid* test = tests_invalid + i;

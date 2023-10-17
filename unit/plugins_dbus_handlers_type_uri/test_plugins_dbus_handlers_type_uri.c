@@ -1,33 +1,40 @@
 /*
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  *
- *   1. Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *   2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in the
- *      documentation and/or other materials provided with the distribution.
- *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived
- *      from this software without specific prior written permission.
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer
+ *     in the documentation and/or other materials provided with the
+ *     distribution.
+ *
+ *  3. Neither the names of the copyright holders nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation
+ * are those of the authors and should not be interpreted as representing
+ * any official policies, either expressed or implied.
  */
 
 #include "nfc_types_p.h"
@@ -89,8 +96,8 @@ test_basic(
     };
     guint i;
     GVariant* args;
-    NfcNdefRec* http = NFC_NDEF_REC(nfc_ndef_rec_u_new("http://jolla.com"));
-    NfcNdefRec* https = NFC_NDEF_REC(nfc_ndef_rec_u_new("https://jolla.com"));
+    NdefRec* http = NDEF_REC(ndef_rec_u_new("http://jolla.com"));
+    NdefRec* https = NDEF_REC(ndef_rec_u_new("https://jolla.com"));
     DBusHandlersConfig* handlers_http;
     DBusHandlersConfig* handlers_https;
     char* fname[G_N_ELEMENTS(contents)];
@@ -119,14 +126,14 @@ test_basic(
     g_assert(handlers_http->listeners->next);
     g_assert(!handlers_http->listeners->next->next);
 
-    g_assert(!g_strcmp0(handlers_http->handlers->dbus.service, "h1.s"));
-    g_assert(!g_strcmp0(handlers_http->handlers->dbus.path, "/h1"));
-    g_assert(!g_strcmp0(handlers_http->handlers->next->dbus.service, "h3.s"));
-    g_assert(!g_strcmp0(handlers_http->handlers->next->dbus.path, "/h3"));
-    g_assert(!g_strcmp0(handlers_http->listeners->dbus.service, "l1.s"));
-    g_assert(!g_strcmp0(handlers_http->listeners->dbus.path, "/l1"));
-    g_assert(!g_strcmp0(handlers_http->listeners->next->dbus.service, "l3.s"));
-    g_assert(!g_strcmp0(handlers_http->listeners->next->dbus.path, "/l3"));
+    g_assert_cmpstr(handlers_http->handlers->dbus.service, == ,"h1.s");
+    g_assert_cmpstr(handlers_http->handlers->dbus.path, == ,"/h1");
+    g_assert_cmpstr(handlers_http->handlers->next->dbus.service, == ,"h3.s");
+    g_assert_cmpstr(handlers_http->handlers->next->dbus.path, == ,"/h3");
+    g_assert_cmpstr(handlers_http->listeners->dbus.service, == ,"l1.s");
+    g_assert_cmpstr(handlers_http->listeners->dbus.path, == ,"/l1");
+    g_assert_cmpstr(handlers_http->listeners->next->dbus.service, == ,"l3.s");
+    g_assert_cmpstr(handlers_http->listeners->next->dbus.path, == ,"/l3");
 
     g_assert(handlers_https);
     g_assert(handlers_https->handlers);
@@ -137,29 +144,29 @@ test_basic(
     g_assert(handlers_https->listeners->next);
     g_assert(!handlers_https->listeners->next->next);
 
-    g_assert(!g_strcmp0(handlers_https->handlers->dbus.service, "h2.s"));
-    g_assert(!g_strcmp0(handlers_https->handlers->dbus.path, "/h2"));
-    g_assert(!g_strcmp0(handlers_https->handlers->next->dbus.service, "h3.s"));
-    g_assert(!g_strcmp0(handlers_https->handlers->next->dbus.path, "/h3"));
-    g_assert(!g_strcmp0(handlers_https->listeners->dbus.service, "l2.s"));
-    g_assert(!g_strcmp0(handlers_https->listeners->dbus.path, "/l2"));
-    g_assert(!g_strcmp0(handlers_https->listeners->next->dbus.service, "l3.s"));
-    g_assert(!g_strcmp0(handlers_https->listeners->next->dbus.path, "/l3"));
+    g_assert_cmpstr(handlers_https->handlers->dbus.service, == ,"h2.s");
+    g_assert_cmpstr(handlers_https->handlers->dbus.path, == ,"/h2");
+    g_assert_cmpstr(handlers_https->handlers->next->dbus.service, == ,"h3.s");
+    g_assert_cmpstr(handlers_https->handlers->next->dbus.path, == ,"/h3");
+    g_assert_cmpstr(handlers_https->listeners->dbus.service, == ,"l2.s");
+    g_assert_cmpstr(handlers_https->listeners->dbus.path, == ,"/l2");
+    g_assert_cmpstr(handlers_https->listeners->next->dbus.service, == ,"l3.s");
+    g_assert_cmpstr(handlers_https->listeners->next->dbus.path, == ,"/l3");
 
     args = handlers_http->handlers->type->handler_args(http);
     g_assert(args);
-    g_assert(!g_strcmp0(g_variant_get_type_string(args), "(s)"));
+    g_assert_cmpstr(g_variant_get_type_string(args), == ,"(s)");
     g_variant_unref(g_variant_ref_sink(args));
 
     args = handlers_http->handlers->type->listener_args(TRUE, http);
     g_assert(args);
-    g_assert(!g_strcmp0(g_variant_get_type_string(args), "(bs)"));
+    g_assert_cmpstr(g_variant_get_type_string(args), == ,"(bs)");
     g_variant_unref(g_variant_ref_sink(args));
 
     dbus_handlers_config_free(handlers_http);
     dbus_handlers_config_free(handlers_https);
-    nfc_ndef_rec_unref(http);
-    nfc_ndef_rec_unref(https);
+    ndef_rec_unref(http);
+    ndef_rec_unref(https);
     for (i = 0; i < G_N_ELEMENTS(fname); i++) {
         g_unlink(fname[i]);
         g_free(fname[i]);
