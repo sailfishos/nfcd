@@ -243,6 +243,11 @@ dbus_neard_adapter_handle_stop_poll_loop(
 {
     DBusNeardAdapter* self = user_data;
 
+    if (getenv("NFCD_NO_STOP_POLL_LOOP")) {
+        GDEBUG("Avoiding StopPollLoop");
+        return FALSE;
+    }
+
     GDEBUG("StopPollLoop");
     nfc_adapter_request_mode(self->adapter, NFC_MODE_NONE);
     org_neard_adapter_complete_stop_poll_loop(iface, call);
