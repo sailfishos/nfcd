@@ -9,7 +9,7 @@
 #
 
 PKGS = gio-unix-2.0 gio-2.0 libglibutil
-LIB_PKGS = $(PKGS) libdbusaccess
+LIB_PKGS = $(PKGS)
 
 #
 # libdbusaccess is optional
