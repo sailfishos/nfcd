@@ -1,34 +1,46 @@
 /*
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
- * Copyright (C) 2018-2021 Slava Monich <slava.monich@jolla.com>
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  *
- *   1. Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *   2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in the
- *      documentation and/or other materials provided with the distribution.
- *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived
- *      from this software without specific prior written permission.
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer
+ *     in the documentation and/or other materials provided with the
+ *     distribution.
+ *
+ *  3. Neither the names of the copyright holders nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation
+ * are those of the authors and should not be interpreted as representing
+ * any official policies, either expressed or implied.
  */
+
+/* This test intentionally keeps using legacy NfcNdef API */
+#include <glib.h>
+#undef G_DEPRECATED_FOR
+#define G_DEPRECATED_FOR(x)
 
 #include "nfc_types_p.h"
 
@@ -41,19 +53,19 @@
 static TestOpt test_opt;
 
 static
-NfcNdefRec*
+NdefRec*
 test_ndef_record_new(
     const char* mediatype,
     const GUtilData* payload)
 {
     GUtilData data;
-    NfcNdefRec* rec;
+    NdefRec* rec;
     const gsize type_length = strlen(mediatype);
     const gsize payload_length = (payload ? payload->size : 0);
     guint8* bytes;
 
-    g_assert(type_length < 0x100);
-    g_assert(payload_length < 0x100);
+    g_assert_cmpuint(type_length, < ,0x100);
+    g_assert_cmpuint(payload_length, < ,0x100);
     data.size = 3 + type_length + (payload ? payload->size : 0);
     data.bytes = bytes = g_malloc(data.size);
     bytes[0] = 0xd2;                   /* (MB,ME,SR,TNF=0x02) */
@@ -64,14 +76,14 @@ test_ndef_record_new(
         memcpy(bytes + 3 + type_length, payload->bytes, payload_length);
     }
 
-    rec = nfc_ndef_rec_new(&data);
+    rec = ndef_rec_new(&data);
     g_assert(rec);
     g_free(bytes);
     return rec;
 }
 
 static
-NfcNdefRec*
+NdefRec*
 test_ndef_record_new_text(
     const char* mediatype,
     const char* text)
@@ -100,7 +112,7 @@ test_recognize(
     void)
 {
     GUtilData bytes;
-    NfcNdefRec* rec;
+    NdefRec* rec;
     static const guint8 ndef_data[] = {
         0xd1,       /* NDEF record header (MB,ME,SR,TNF=0x01) */
         0x01,       /* Length of the record type */
@@ -112,60 +124,60 @@ test_recognize(
 
     /* Not a media-type record */
     TEST_BYTES_SET(bytes, ndef_data);
-    rec = nfc_ndef_rec_new(&bytes);
+    rec = ndef_rec_new(&bytes);
     g_assert(rec);
     g_assert(!supported(rec));
-    nfc_ndef_rec_unref(rec);
+    ndef_rec_unref(rec);
 
     /* Invalid media types */
     rec = test_ndef_record_new("", NULL);
     g_assert(!supported(rec));
-    nfc_ndef_rec_unref(rec);
+    ndef_rec_unref(rec);
 
     rec = test_ndef_record_new(" ", NULL);
     g_assert(!supported(rec));
-    nfc_ndef_rec_unref(rec);
+    ndef_rec_unref(rec);
 
     rec = test_ndef_record_new("foo", NULL);
     g_assert(!supported(rec));
-    nfc_ndef_rec_unref(rec);
+    ndef_rec_unref(rec);
 
     rec = test_ndef_record_new("*", NULL);
     g_assert(!supported(rec));
-    nfc_ndef_rec_unref(rec);
+    ndef_rec_unref(rec);
 
     rec = test_ndef_record_new("*/*", NULL);
     g_assert(!supported(rec));
-    nfc_ndef_rec_unref(rec);
+    ndef_rec_unref(rec);
 
     rec = test_ndef_record_new("foo/", NULL);
     g_assert(!supported(rec));
-    nfc_ndef_rec_unref(rec);
+    ndef_rec_unref(rec);
 
     rec = test_ndef_record_new("foo ", NULL);
     g_assert(!supported(rec));
-    nfc_ndef_rec_unref(rec);
+    ndef_rec_unref(rec);
 
     rec = test_ndef_record_new("foo  ", NULL);
     g_assert(!supported(rec));
-    nfc_ndef_rec_unref(rec);
+    ndef_rec_unref(rec);
 
     rec = test_ndef_record_new("foo/\x80", NULL);
     g_assert(!supported(rec));
-    nfc_ndef_rec_unref(rec);
+    ndef_rec_unref(rec);
 
     rec = test_ndef_record_new("foo/*", NULL);
     g_assert(!supported(rec));
-    nfc_ndef_rec_unref(rec);
+    ndef_rec_unref(rec);
 
     rec = test_ndef_record_new("foo/bar\t", NULL);
     g_assert(!supported(rec));
-    nfc_ndef_rec_unref(rec);
+    ndef_rec_unref(rec);
 
     /* And finally a valid one */
     rec = test_ndef_record_new("foo/bar", NULL);
     g_assert(supported(rec));
-    nfc_ndef_rec_unref(rec);
+    ndef_rec_unref(rec);
 }
 
 /*==========================================================================*
@@ -223,7 +235,7 @@ test_basic(
     guint i;
     GVariant* args;
     DBusHandlersConfig* handlers;
-    NfcNdefRec* rec = test_ndef_record_new_text("text/plain", "test");
+    NdefRec* rec = test_ndef_record_new_text("text/plain", "test");
     char* fname[G_N_ELEMENTS(contents)];
     char* dir = g_dir_make_tmp("test_XXXXXX", NULL);
 
@@ -249,41 +261,41 @@ test_basic(
     g_assert(handlers->listeners->next);
     g_assert(!handlers->listeners->next->next);
 
-    g_assert(!g_strcmp0(handlers->handlers->dbus.service, "h2.s"));
-    g_assert(!g_strcmp0(handlers->handlers->dbus.path, "/h2"));
-    g_assert(!g_strcmp0(handlers->handlers->next->dbus.service, "h1.s"));
-    g_assert(!g_strcmp0(handlers->handlers->next->dbus.path, "/h1"));
-    g_assert(!g_strcmp0(handlers->listeners->dbus.service, "l2.s"));
-    g_assert(!g_strcmp0(handlers->listeners->dbus.path, "/l2"));
-    g_assert(!g_strcmp0(handlers->listeners->next->dbus.service, "l1.s"));
-    g_assert(!g_strcmp0(handlers->listeners->next->dbus.path, "/l1"));
+    g_assert_cmpstr(handlers->handlers->dbus.service, == ,"h2.s");
+    g_assert_cmpstr(handlers->handlers->dbus.path, == ,"/h2");
+    g_assert_cmpstr(handlers->handlers->next->dbus.service, == ,"h1.s");
+    g_assert_cmpstr(handlers->handlers->next->dbus.path, == ,"/h1");
+    g_assert_cmpstr(handlers->listeners->dbus.service, == ,"l2.s");
+    g_assert_cmpstr(handlers->listeners->dbus.path, == ,"/l2");
+    g_assert_cmpstr(handlers->listeners->next->dbus.service, == ,"l1.s");
+    g_assert_cmpstr(handlers->listeners->next->dbus.path, == ,"/l1");
 
     args = handlers->handlers->type->handler_args(rec);
     g_assert(args);
-    g_assert(!g_strcmp0(g_variant_get_type_string(args), "(say)"));
+    g_assert_cmpstr(g_variant_get_type_string(args), == ,"(say)");
     g_variant_unref(g_variant_ref_sink(args));
 
     args = handlers->handlers->type->listener_args(TRUE, rec);
     g_assert(args);
-    g_assert(!g_strcmp0(g_variant_get_type_string(args), "(bsay)"));
+    g_assert_cmpstr(g_variant_get_type_string(args), == ,"(bsay)");
     g_variant_unref(g_variant_ref_sink(args));
 
     /* Try empty record too */
-    nfc_ndef_rec_unref(rec);
+    ndef_rec_unref(rec);
     rec = test_ndef_record_new("", NULL);
 
     args = handlers->handlers->type->handler_args(rec);
     g_assert(args);
-    g_assert(!g_strcmp0(g_variant_get_type_string(args), "(say)"));
+    g_assert_cmpstr(g_variant_get_type_string(args), == ,"(say)");
     g_variant_unref(g_variant_ref_sink(args));
 
     args = handlers->handlers->type->listener_args(TRUE, rec);
     g_assert(args);
-    g_assert(!g_strcmp0(g_variant_get_type_string(args), "(bsay)"));
+    g_assert_cmpstr(g_variant_get_type_string(args), == ,"(bsay)");
     g_variant_unref(g_variant_ref_sink(args));
 
     dbus_handlers_config_free(handlers);
-    nfc_ndef_rec_unref(rec);
+    ndef_rec_unref(rec);
     for (i = 0; i < G_N_ELEMENTS(fname); i++) {
         g_unlink(fname[i]);
         g_free(fname[i]);

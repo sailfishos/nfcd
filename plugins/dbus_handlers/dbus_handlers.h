@@ -1,34 +1,41 @@
 /*
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2019 Open Mobile Platform LLC.
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  *
- *   1. Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *   2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in the
- *      documentation and/or other materials provided with the distribution.
- *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived
- *      from this software without specific prior written permission.
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer
+ *     in the documentation and/or other materials provided with the
+ *     distribution.
+ *
+ *  3. Neither the names of the copyright holders nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation
+ * are those of the authors and should not be interpreted as representing
+ * any official policies, either expressed or implied.
  */
 
 #ifndef DBUS_HANDLERS_H
@@ -38,10 +45,10 @@
 
 #define GLOG_MODULE_NAME dbus_handlers_log
 #include <gutil_log.h>
-
-#include <nfc_ndef.h>
-
 #include <gio/gio.h>
+
+#include <nfc_types.h>
+#include <nfcdef.h>
 
 typedef struct dbus_handlers DBusHandlers;
 typedef struct dbus_handlers_adapter DBusHandlersAdapter;
@@ -80,15 +87,15 @@ struct dbus_handler_type {
     DBUS_HANDLER_PRIORITY priority;
     const DBusHandlerType* buddy;
     /* Recognizing NDEF records */
-    gboolean (*supported_record)(NfcNdefRec* ndef);
+    gboolean (*supported_record)(NdefRec* ndef);
     /* Config parsing */
-    DBusHandlerConfig* (*new_handler_config)(GKeyFile* f, NfcNdefRec* ndef);
-    DBusListenerConfig* (*new_listener_config)(GKeyFile* f, NfcNdefRec* ndef);
+    DBusHandlerConfig* (*new_handler_config)(GKeyFile* f, NdefRec* ndef);
+    DBusListenerConfig* (*new_listener_config)(GKeyFile* f, NdefRec* ndef);
     void (*free_handler_config)(DBusHandlerConfig* config);
     void (*free_listener_config)(DBusListenerConfig* config);
     /* DBus message sending (floating ref) */
-    GVariant* (*handler_args)(NfcNdefRec* ndef);
-    GVariant* (*listener_args)(gboolean handled, NfcNdefRec* ndef);
+    GVariant* (*handler_args)(NdefRec* ndef);
+    GVariant* (*listener_args)(gboolean handled, NdefRec* ndef);
 };
 
 typedef struct dbus_handlers_config {
@@ -103,10 +110,10 @@ extern const DBusHandlerType dbus_handlers_type_mediatype_wildcard;
 extern const DBusHandlerType dbus_handlers_type_mediatype_exact;
 extern const DBusHandlerType dbus_handlers_type_generic;
 
-NfcNdefRec*
+NdefRec*
 dbus_handlers_config_find_record(
-    NfcNdefRec* ndef,
-    gboolean (*check)(NfcNdefRec* ndef));
+    NdefRec* ndef,
+    gboolean (*check)(NdefRec* ndef));
 
 #define dbus_handlers_config_find_supported_record(ndef, type) \
     dbus_handlers_config_find_record(ndef, (type)->supported_record)
@@ -116,7 +123,7 @@ dbus_handlers_config_find_record(
 DBusHandlersConfig*
 dbus_handlers_config_load(
     const char* config_dir,
-    NfcNdefRec* ndef);
+    NdefRec* ndef);
 
 void
 dbus_handlers_config_free(
@@ -162,7 +169,7 @@ dbus_handlers_new(
 void
 dbus_handlers_run(
     DBusHandlers* handlers,
-    NfcNdefRec* ndef);
+    NdefRec* ndef);
 
 void
 dbus_handlers_free(

@@ -8,7 +8,7 @@
 # Required packages
 #
 
-PKGS = gio-unix-2.0 gio-2.0 libglibutil
+PKGS = libnfcdef libglibutil gio-unix-2.0 gio-2.0
 LIB_PKGS = $(PKGS)
 
 #

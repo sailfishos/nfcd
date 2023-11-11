@@ -11,23 +11,27 @@
  *
  *  1. Redistributions of source code must retain the above copyright
  *     notice, this list of conditions and the following disclaimer.
+ *
  *  2. Redistributions in binary form must reproduce the above copyright
  *     notice, this list of conditions and the following disclaimer
  *     in the documentation and/or other materials provided with the
  *     distribution.
+ *
  *  3. Neither the names of the copyright holders nor the names of its
  *     contributors may be used to endorse or promote products derived
  *     from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) ARISING
- * IN ANY WAY OUT OF THE USE OR INABILITY TO USE THIS SOFTWARE, EVEN
- * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * The views and conclusions contained in the software and documentation
  * are those of the authors and should not be interpreted as representing
@@ -39,7 +43,7 @@
 #include "org.sailfishos.nfc.Tag.h"
 #include "org.sailfishos.nfc.TagType2.h"
 
-#include "nfc_ndef.h"
+#include <nfcdef.h>
 
 #include <gutil_misc.h>
 #include <gutil_strv.h>
@@ -380,34 +384,34 @@ write_ndef(
 }
 
 static
-NfcNdefRec*
+NdefRec*
 ndef_uri_proc(
     const char* uri,
     const GUtilData* data)
 {
-    NfcNdefRecU* u = nfc_ndef_rec_u_new(uri);
+    NdefRecU* u = ndef_rec_u_new(uri);
 
     return u ? &u->rec : NULL;
 }
 
 static
-NfcNdefRec*
+NdefRec*
 ndef_text_proc(
     const char* text,
     const GUtilData* data)
 {
-    NfcNdefRecT* t = nfc_ndef_rec_t_new(text, NULL);
+    NdefRecT* t = ndef_rec_t_new(text, NULL);
 
     return t ? &t->rec : NULL;
 }
 
 static
-NfcNdefRec*
+NdefRec*
 ndef_sp_proc(
     const char* spec,
     const GUtilData* data)
 {
-    NfcNdefRec* rec = NULL;
+    NdefRec* rec = NULL;
     const char* ptr = spec;
     gboolean backslash = FALSE;
     GStrV* params = NULL;
@@ -456,11 +460,11 @@ ndef_sp_proc(
     /* URL, title, action, type, size, path */
     if (n >= 1 && n <= 6) {
         gboolean ok = TRUE;
-        int act = NFC_NDEF_SP_ACT_DEFAULT;
+        int act = NDEF_SP_ACT_DEFAULT;
         int size = 0;
-        NfcNdefMedia media;
+        NdefMedia media;
         GMappedFile* icon_map = NULL;
-        const NfcNdefMedia* icon = NULL;
+        const NdefMedia* icon = NULL;
         magic_t magic = (magic_t)0;
 
         memset(&media, 0, sizeof(media));
@@ -484,7 +488,7 @@ ndef_sp_proc(
         if (ok && n == 6) {
             const char* fname = params[5];
             GError* error = NULL;
-            
+
             icon_map = g_mapped_file_new(fname, FALSE, &error);
             if (icon_map) {
                 media.data.bytes = (void*)g_mapped_file_get_contents(icon_map);
@@ -507,7 +511,7 @@ ndef_sp_proc(
         if (ok) {
             const char* title = (n > 1) ? params[1] : NULL;
             const char* type = (n > 3) ? params[3] : NULL;
-            NfcNdefRecSp* sp = nfc_ndef_rec_sp_new(params[0], title, NULL,
+            NdefRecSp* sp = ndef_rec_sp_new(params[0], title, NULL,
                 type, size, act, icon);
 
             if (sp) {
@@ -528,12 +532,12 @@ ndef_sp_proc(
 }
 
 static
-NfcNdefRec*
+NdefRec*
 ndef_mt_proc(
     const char* type,
     const GUtilData* data)
 {
-    NfcNdefRec* rec = NULL;
+    NdefRec* rec = NULL;
     magic_t magic = (magic_t)0;
 
     if (!type) {
@@ -552,8 +556,8 @@ ndef_mt_proc(
     if (type) {
         GUtilData mediatype;
 
-        rec = nfc_ndef_rec_new_mediatype(gutil_data_from_string(&mediatype,
-            type), data);
+        rec = ndef_rec_new_mediatype(gutil_data_from_string(&mediatype, type),
+            data);
     }
     if (magic) {
         magic_close(magic);
@@ -572,10 +576,7 @@ parse_media_type(
     AppOpts* opts = data;
 
     if (value && value[0]) {
-        GUtilData mediatype;
-
-        if (!nfc_ndef_valid_mediatype(gutil_data_from_string(&mediatype,
-            value), FALSE)) {
+        if (!ndef_valid_mediatype_str(value, FALSE)) {
             g_propagate_error(error, g_error_new(G_OPTION_ERROR,
                 G_OPTION_ERROR_BAD_VALUE, "Invalid media type '%s'", value));
             return FALSE;
@@ -629,7 +630,7 @@ int main(int argc, char* argv[])
         "media type from the FILE contents.");
 
     if (g_option_context_parse(options, &argc, &argv, &error) && argc < 3) {
-        NfcNdefRec* (*ndef_proc)(const char*, const GUtilData*) = NULL;
+        NdefRec* (*ndef_proc)(const char*, const GUtilData*) = NULL;
         const char* file = argc == 2 ? argv[1] : NULL;
         const char* ndef_spec = NULL;
         const char* type = NULL;
@@ -688,12 +689,12 @@ int main(int argc, char* argv[])
                 }
 
                 if (ndef_proc) {
-                    NfcNdefRec* rec = ndef_proc(ndef_spec, data);
+                    NdefRec* rec = ndef_proc(ndef_spec, data);
 
                     if (rec) {
                         app.ndef = rec->raw;
                         ret = write_ndef(&app);
-                        nfc_ndef_rec_unref(rec);
+                        ndef_rec_unref(rec);
                     } else {
                         fprintf(stderr, "Failed to generate %s record\n",
                             type);

@@ -10,105 +10,48 @@
  *
  *  1. Redistributions of source code must retain the above copyright
  *     notice, this list of conditions and the following disclaimer.
+ *
  *  2. Redistributions in binary form must reproduce the above copyright
  *     notice, this list of conditions and the following disclaimer
  *     in the documentation and/or other materials provided with the
  *     distribution.
+ *
  *  3. Neither the names of the copyright holders nor the names of its
  *     contributors may be used to endorse or promote products derived
  *     from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) ARISING
- * IN ANY WAY OUT OF THE USE OR INABILITY TO USE THIS SOFTWARE, EVEN
- * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * The views and conclusions contained in the software and documentation
  * are those of the authors and should not be interpreted as representing
  * any official policies, either expressed or implied.
  */
 
+/* This test intentionally keeps using legacy NfcNdef API */
+#include <glib.h>
+#undef G_DEPRECATED_FOR
+#define G_DEPRECATED_FOR(x)
+
 #include "test_common.h"
 
-#include "nfc_ndef_p.h"
-#include "nfc_tlv.h"
+#include "nfc_types_p.h"
+#include "nfc_ndef.h"
 
 #include <gutil_misc.h>
 
 static TestOpt test_opt;
 
 #define TLV_TEST (0x04)
-
-/*==========================================================================*
- * type
- *==========================================================================*/
-
-static
-void
-test_type(
-    void)
-{
-    static const guint8 rec[] = {
-        0xd1,           /* NDEF record header (MB,ME,SR,TNF=0x01) */
-        0x01,           /* Length of the record type */
-        0x01,           /* Length of the record payload */
-        'U',            /* Record type: 'U' (URI) */
-        0x00
-    };
-    NfcNdefData ndef;
-    GUtilData type;
-
-    memset(&ndef, 0, sizeof(ndef));
-    memset(&type, 0, sizeof(type));
-    g_assert(!nfc_ndef_type(NULL, &type));
-    g_assert(!nfc_ndef_type(&ndef, &type));
-
-    TEST_BYTES_SET(ndef.rec, rec);
-    ndef.payload_length = rec[2];
-    ndef.type_offset = 3;
-    ndef.type_length = 1;
-    g_assert(nfc_ndef_type(&ndef, &type));
-    g_assert(type.bytes == rec + ndef.type_offset);
-    g_assert(type.size == ndef.type_length);
-}
-
-/*==========================================================================*
- * payload
- *==========================================================================*/
-
-static
-void
-test_payload(
-    void)
-{
-    static const guint8 rec[] = {
-        0xd1,           /* NDEF record header (MB,ME,SR,TNF=0x01) */
-        0x01,           /* Length of the record type */
-        0x01,           /* Length of the record payload */
-        'U',            /* Record type: 'U' (URI) */
-        0x00
-    };
-    NfcNdefData ndef;
-    GUtilData payload;
-
-    memset(&ndef, 0, sizeof(ndef));
-    memset(&payload, 0, sizeof(payload));
-    g_assert(!nfc_ndef_payload(NULL, &payload));
-    g_assert(!nfc_ndef_payload(&ndef, &payload));
-
-    TEST_BYTES_SET(ndef.rec, rec);
-    ndef.payload_length = rec[2];
-    ndef.type_offset = 3;
-    ndef.type_length = 1;
-    g_assert(nfc_ndef_payload(&ndef, &payload));
-    g_assert(payload.bytes == rec + ndef.type_offset + ndef.type_length);
-    g_assert(payload.size == ndef.payload_length);
-}
 
 /*==========================================================================*
  * null
@@ -123,7 +66,6 @@ test_null(
     g_assert(!nfc_ndef_rec_new(NULL));
     g_assert(!nfc_ndef_rec_new_tlv(NULL));
     g_assert(!nfc_ndef_rec_ref(NULL));
-    g_assert(!nfc_ndef_rec_initialize(NULL, NFC_NDEF_RTD_UNKNOWN, NULL));
     nfc_ndef_rec_unref(NULL);
 }
 
@@ -145,7 +87,6 @@ test_empty(
 
     g_assert(rec);
     g_assert(!rec->next);
-    g_assert(nfc_ndef_rec_initialize(rec, NFC_NDEF_RTD_UNKNOWN, NULL) == rec);
     g_assert(rec->tnf == NFC_NDEF_TNF_EMPTY);
     g_assert(rec->rtd == NFC_NDEF_RTD_UNKNOWN);
     g_assert(nfc_ndef_rec_ref(rec) == rec);
@@ -249,7 +190,6 @@ test_tlv_empty(
 
     g_assert(rec);
     g_assert(!rec->next);
-    g_assert(nfc_ndef_rec_initialize(rec, NFC_NDEF_RTD_UNKNOWN, NULL) == rec);
     g_assert(rec->tnf == NFC_NDEF_TNF_EMPTY);
     g_assert(rec->rtd == NFC_NDEF_RTD_UNKNOWN);
     nfc_ndef_rec_unref(rec);
@@ -434,102 +374,6 @@ test_uri(
     g_assert(rec->payload.size == rec->raw.bytes[2]);
     g_assert(rec->payload.bytes == rec->raw.bytes + 4);
     nfc_ndef_rec_unref(rec);
-}
-
-/*==========================================================================*
- * well_known_short
- *==========================================================================*/
-
-static
-void
-test_well_known_short(
-    void)
-{
-    static const guint8 payload_bytes[] = {
-        0x02,           /* "https://www." */
-        'j', 'o', 'l', 'l', 'a', '.', 'c', 'o', 'm'
-    };
-    GUtilData payload;
-    NfcNdefRec* rec;
-    NfcNdefRec* urec;
-
-    TEST_BYTES_SET(payload, payload_bytes);
-    rec = nfc_ndef_rec_new_well_known(NFC_TYPE_NDEF_REC, NFC_NDEF_RTD_URI,
-        &nfc_ndef_rec_type_u, &payload);
-    g_assert(rec);
-
-    /* Re-parse it */
-    urec = nfc_ndef_rec_new(&rec->raw);
-    g_assert(NFC_IS_NDEF_REC_U(urec));
-    g_assert(!g_strcmp0(NFC_NDEF_REC_U(urec)->uri, "https://www.jolla.com"));
-    nfc_ndef_rec_unref(rec);
-    nfc_ndef_rec_unref(urec);
-}
-
-/*==========================================================================*
- * well_known_long
- *==========================================================================*/
-
-static
-void
-test_well_known_long(
-    void)
-{
-    static const guint8 payload_bytes[] = {
-        0x01,           /* "http://www." */
-        'e', 'x', 'a', 'm', 'p', 'l', 'e', '.', 'c',
-        'o', 'm', '/', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
-        'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a'
-    };
-    GUtilData payload;
-    NfcNdefRec* rec;
-    NfcNdefRec* urec;
-
-    TEST_BYTES_SET(payload, payload_bytes);
-    rec = nfc_ndef_rec_new_well_known(NFC_TYPE_NDEF_REC, NFC_NDEF_RTD_URI,
-        &nfc_ndef_rec_type_u, &payload);
-    g_assert(rec);
-
-    /* Re-parse it */
-    urec = nfc_ndef_rec_new(&rec->raw);
-    g_assert(NFC_IS_NDEF_REC_U(urec));
-    g_assert(!g_strcmp0(NFC_NDEF_REC_U(urec)->uri, "http://www.example.com/"
-        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-        "aaaaaaaa"));
-    nfc_ndef_rec_unref(rec);
-    nfc_ndef_rec_unref(urec);
 }
 
 /*==========================================================================*
@@ -801,8 +645,6 @@ int main(int argc, char* argv[])
     g_type_init();
     G_GNUC_END_IGNORE_DEPRECATIONS;
     g_test_init(&argc, &argv, NULL);
-    g_test_add_func(TEST_("type"), test_type);
-    g_test_add_func(TEST_("payload"), test_payload);
     g_test_add_func(TEST_("null"), test_null);
     g_test_add_func(TEST_("empty"), test_empty);
     g_test_add_func(TEST_("short"), test_short);
@@ -813,8 +655,6 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("tlv_multiple"), test_tlv_multiple);
     g_test_add_func(TEST_("no_type"), test_no_type);
     g_test_add_func(TEST_("uri"), test_uri);
-    g_test_add_func(TEST_("well_known_short"), test_well_known_short);
-    g_test_add_func(TEST_("well_known_long"), test_well_known_long);
     g_test_add_func(TEST_("mediatype"), test_mediatype);
     g_test_add_func(TEST_("broken_uri"), test_broken_uri);
     g_test_add_func(TEST_("id"), test_id);

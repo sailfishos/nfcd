@@ -1,13 +1,12 @@
 # -*- Mode: makefile-gmake -*-
 
 .PHONY: all debug release clean install
-.PHONY: nfc_core_debug_lib nfc_core_release_lib
 
 #
 # Required packages
 #
 
-PKGS = gio-unix-2.0 gio-2.0 libglibutil
+PKGS = libnfcdef libglibutil glib-2.0 gobject-2.0 gio-2.0 gio-unix-2.0
 LIB_PKGS = $(PKGS)
 
 #
@@ -38,19 +37,10 @@ ALL_SRC = $(GEN_SRC) $(SRC)
 SRC_DIR = .
 BUILD_DIR = build
 SPEC_DIR = ../../plugins/dbus_service
+CORE_DIR = ../../core
 GEN_DIR = $(BUILD_DIR)
 DEBUG_BUILD_DIR = $(BUILD_DIR)/debug
 RELEASE_BUILD_DIR = $(BUILD_DIR)/release
-
-#
-# libnfc-core
-#
-
-NFC_CORE_LIB = libnfc-core.a
-NFC_CORE_DIR = ../../core
-NFC_CORE_BUILD_DIR = $(NFC_CORE_DIR)/build
-NFC_CORE_DEBUG_LIB = $(NFC_CORE_BUILD_DIR)/debug/$(NFC_CORE_LIB)
-NFC_CORE_RELEASE_LIB = $(NFC_CORE_BUILD_DIR)/release/$(NFC_CORE_LIB)
 
 #
 # Tools and flags
@@ -63,8 +53,7 @@ RELEASE_FLAGS =
 DEBUG_DEFS = -DDEBUG
 RELEASE_DEFS =
 WARNINGS = -Wall -Wstrict-aliasing -Wunused-result
-INCLUDES = -I. -I$(NFC_CORE_DIR)/include -I$(GEN_DIR)
-DEFINES += -DNFCD_EXPORT='__attribute__((visibility ("default")))'
+INCLUDES = -I. -I$(CORE_DIR)/include -I$(GEN_DIR)
 FULL_CFLAGS = -fPIC $(CFLAGS) $(DEFINES) $(WARNINGS) $(INCLUDES) \
   -MMD -MP $(shell pkg-config --cflags $(PKGS))
 FULL_LDFLAGS = $(LDFLAGS) -pie
@@ -81,12 +70,8 @@ DEBUG_LDFLAGS = $(DEBUG_FLAGS) $(FULL_LDFLAGS)
 RELEASE_LDFLAGS = $(RELEASE_FLAGS) $(FULL_LDFLAGS)
 
 LIBS = $(shell pkg-config --libs $(LIB_PKGS)) -lmagic -ldl
-DEBUG_LIBS = \
-  $(NFC_CORE_DEBUG_LIB) \
-  $(LIBS)
-RELEASE_LIBS = \
-  $(NFC_CORE_RELEASE_LIB) \
-  $(LIBS)
+DEBUG_LIBS = $(LIBS)
+RELEASE_LIBS = $(LIBS)
 
 #
 # Files
@@ -108,14 +93,6 @@ ifneq ($(strip $(DEPS)),)
 endif
 endif
 
-DEBUG_DEPS = nfc_core_debug_lib
-RELEASE_DEPS = nfc_core_release_lib
-
-DEBUG_EXE_DEPS = $(NFC_CORE_DEBUG_LIB)
-RELEASE_EXE_DEPS = $(NFC_CORE_RELEASE_LIB)
-
-$(NFC_CORE_DEBUG_LIB): | nfc_core_debug_lib
-$(NFC_CORE_RELEASE_LIB): | nfc_core_release_lib
 $(GEN_SRC:%=$(GEN_DIR)/%): | $(GEN_DIR)
 $(SRC): | $(GEN_SRC:%=$(GEN_DIR)/%)
 $(DEBUG_OBJS): | $(DEBUG_BUILD_DIR)
@@ -135,12 +112,6 @@ release: $(RELEASE_DEPS) $(RELEASE_EXE)
 
 clean:
 	rm -fr $(BUILD_DIR) $(SRC_DIR)/*~
-
-nfc_core_debug_lib:
-	$(MAKE) -C $(NFC_CORE_DIR) debug
-
-nfc_core_release_lib:
-	$(MAKE) -C $(NFC_CORE_DIR) release
 
 $(GEN_DIR)/%.c: $(SPEC_DIR)/%.xml
 	gdbus-codegen --generate-c-code $(@:%.c=%) $<

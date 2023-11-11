@@ -1,38 +1,51 @@
 /*
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  *
- *   1. Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *   2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in the
- *      documentation and/or other materials provided with the distribution.
- *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived
- *      from this software without specific prior written permission.
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer
+ *     in the documentation and/or other materials provided with the
+ *     distribution.
+ *
+ *  3. Neither the names of the copyright holders nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation
+ * are those of the authors and should not be interpreted as representing
+ * any official policies, either expressed or implied.
  */
+
+/* This test intentionally keeps using legacy NfcNdef API */
+#include <glib.h>
+#undef G_DEPRECATED_FOR
+#define G_DEPRECATED_FOR(x)
 
 #include "test_common.h"
 
-#include "nfc_ndef_p.h"
+#include "nfc_types_p.h"
+#include "nfc_ndef.h"
 
 static TestOpt test_opt;
 
@@ -45,34 +58,7 @@ void
 test_null(
     void)
 {
-    NfcNdefData ndef;
-
-    memset(&ndef, 0, sizeof(ndef));
     g_assert(!nfc_ndef_rec_u_new(NULL));
-    g_assert(!nfc_ndef_rec_u_new_from_data(NULL));
-    g_assert(!nfc_ndef_rec_u_new_from_data(&ndef));
-    g_assert(!nfc_ndef_rec_u_steal_uri(NULL));
-}
-
-/*==========================================================================*
- * steal
- *==========================================================================*/
-
-static
-void
-test_steal(
-    void)
-{
-    const char* uri = "https://jolla.com";
-    NfcNdefRecU* urec = nfc_ndef_rec_u_new(uri);
-    char* stolen = nfc_ndef_rec_u_steal_uri(urec);
-
-    g_assert(urec);
-    g_assert(!g_strcmp0(stolen, uri));
-    /* Can't steal the same thing more than once */
-    g_assert(!nfc_ndef_rec_u_steal_uri(urec));
-    g_free(stolen);
-    nfc_ndef_rec_unref(&urec->rec);
 }
 
 /*==========================================================================*
@@ -84,7 +70,7 @@ void
 test_invalid_prefix(
     void)
 {
-    static const guint8 rec[] = {
+    static const guint8 data[] = {
         0xd1,           /* NDEF record header (MB=1, ME=1, SR=1, TNF=0x01) */
         0x01,           /* Length of the record type */
         0x02,           /* Length of the record payload (2 bytes) */
@@ -93,14 +79,13 @@ test_invalid_prefix(
         0x00
     };
 
-    NfcNdefData ndef;
+    /* This records is interpreted as generic by nfc_ndef_rec_new() */
+    static const GUtilData ndef = { TEST_ARRAY_AND_SIZE(data) };
+    NfcNdefRec* rec = nfc_ndef_rec_new(&ndef);
 
-    memset(&ndef, 0, sizeof(ndef));
-    TEST_BYTES_SET(ndef.rec, rec);
-    ndef.payload_length = rec[2];
-    ndef.type_offset = 3;
-    ndef.type_length = 1;
-    g_assert(!nfc_ndef_rec_u_new_from_data(&ndef));
+    g_assert(rec);
+    g_assert(!NFC_IS_NDEF_REC_U(rec));
+    nfc_ndef_rec_unref(rec);
 }
 
 /*==========================================================================*
@@ -112,7 +97,7 @@ void
 test_empty(
     void)
 {
-    static const guint8 rec[] = {
+    static const guint8 data[] = {
         0xd1,           /* NDEF record header (MB=1, ME=1, SR=1, TNF=0x01) */
         0x01,           /* Length of the record type */
         0x01,           /* Length of the record payload (1 byte) */
@@ -120,20 +105,16 @@ test_empty(
         0x00
     };
 
-    NfcNdefData ndef;
-    NfcNdefRecU* urec;
+    static const GUtilData ndef = { TEST_ARRAY_AND_SIZE(data) };
+    NfcNdefRec* rec = nfc_ndef_rec_new(&ndef);
+    NfcNdefRecU* urec = NFC_NDEF_REC_U(rec);
 
-    memset(&ndef, 0, sizeof(ndef));
-    TEST_BYTES_SET(ndef.rec, rec);
-    ndef.payload_length = rec[2];
-    ndef.type_offset = 3;
-    ndef.type_length = 1;
-
-    urec = nfc_ndef_rec_u_new_from_data(&ndef);
     g_assert(urec);
     g_assert(urec->uri);
     g_assert(!urec->uri[0]);
-    nfc_ndef_rec_unref(&urec->rec);
+    g_assert_cmpint(rec->tnf, == ,NFC_NDEF_TNF_WELL_KNOWN);
+    g_assert_cmpint(rec->rtd, == ,NFC_NDEF_RTD_URI);
+    nfc_ndef_rec_unref(rec);
 }
 
 /*==========================================================================*
@@ -142,8 +123,7 @@ test_empty(
 
 typedef struct test_ok_data {
     const char* name;
-    const void* data;
-    guint size;
+    const GUtilData data;
     const char* uri;
 } TestOkData;
 
@@ -168,11 +148,11 @@ static const guint8 omp_rec[] = {
 static const TestOkData ok_tests[] = {
     {
         "jolla",
-        TEST_ARRAY_AND_SIZE(jolla_rec),
+        { TEST_ARRAY_AND_SIZE(jolla_rec) },
         "https://www.jolla.com"
     },{
         "omp",
-        TEST_ARRAY_AND_SIZE(omp_rec),
+        { TEST_ARRAY_AND_SIZE(omp_rec) },
         "http://omprussia.ru/"
     }
 };
@@ -183,22 +163,14 @@ test_ok(
     gconstpointer data)
 {
     const TestOkData* test = data;
-    NfcNdefData ndef;
-    NfcNdefRecU* urec;
+    NfcNdefRec* rec = nfc_ndef_rec_new(&test->data);
+    NfcNdefRecU* urec = NFC_NDEF_REC_U(rec);
 
-    memset(&ndef, 0, sizeof(ndef));
-    ndef.rec.bytes = test->data;
-    ndef.rec.size = test->size;
-    ndef.payload_length = ndef.rec.bytes[2];
-    ndef.type_offset = 3;
-    ndef.type_length = 1;
-
-    urec = nfc_ndef_rec_u_new_from_data(&ndef);
     g_assert(urec);
-    g_assert(urec->rec.tnf == NFC_NDEF_TNF_WELL_KNOWN);
-    g_assert(urec->rec.rtd == NFC_NDEF_RTD_URI);
-    g_assert(!g_strcmp0(urec->uri, test->uri));
-    nfc_ndef_rec_unref(&urec->rec);
+    g_assert_cmpint(rec->tnf, == ,NFC_NDEF_TNF_WELL_KNOWN);
+    g_assert_cmpint(rec->rtd, == ,NFC_NDEF_RTD_URI);
+    g_assert_cmpstr(urec->uri, == ,test->uri);
+    nfc_ndef_rec_unref(rec);
 }
 
 /*==========================================================================*
@@ -240,7 +212,6 @@ int main(int argc, char* argv[])
     G_GNUC_END_IGNORE_DEPRECATIONS;
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("null"), test_null);
-    g_test_add_func(TEST_("steal"), test_steal);
     g_test_add_func(TEST_("invalid_prefix"), test_invalid_prefix);
     g_test_add_func(TEST_("empty"), test_empty);
     for (i = 0; i < G_N_ELEMENTS(ok_tests); i++) {

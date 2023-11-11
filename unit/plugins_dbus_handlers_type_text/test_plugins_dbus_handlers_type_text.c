@@ -1,37 +1,43 @@
 /*
+ * Copyright (C) 2019-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2019-2021 Jolla Ltd.
- * Copyright (C) 2019-2021 Slava Monich <slava.monich@jolla.com>
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  *
- *   1. Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *   2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in the
- *      documentation and/or other materials provided with the distribution.
- *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived
- *      from this software without specific prior written permission.
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer
+ *     in the documentation and/or other materials provided with the
+ *     distribution.
+ *
+ *  3. Neither the names of the copyright holders nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation
+ * are those of the authors and should not be interpreted as representing
+ * any official policies, either expressed or implied.
  */
 
 #include "nfc_util.h"
-#include "nfc_system.h"
 
 #include "dbus_handlers/dbus_handlers.h"
 
@@ -40,15 +46,46 @@
 #include <glib/gstdio.h>
 
 static TestOpt test_opt;
-static const char* test_system_locale = NULL;
+static const NdefLanguage* test_system_language = NULL;
 
 /* Stubs */
 
-const char*
-nfc_system_locale(
+static
+NdefLanguage*
+test_copy_language(
+    const NdefLanguage* src)
+{
+    NdefLanguage* copy = NULL;
+
+    if (src) {
+        const gsize lsize = src->language ? (strlen(src->language) + 1) : 0;
+        const gsize tsize = src->territory ? (strlen(src->territory) + 1) : 0;
+        char* dest;
+
+        copy = g_malloc(sizeof(NdefLanguage) + lsize + tsize);
+        memset(copy, 0, sizeof(NdefLanguage));
+        dest = (char*) (copy + 1);
+
+        if (lsize) {
+            memcpy(dest, src->language, lsize);
+            copy->language = dest;
+            dest += lsize;
+        }
+
+        if (tsize) {
+            memcpy(dest, src->territory, tsize);
+            copy->territory = dest;
+            dest += tsize;
+        }
+    }
+    return copy;
+}
+
+NdefLanguage*
+ndef_system_language(
     void)
 {
-    return test_system_locale;
+    return test_copy_language(test_system_language);
 }
 
 /*==========================================================================*
@@ -75,7 +112,7 @@ test_basic(
     char* dir = g_dir_make_tmp("test_XXXXXX", NULL);
     char* fname = g_build_filename(dir, "test.conf", NULL);
     const char* rec_text = "Test";
-    NfcNdefRec* rec = NFC_NDEF_REC(nfc_ndef_rec_t_new(rec_text, "en"));
+    NdefRec* rec = NDEF_REC(ndef_rec_t_new(rec_text, "en"));
     const char* text = NULL;
     gboolean handled = FALSE;
 
@@ -83,7 +120,7 @@ test_basic(
     g_assert(g_file_set_contents(fname, contents, -1, NULL));
 
     g_assert(rec);
-    test_system_locale = NULL;
+    test_system_language = NULL;
     handlers = dbus_handlers_config_load(dir, rec);
 
     g_assert(handlers);
@@ -94,21 +131,21 @@ test_basic(
 
     args = handlers->handlers->type->handler_args(rec);
     g_assert(args);
-    g_assert(!g_strcmp0(g_variant_get_type_string(args), "(s)"));
+    g_assert_cmpstr(g_variant_get_type_string(args), == ,"(s)");
     g_variant_get(args, "(&s)", &text);
-    g_assert(!g_strcmp0(text, rec_text));
+    g_assert_cmpstr(text, == ,rec_text);
     g_variant_unref(g_variant_ref_sink(args));
 
     args = handlers->handlers->type->listener_args(TRUE, rec);
     g_assert(args);
-    g_assert(!g_strcmp0(g_variant_get_type_string(args), "(bs)"));
+    g_assert_cmpstr(g_variant_get_type_string(args), == ,"(bs)");
     g_variant_get(args, "(b&s)", &handled, &text);
     g_assert(handled);
-    g_assert(!g_strcmp0(text, rec_text));
+    g_assert_cmpstr(text, == ,rec_text);
     g_variant_unref(g_variant_ref_sink(args));
 
     dbus_handlers_config_free(handlers);
-    nfc_ndef_rec_unref(rec);
+    ndef_rec_unref(rec);
     g_unlink(fname);
     g_rmdir(dir);
     g_free(fname);
@@ -120,17 +157,21 @@ test_basic(
  *==========================================================================*/
 
 typedef struct test_language_data {
-    const char* loc;
-    const char* lang;
+    const char* name;
+    const NdefLanguage* lang;
     const char* text;
 } TestLanguageData;
 
+static const NdefLanguage test_lang_en = { "en", NULL };
+static const NdefLanguage test_lang_en_GB = { "en", "GB" };
+static const NdefLanguage test_lang_fi = { "fi", NULL };
+static const NdefLanguage test_lang_ru = { "ru", NULL };
 static const TestLanguageData tests_language[] = {
-    { NULL, "en-US", "Hi" },
-    { "ru", "en-US", "Hi" },
-    { "en", "en-US", "Hi" },
-    { "en_GB", "en-GB", "Hello" },
-    { "fi", "fi", "Moi" }
+    { "none", NULL, "Hi" },
+    { "en-US", &test_lang_en, "Hi" },
+    { "en-GB", &test_lang_en_GB, "Hello" },
+    { "fi", &test_lang_fi, "Moi" },
+    { "ru", &test_lang_ru, "Hi" }
 };
 
 static
@@ -153,7 +194,7 @@ test_language(
     guint i;
     const TestLanguageData* test = test_data;
     GVariant* args;
-    NfcNdefRec* rec;
+    NdefRec* rec;
     DBusHandlersConfig* handlers;
     char* fname[G_N_ELEMENTS(contents)];
     char* dir = g_dir_make_tmp("test_XXXXXX", NULL);
@@ -169,12 +210,12 @@ test_language(
         g_assert(g_file_set_contents(fname[i], contents[i], -1, NULL));
     }
 
-    (((rec = NFC_NDEF_REC(nfc_ndef_rec_t_new("Hi", "en-US")))->next =
-    NFC_NDEF_REC(nfc_ndef_rec_t_new("Hello", "en-GB")))->next =
-    NFC_NDEF_REC(nfc_ndef_rec_t_new("Moi", "fi")))->next =
-    NFC_NDEF_REC(nfc_ndef_rec_u_new("http://jolla.com"));
+    (((rec = NDEF_REC(ndef_rec_t_new("Hi", "en-US")))->next =
+    NDEF_REC(ndef_rec_t_new("Hello", "en-GB")))->next =
+    NDEF_REC(ndef_rec_t_new("Moi", "fi")))->next =
+    NDEF_REC(ndef_rec_u_new("http://jolla.com"));
     g_assert(rec);
-    test_system_locale = test->loc;
+    test_system_language = test->lang;
     handlers = dbus_handlers_config_load(dir, rec);
 
     g_assert(handlers);
@@ -185,25 +226,26 @@ test_language(
 
     args = handlers->handlers->type->handler_args(rec);
     g_assert(args);
-    g_assert(!g_strcmp0(g_variant_get_type_string(args), "(s)"));
+    g_assert_cmpstr(g_variant_get_type_string(args), == ,"(s)");
     g_variant_get(args, "(&s)", &text);
-    g_assert(!g_strcmp0(text, test->text));
+    g_assert_cmpstr(text, == ,test->text);
     g_variant_unref(g_variant_ref_sink(args));
 
     args = handlers->handlers->type->listener_args(TRUE, rec);
     g_assert(args);
-    g_assert(!g_strcmp0(g_variant_get_type_string(args), "(bs)"));
+    g_assert_cmpstr(g_variant_get_type_string(args), == ,"(bs)");
     g_variant_get(args, "(b&s)", &handled, &text);
     g_assert(handled);
-    g_assert(!g_strcmp0(text, test->text));
+    g_assert_cmpstr(text, == ,test->text);
     g_variant_unref(g_variant_ref_sink(args));
 
     dbus_handlers_config_free(handlers);
-    nfc_ndef_rec_unref(rec);
+    ndef_rec_unref(rec);
     for (i = 0; i < G_N_ELEMENTS(fname); i++) {
         g_unlink(fname[i]);
         g_free(fname[i]);
     }
+    test_system_language = NULL;
     g_rmdir(dir);
     g_free(dir);
 }
@@ -225,9 +267,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("basic"), test_basic);
     for (i = 0; i < G_N_ELEMENTS(tests_language); i++) {
         const TestLanguageData* test = tests_language + i;
-        char* path = test->loc ?
-            g_strconcat(TEST_(""), test->lang, "/", test->loc, NULL) :
-            g_strconcat(TEST_(""), test->lang, NULL);
+        char* path = g_strconcat(TEST_(""), test->name, NULL);
 
         g_test_add_data_func(path, test, test_language);
         g_free(path);

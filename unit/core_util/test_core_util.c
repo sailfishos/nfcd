@@ -1,33 +1,40 @@
 /*
+ * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  *
- *   1. Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *   2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in the
- *      documentation and/or other materials provided with the distribution.
- *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived from
- *      this software without specific prior written permission.
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer
+ *     in the documentation and/or other materials provided with the
+ *     distribution.
+ *
+ *  3. Neither the names of the copyright holders nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation
+ * are those of the authors and should not be interpreted as representing
+ * any official policies, either expressed or implied.
  */
 
 #include "test_common.h"
@@ -37,7 +44,6 @@
 #include "nfc_log.h"
 
 static TestOpt test_opt;
-static const char* test_system_locale;
 static GString* test_log_buf;
 
 static
@@ -50,13 +56,6 @@ test_log_proc(
 {
     g_string_append_vprintf(test_log_buf, format, va);
     g_string_append(test_log_buf, "\n");
-}
-
-const char*
-nfc_system_locale(
-    void)
-{
-    return test_system_locale;
 }
 
 /*==========================================================================*
@@ -89,72 +88,18 @@ test_hexdump(
     /* Only at VERBOSE */
     NFC_CORE_LOG_MODULE.level = GLOG_LEVEL_VERBOSE;
     nfc_hexdump(data, sizeof(data));
-    g_assert(!strcmp(test_log_buf->str, data_hexdump));
+    g_assert_cmpstr(test_log_buf->str, == ,data_hexdump);
 
     /* Same thing with GUtilData */
     g_string_set_size(test_log_buf, 0);
     TEST_BYTES_SET(buf, data);
     nfc_hexdump_data(NULL); /* This one does nothing */
     nfc_hexdump_data(&buf);
-    g_assert(!strcmp(test_log_buf->str, data_hexdump));
+    g_assert_cmpstr(test_log_buf->str, == ,data_hexdump);
 
     NFC_CORE_LOG_MODULE.level = level;
     g_string_free(test_log_buf, TRUE);
     gutil_log_func = fn;
-}
-
-/*==========================================================================*
- * language_none
- *==========================================================================*/
-
-static
-void
-test_language_none(
-    void)
-{
-    test_system_locale = NULL;
-    g_assert(!nfc_system_language());
-
-    test_system_locale = "C";
-    g_assert(!nfc_system_language());
-
-    test_system_locale = "POSIX";
-    g_assert(!nfc_system_language());
-}
-
-/*==========================================================================*
- * language
- *==========================================================================*/
-
-typedef struct test_language_data {
-    const char* locale;
-    const char* language;
-    const char* territory;
-} TestLanguageData;
-
-static const TestLanguageData tests_language[] = {
-    { "en", "en", NULL },
-    { "en.UTF-8", "en", NULL },
-    { "en_US", "en", "US" },
-    { "en_US.UTF-8", "en", "US" },
-    { "en_US@modifier", "en", "US" },
-    { "en_US.UTF-8@modifier", "en", "US" }
-};
-
-static
-void
-test_language(
-    gconstpointer data)
-{
-    const TestLanguageData* test = data;
-    NfcLanguage* result;
-
-    test_system_locale = test->locale;
-    result = nfc_system_language();
-    g_assert(result);
-    g_assert(!g_strcmp0(result->language, test->language));
-    g_assert(!g_strcmp0(result->territory, test->territory));
-    g_free(result);
 }
 
 /*==========================================================================*
@@ -165,19 +110,8 @@ test_language(
 
 int main(int argc, char* argv[])
 {
-    guint i;
-
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("hexdump"), test_hexdump);
-    g_test_add_func(TEST_("language/none"), test_language_none);
-    for (i = 0; i < G_N_ELEMENTS(tests_language); i++) {
-        const TestLanguageData* test = tests_language + i;
-        char* path = g_strconcat(TEST_("language/"), test->locale, NULL);
-
-        g_test_add_data_func(path, test, test_language);
-        g_free(path);
-    }
-
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

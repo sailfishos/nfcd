@@ -6,7 +6,7 @@
 # Required packages
 #
 
-PKGS = libglibutil glib-2.0 gobject-2.0 gio-2.0 gio-unix-2.0
+PKGS = libnfcdef libglibutil glib-2.0 gobject-2.0 gio-2.0 gio-unix-2.0
 
 #
 # libdbusaccess is optional
