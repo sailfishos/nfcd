@@ -708,6 +708,10 @@ int main(int argc, char* argv[])
                     app.ndef = mapdata;
                     ret = write_ndef(&app);
                 }
+
+                if (map) {
+                    g_mapped_file_unref(map);
+                }
                 g_strfreev(app.tags);
             } else if (error) {
                 fprintf(stderr, "%s\n", GERRMSG(error));
