@@ -10,31 +10,37 @@
  *
  *  1. Redistributions of source code must retain the above copyright
  *     notice, this list of conditions and the following disclaimer.
+ *
  *  2. Redistributions in binary form must reproduce the above copyright
  *     notice, this list of conditions and the following disclaimer
  *     in the documentation and/or other materials provided with the
  *     distribution.
+ *
  *  3. Neither the names of the copyright holders nor the names of its
  *     contributors may be used to endorse or promote products derived
  *     from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) ARISING
- * IN ANY WAY OUT OF THE USE OR INABILITY TO USE THIS SOFTWARE, EVEN
- * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * The views and conclusions contained in the software and documentation
  * are those of the authors and should not be interpreted as representing
  * any official policies, either expressed or implied.
  */
 
-#include "test_service.h"
 #include "test_common.h"
+#include "test_service.h"
+#include "test_host_app.h"
+#include "test_host_service.h"
 
 #include "nfc_manager_p.h"
 #include "internal/nfc_manager_i.h"
@@ -74,6 +80,8 @@ typedef struct test_adapter {
     gboolean power_requested;
     gboolean mode_request_pending;
     NFC_MODE mode_requested;
+    NFC_TECHNOLOGY supported_techs;
+    NFC_TECHNOLOGY allowed_techs;
 } TestAdapter;
 
 G_DEFINE_TYPE(TestAdapter, test_adapter, NFC_TYPE_ADAPTER)
@@ -151,11 +159,30 @@ test_adapter_cancel_mode_request(
 }
 
 static
+NFC_TECHNOLOGY
+test_adapter_get_supported_techs(
+    NfcAdapter* adapter)
+{
+    return TEST_ADAPTER(adapter)->supported_techs;
+}
+
+static
+void
+test_adapter_set_allowed_techs(
+    NfcAdapter* adapter,
+    NFC_TECHNOLOGY techs)
+{
+    TEST_ADAPTER(adapter)->allowed_techs = techs;
+}
+
+static
 void
 test_adapter_init(
     TestAdapter* self)
 {
     self->adapter.supported_modes = NFC_MODE_READER_WRITER;
+    self->allowed_techs = self->supported_techs =
+        NFC_TECHNOLOGY_A | NFC_TECHNOLOGY_B;
 }
 
 static
@@ -167,6 +194,8 @@ test_adapter_class_init(
     klass->cancel_power_request = test_adapter_cancel_power_request;
     klass->submit_mode_request = test_adapter_submit_mode_request;
     klass->cancel_mode_request = test_adapter_cancel_mode_request;
+    klass->get_supported_techs = test_adapter_get_supported_techs;
+    klass->set_allowed_techs = test_adapter_set_allowed_techs;
 }
 
 /*==========================================================================*
@@ -180,7 +209,6 @@ test_null(
 {
     /* Public interfaces are NULL tolerant */
     g_assert(!nfc_manager_ref(NULL));
-    g_assert(!nfc_manager_start(NULL));
     g_assert(!nfc_manager_plugins(NULL));
     g_assert(!nfc_manager_get_adapter(NULL, NULL));
     g_assert(!nfc_manager_add_adapter(NULL, NULL));
@@ -190,20 +218,33 @@ test_null(
     g_assert(!nfc_manager_add_service_unregistered_handler(NULL, NULL, NULL));
     g_assert(!nfc_manager_add_enabled_changed_handler(NULL, NULL, NULL));
     g_assert(!nfc_manager_add_mode_changed_handler(NULL, NULL, NULL));
+    g_assert(!nfc_manager_add_techs_changed_handler(NULL, NULL, NULL));
     g_assert(!nfc_manager_add_stopped_handler(NULL, NULL, NULL));
     g_assert(!nfc_manager_mode_request_new(NULL, 0, 0));
+    g_assert(!nfc_manager_tech_request_new(NULL, 0, 0));
 
     nfc_manager_mode_request_free(NULL);
+    nfc_manager_tech_request_free(NULL);
     nfc_manager_stop(NULL, 0);
     nfc_manager_set_enabled(NULL, FALSE);
     nfc_manager_request_power(NULL, FALSE);
     nfc_manager_request_mode(NULL, NFC_MODE_NONE);
+    nfc_manager_register_host_app(NULL, NULL);
+    nfc_manager_register_host_service(NULL, NULL);
     nfc_manager_register_service(NULL, NULL);
+    nfc_manager_unregister_host_app(NULL, NULL);
+    nfc_manager_unregister_host_service(NULL, NULL);
     nfc_manager_unregister_service(NULL, NULL);
     nfc_manager_remove_adapter(NULL, NULL);
     nfc_manager_remove_handler(NULL, 0);
     nfc_manager_remove_handlers(NULL, NULL, 0);
     nfc_manager_unref(NULL);
+
+    /* The internal APIs are NULL tolerant too */
+    g_assert(!nfc_manager_start(NULL));
+    g_assert(!nfc_manager_peer_services(NULL));
+    g_assert(!nfc_manager_host_services(NULL));
+    g_assert(!nfc_manager_host_apps(NULL));
 }
 
 /*==========================================================================*
@@ -402,10 +443,11 @@ test_mode(
     g_assert_cmpint(count, == ,1);
     count = 0;
 
-    /* Try to disable those but they stay enabled */
+    /* Disable P2P (last submitted request takes precedence) */
     disable_p2p = nfc_manager_mode_request_new(manager, 0, NFC_MODES_P2P);
-    g_assert_cmpint(manager->mode, == ,NFC_MODES_P2P | NFC_MODE_READER_WRITER);
-    g_assert_cmpint(count, == ,0);
+    g_assert_cmpint(manager->mode, == ,NFC_MODE_READER_WRITER);
+    g_assert_cmpint(count, == ,1);
+    count = 0;
 
     /* Add another enable request on top of that */
     enable_all = nfc_manager_mode_request_new(manager, NFC_MODES_ALL, 0);
@@ -418,8 +460,13 @@ test_mode(
     g_assert_cmpint(manager->mode, == , NFC_MODES_ALL);
     g_assert_cmpint(count, == ,0);
 
-    /* P2P modes get disabled when we release enable_p2p request */
-    nfc_manager_mode_request_free(enable_p2p);
+    /* Removing disable_p2p request makes no difference */
+    nfc_manager_mode_request_free(disable_p2p);
+    g_assert_cmpint(manager->mode, == , NFC_MODES_ALL);
+    g_assert_cmpint(count, == ,0);
+
+    /* But submitting a new one does */
+    disable_p2p = nfc_manager_mode_request_new(manager, 0, NFC_MODES_P2P);
     g_assert_cmpint(manager->mode, == ,NFC_MODE_READER_WRITER |
         NFC_MODE_CARD_EMULATION);
     g_assert_cmpint(count, == ,1);
@@ -437,11 +484,107 @@ test_mode(
     g_assert_cmpint(count, == ,0);
 
     /* We are back to the default when all requests are released */
+    nfc_manager_mode_request_free(enable_p2p);
+    g_assert_cmpint(count, == ,0);
     nfc_manager_mode_request_free(enable_all2);
     g_assert_cmpint(manager->mode, == , NFC_MODE_READER_WRITER);
     g_assert_cmpint(count, == ,1);
     count = 0;
 
+    nfc_manager_remove_handler(manager, id);
+    nfc_manager_unref(manager);
+}
+
+/*==========================================================================*
+ * tech
+ *==========================================================================*/
+
+static
+void
+test_tech(
+    void)
+{
+    NfcPluginsInfo pi;
+    NfcManager* manager;
+    TestAdapter* adapter = test_adapter_new();
+    const char* adapter_name;
+    NfcTechRequest* disable_b;
+    NfcTechRequest* disable_a;
+    NfcTechRequest* enable_b1;
+    NfcTechRequest* enable_b2;
+    int count = 0;
+    gulong id;
+
+    memset(&pi, 0, sizeof(pi));
+    manager = nfc_manager_new(&pi);
+    g_assert_cmpint(manager->techs, == ,0);
+
+    /* Add the listener */
+    g_assert(!nfc_manager_add_techs_changed_handler(manager, NULL, NULL));
+    id = nfc_manager_add_techs_changed_handler(manager,
+        test_manager_inc, &count);
+
+    adapter_name = nfc_manager_add_adapter(manager, NFC_ADAPTER(adapter));
+    g_assert(adapter->allowed_techs & (NFC_TECHNOLOGY_A|NFC_TECHNOLOGY_B));
+    g_assert_cmpint(manager->techs, == ,adapter->allowed_techs);
+    g_assert_cmpint(count, == ,1);
+    count = 0;
+
+    /* Useless requests are refused */
+    g_assert(!nfc_manager_tech_request_new(manager, 0, 0));
+
+    /* Disable NFC-B */
+    disable_b = nfc_manager_tech_request_new(manager, 0, NFC_TECHNOLOGY_B);
+    g_assert(disable_b);
+    g_assert(adapter->allowed_techs & NFC_TECHNOLOGY_A);
+    g_assert(!(adapter->allowed_techs & NFC_TECHNOLOGY_B));
+    g_assert_cmpint(count, == ,1);
+    count = 0;
+
+    /* Disable NFC-A too */
+    disable_a = nfc_manager_tech_request_new(manager, 0, NFC_TECHNOLOGY_A);
+    g_assert(disable_a);
+    g_assert(!(adapter->allowed_techs & NFC_TECHNOLOGY_A));
+    g_assert(!(adapter->allowed_techs & NFC_TECHNOLOGY_B));
+    g_assert_cmpint(count, == ,1);
+    count = 0;
+
+    /* Re-enable NFC-B */
+    enable_b1 = nfc_manager_tech_request_new(manager, NFC_TECHNOLOGY_B, 0);
+    g_assert(enable_b1);
+    g_assert(!(adapter->allowed_techs & NFC_TECHNOLOGY_A));
+    g_assert(adapter->allowed_techs & NFC_TECHNOLOGY_B);
+    g_assert_cmpint(count, == ,1);
+    count = 0;
+
+    /* Re-enabling NFC-B again makes no difference */
+    enable_b2 = nfc_manager_tech_request_new(manager, NFC_TECHNOLOGY_B, 0);
+    g_assert(enable_b2);
+    g_assert(!(adapter->allowed_techs & NFC_TECHNOLOGY_A));
+    g_assert(adapter->allowed_techs & NFC_TECHNOLOGY_B);
+    g_assert_cmpint(count, == ,0);
+
+    /* This re-enables NFC-A */
+    nfc_manager_tech_request_free(disable_a);
+    g_assert(adapter->allowed_techs & NFC_TECHNOLOGY_A);
+    g_assert(adapter->allowed_techs & NFC_TECHNOLOGY_B);
+    g_assert_cmpint(count, == ,1);
+    count = 0;
+
+    nfc_manager_tech_request_free(disable_b);
+    nfc_manager_tech_request_free(enable_b1);
+    nfc_manager_tech_request_free(enable_b2);
+    g_assert_cmpint(adapter->allowed_techs, == ,adapter->supported_techs);
+    g_assert_cmpint(manager->techs, == ,adapter->allowed_techs);
+    count = 0;
+
+    /* Removing the last adapter zeros the techs */
+    nfc_manager_remove_adapter(manager, adapter_name);
+    g_assert_cmpint(manager->techs, == ,0);
+    g_assert_cmpint(count, == ,1);
+    count = 0;
+
+    nfc_adapter_unref(NFC_ADAPTER(adapter));
     nfc_manager_remove_handler(manager, id);
     nfc_manager_unref(manager);
 }
@@ -515,6 +658,122 @@ test_service(
 }
 
 /*==========================================================================*
+ * host_service
+ *==========================================================================*/
+
+static
+void
+test_host_service(
+    void)
+{
+    NfcPluginsInfo pi;
+    NfcManager* manager;
+    NfcHostService* service1 = NFC_HOST_SERVICE(test_host_service_new("Test1"));
+    NfcHostService* service2 = NFC_HOST_SERVICE(test_host_service_new("Test2"));
+    TestAdapter* test_adapter = test_adapter_new();
+    NfcAdapter* adapter = NFC_ADAPTER(test_adapter);
+    const char* adapter_name;
+
+    adapter->supported_modes |= NFC_MODE_CARD_EMULATION;
+
+    memset(&pi, 0, sizeof(pi));
+    manager = nfc_manager_new(&pi);
+    adapter_name = nfc_manager_add_adapter(manager, adapter);
+    nfc_manager_request_power(manager, TRUE);
+    test_adapter_complete_power_request(test_adapter);
+    g_assert(!(adapter->mode_requested & NFC_MODE_CARD_EMULATION));
+
+    g_assert(!nfc_manager_register_host_service(manager, NULL));
+
+    /* Register the service */
+    g_assert(nfc_manager_register_host_service(manager, service1));
+    g_assert(test_adapter->mode_requested & NFC_MODE_CARD_EMULATION);
+    g_assert(nfc_manager_register_host_service(manager, service2));
+    g_assert(test_adapter->mode_requested & NFC_MODE_CARD_EMULATION);
+
+    /* Service can only be registered once */
+    g_assert(!nfc_manager_register_host_service(manager, service1));
+    g_assert(!nfc_manager_register_host_service(manager, service2));
+
+    /* Then unregister all services */
+    nfc_manager_unregister_host_service(manager, service1);
+    g_assert(test_adapter->mode_requested & NFC_MODE_CARD_EMULATION);
+    nfc_manager_unregister_host_service(manager, service2);
+    g_assert(!(adapter->mode_requested & NFC_MODE_CARD_EMULATION));
+
+    /* These won't have any effect */
+    nfc_manager_unregister_host_service(manager, service1);
+    nfc_manager_unregister_host_service(manager, NULL);
+    nfc_manager_remove_adapter(manager, adapter_name);
+    nfc_manager_remove_adapter(manager, NULL);
+
+    nfc_host_service_unref(service1);
+    nfc_host_service_unref(service2);
+    nfc_adapter_unref(adapter);
+    nfc_manager_unref(manager);
+}
+
+/*==========================================================================*
+ * host_app
+ *==========================================================================*/
+
+static
+void
+test_host_app(
+    void)
+{
+    static const guchar aid1_bytes[] = { 0x01, 0x02, 0x03, 0x04 };
+    static const guchar aid2_bytes[] = { 0x05, 0x06, 0x07, 0x08 };
+    static const GUtilData aid1 = { TEST_ARRAY_AND_SIZE(aid1_bytes) };
+    static const GUtilData aid2 = { TEST_ARRAY_AND_SIZE(aid2_bytes) };
+    NfcPluginsInfo pi;
+    NfcManager* manager;
+    NfcHostApp* app1 = NFC_HOST_APP(test_host_app_new(&aid1, NULL, 0));
+    NfcHostApp* app2 = NFC_HOST_APP(test_host_app_new(&aid2, NULL, 0));
+    TestAdapter* test_adapter = test_adapter_new();
+    NfcAdapter* adapter = NFC_ADAPTER(test_adapter);
+    const char* adapter_name;
+
+    adapter->supported_modes |= NFC_MODE_CARD_EMULATION;
+
+    memset(&pi, 0, sizeof(pi));
+    manager = nfc_manager_new(&pi);
+    adapter_name = nfc_manager_add_adapter(manager, adapter);
+    nfc_manager_request_power(manager, TRUE);
+    test_adapter_complete_power_request(test_adapter);
+    g_assert(!(adapter->mode_requested & NFC_MODE_CARD_EMULATION));
+
+    g_assert(!nfc_manager_register_host_app(manager, NULL));
+
+    /* Register the app */
+    g_assert(nfc_manager_register_host_app(manager, app1));
+    g_assert(test_adapter->mode_requested & NFC_MODE_CARD_EMULATION);
+    g_assert(nfc_manager_register_host_app(manager, app2));
+    g_assert(test_adapter->mode_requested & NFC_MODE_CARD_EMULATION);
+
+    /* App can only be registered once */
+    g_assert(!nfc_manager_register_host_app(manager, app1));
+    g_assert(!nfc_manager_register_host_app(manager, app2));
+
+    /* Then unregister all apps */
+    nfc_manager_unregister_host_app(manager, app1);
+    g_assert(test_adapter->mode_requested & NFC_MODE_CARD_EMULATION);
+    nfc_manager_unregister_host_app(manager, app2);
+    g_assert(!(adapter->mode_requested & NFC_MODE_CARD_EMULATION));
+
+    /* These won't have any effect */
+    nfc_manager_unregister_host_app(manager, app1);
+    nfc_manager_unregister_host_app(manager, NULL);
+    nfc_manager_remove_adapter(manager, adapter_name);
+    nfc_manager_remove_adapter(manager, NULL);
+
+    nfc_host_app_unref(app1);
+    nfc_host_app_unref(app2);
+    nfc_adapter_unref(adapter);
+    nfc_manager_unref(manager);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -530,7 +789,10 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("basic"), test_basic);
     g_test_add_func(TEST_("adapter"), test_adapter);
     g_test_add_func(TEST_("mode"), test_mode);
+    g_test_add_func(TEST_("tech"), test_tech);
     g_test_add_func(TEST_("service"), test_service);
+    g_test_add_func(TEST_("host_service"), test_host_service);
+    g_test_add_func(TEST_("host_app"), test_host_app);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

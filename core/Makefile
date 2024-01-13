@@ -33,6 +33,9 @@ SRC = \
   nfc_crc.c \
   nfc_config.c \
   nfc_core.c \
+  nfc_host.c \
+  nfc_host_app.c \
+  nfc_host_service.c \
   nfc_initiator.c \
   nfc_llc.c \
   nfc_llc_io.c \

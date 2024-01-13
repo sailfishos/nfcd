@@ -2,67 +2,74 @@
  * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  *
- *   1. Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *   2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in the
- *      documentation and/or other materials provided with the distribution.
- *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived
- *      from this software without specific prior written permission.
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer
+ *     in the documentation and/or other materials provided with the
+ *     distribution.
+ *  3. Neither the names of the copyright holders nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) ARISING
+ * IN ANY WAY OUT OF THE USE OR INABILITY TO USE THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation
+ * are those of the authors and should not be interpreted as representing
+ * any official policies, either expressed or implied.
  */
 
 #include "nfc_adapter_p.h"
 #include "nfc_adapter_impl.h"
-#include "nfc_peer_services.h"
+#include "nfc_host_p.h"
+#include "nfc_initiator.h"
+#include "nfc_manager_p.h"
 #include "nfc_tag_p.h"
 #include "nfc_tag_t4_p.h"
 #include "nfc_peer_p.h"
 #include "nfc_log.h"
 
 #include <gutil_misc.h>
+#include <gutil_macros.h>
+#include <gutil_objv.h>
+#include <gutil_weakref.h>
 
 #include <stdlib.h>
 
 #define NFC_TAG_NAME_FORMAT "tag%u"
 #define NFC_PEER_NAME_FORMAT "peer%u"
+#define NFC_HOST_NAME_FORMAT "host%u"
 
-typedef struct nfc_adapter_tag_entry {
-    NfcTag* tag;
+typedef struct nfc_adapter_object_entry {
+    gpointer obj;
     gulong gone_id;
-} NfcAdapterTagEntry;
-
-typedef struct nfc_adapter_peer_entry {
-    NfcPeer* peer;
-    gulong gone_id;
-} NfcAdapterPeerEntry;
+} NfcAdapterObjectEntry;
 
 struct nfc_adapter_priv {
     char* name;
-    NfcPeerServices* services;
+    GUtilWeakRef* manager_ref;
     GHashTable* tag_table;
     GHashTable* peer_table;
+    GHashTable* host_table;
     NfcPeer** peers;
+    NfcHost** hosts;
     guint next_tag_index;
     guint next_peer_index;
+    guint next_host_index;
     guint32 pending_signals;
     NFC_MODE mode_submitted;
     gboolean mode_pending;
@@ -89,6 +96,8 @@ enum nfc_adapter_signal {
     SIGNAL_TARGET_PRESENCE,
     SIGNAL_PEER_ADDED,
     SIGNAL_PEER_REMOVED,
+    SIGNAL_HOST_ADDED,
+    SIGNAL_HOST_REMOVED,
     SIGNAL_COUNT
 };
 
@@ -104,12 +113,17 @@ enum nfc_adapter_signal {
 #define SIGNAL_TARGET_PRESENCE_NAME     "nfc-adapter-target-presence"
 #define SIGNAL_PEER_ADDED_NAME          "nfc-adapter-peer-added"
 #define SIGNAL_PEER_REMOVED_NAME        "nfc-adapter-peer-removed"
+#define SIGNAL_HOST_ADDED_NAME          "nfc-adapter-host-added"
+#define SIGNAL_HOST_REMOVED_NAME        "nfc-adapter-host-removed"
 
 static guint nfc_adapter_signals[SIGNAL_COUNT] = { 0 };
 
 #define NEW_SIGNAL(name,type) nfc_adapter_signals[SIGNAL_##name] = \
     g_signal_new(SIGNAL_##name##_NAME, type, G_SIGNAL_RUN_FIRST, \
     0, NULL, NULL, NULL, G_TYPE_NONE, 0)
+#define NEW_OBJECT_SIGNAL(name,type) nfc_adapter_signals[SIGNAL_##name] = \
+    g_signal_new(SIGNAL_##name##_NAME, type, G_SIGNAL_RUN_FIRST, \
+    0, NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_OBJECT)
 
 static
 void
@@ -173,8 +187,7 @@ nfc_adapter_update_tags(
     ptr = self->tags = g_new(NfcTag*, count + 1);
     g_hash_table_iter_init(&iter, priv->tag_table);
     while (g_hash_table_iter_next(&iter, NULL, &value)) {
-        NfcAdapterTagEntry* entry = value;
-        *ptr++ = entry->tag;
+        *ptr++ = NFC_TAG(((NfcAdapterObjectEntry*)value)->obj);
     }
     *ptr = NULL;
 
@@ -208,13 +221,46 @@ nfc_adapter_update_peers(
     ptr = priv->peers = g_new(NfcPeer*, count + 1);
     g_hash_table_iter_init(&iter, priv->peer_table);
     while (g_hash_table_iter_next(&iter, NULL, &value)) {
-        NfcAdapterPeerEntry* entry = value;
-        *ptr++ = entry->peer;
+        *ptr++ = NFC_PEER(((NfcAdapterObjectEntry*)value)->obj);
     }
     *ptr = NULL;
 
     /* Sort peers by name */
     qsort(priv->peers, count, sizeof(NfcPeer*), nfc_adapter_compare_peers);
+}
+
+static
+int
+nfc_adapter_compare_hosts(
+    const void* p1,
+    const void* p2)
+{
+    NfcHost* c1 = *(NfcHost* const*)p1;
+    NfcHost* c2 = *(NfcHost* const*)p2;
+
+    return strcmp(c1->name, c2->name);
+}
+
+static
+void
+nfc_adapter_update_hosts(
+    NfcAdapterPriv* priv)
+{
+    const guint count = g_hash_table_size(priv->host_table);
+    NfcHost** ptr;
+    GHashTableIter iter;
+    gpointer value;
+
+    g_free(priv->hosts);
+    ptr = priv->hosts = g_new(NfcHost*, count + 1);
+    g_hash_table_iter_init(&iter, priv->host_table);
+    while (g_hash_table_iter_next(&iter, NULL, &value)) {
+        *ptr++ = NFC_HOST(((NfcAdapterObjectEntry*)value)->obj);
+    }
+    *ptr = NULL;
+
+    /* Sort hosts by name */
+    qsort(priv->hosts, count, sizeof(NfcHost*), nfc_adapter_compare_hosts);
 }
 
 static
@@ -242,13 +288,23 @@ nfc_adapter_update_presence(
 
     g_hash_table_iter_init(&it, priv->tag_table);
     while (g_hash_table_iter_next(&it, NULL, &value) && !present) {
-        present = ((NfcAdapterTagEntry*)value)->tag->present;
+        present = NFC_TAG(((NfcAdapterObjectEntry*)value)->obj)->
+            present;
     }
 
     if (!present) {
         g_hash_table_iter_init(&it, priv->peer_table);
         while (g_hash_table_iter_next(&it, NULL, &value) && !present) {
-            present = ((NfcAdapterPeerEntry*)value)->peer->present;
+            present = NFC_PEER(((NfcAdapterObjectEntry*)value)->obj)->
+                present;
+        }
+
+        if (!present) {
+            g_hash_table_iter_init(&it, priv->host_table);
+            while (g_hash_table_iter_next(&it, NULL, &value) && !present) {
+                present = NFC_HOST(((NfcAdapterObjectEntry*)value)->obj)->
+                    initiator->present;
+            }
         }
     }
 
@@ -350,14 +406,23 @@ nfc_adapter_make_name(
 
 static
 void
-nfc_adapter_tag_free(
+nfc_adapter_object_entry_free(
     gpointer data)
 {
-    NfcAdapterTagEntry* entry = data;
+    NfcAdapterObjectEntry* entry = data;
 
-    nfc_tag_remove_handler(entry->tag, entry->gone_id);
-    nfc_tag_unref(entry->tag);
-    g_slice_free(NfcAdapterTagEntry, entry);
+    g_signal_handler_disconnect(entry->obj, entry->gone_id);
+    g_object_unref(entry->obj);
+    gutil_slice_free(entry);
+}
+
+static
+NfcManager*
+nfc_adapter_get_manager(
+    NfcAdapterPriv* priv)
+{
+    /* The returned ref must be released with nfc_manager_unref() */
+    return NFC_MANAGER(gutil_weakref_get(priv->manager_ref));
 }
 
 static
@@ -376,15 +441,15 @@ nfc_adapter_add_tag(
     NfcTag* tag)
 {
     /* This function takes ownership of the tag */
-    if (tag && tag->present) {
+    if (tag->present) {
         NfcAdapterPriv* priv = self->priv;
-        NfcAdapterTagEntry* entry = g_slice_new(NfcAdapterTagEntry);
+        NfcAdapterObjectEntry* entry = g_slice_new(NfcAdapterObjectEntry);
         char* name = nfc_adapter_make_name(priv->tag_table,
             NFC_TAG_NAME_FORMAT, &priv->next_tag_index);
 
         GASSERT(!tag->name);
         nfc_tag_set_name(tag, name);
-        entry->tag = tag;
+        entry->obj = tag;
         entry->gone_id = nfc_tag_add_gone_handler(tag, nfc_adapter_tag_gone,
             self);
         g_hash_table_insert(priv->tag_table, name, entry);
@@ -397,18 +462,6 @@ nfc_adapter_add_tag(
         nfc_tag_unref(tag);
         return NULL;
     }
-}
-
-static
-void
-nfc_adapter_peer_free(
-    gpointer data)
-{
-    NfcAdapterPeerEntry* entry = data;
-
-    nfc_peer_remove_handler(entry->peer, entry->gone_id);
-    nfc_peer_unref(entry->peer);
-    g_slice_free(NfcAdapterPeerEntry, entry);
 }
 
 static
@@ -429,13 +482,13 @@ nfc_adapter_add_peer(
     /* This function takes ownership of the peer */
     if (peer && peer->present) {
         NfcAdapterPriv* priv = self->priv;
-        NfcAdapterPeerEntry* entry = g_slice_new(NfcAdapterPeerEntry);
+        NfcAdapterObjectEntry* entry = g_slice_new(NfcAdapterObjectEntry);
         char* name = nfc_adapter_make_name(priv->peer_table,
             NFC_PEER_NAME_FORMAT, &priv->next_peer_index);
 
         GASSERT(!peer->name);
         nfc_peer_set_name(peer, name);
-        entry->peer = peer;
+        entry->obj = peer;
         entry->gone_id = nfc_peer_add_gone_handler(peer, nfc_adapter_peer_gone,
             self);
         g_hash_table_insert(priv->peer_table, name, entry);
@@ -460,9 +513,11 @@ nfc_adapter_add_peer_initiator(
 {
     if (G_LIKELY(self) && G_LIKELY(target) && G_LIKELY(param)) {
         NfcAdapterPriv* priv = self->priv;
+        NfcManager* manager = nfc_adapter_get_manager(priv);
         NfcPeer* peer = nfc_peer_new_initiator(target, technology, param,
-            priv->services);
+            nfc_manager_peer_services(manager));
 
+        nfc_manager_unref(manager);
         if (peer) {
             return nfc_adapter_add_peer(self, peer);
         }
@@ -480,14 +535,37 @@ nfc_adapter_add_peer_target(
 {
     if (G_LIKELY(self) && G_LIKELY(initiator) && G_LIKELY(param)) {
         NfcAdapterPriv* priv = self->priv;
+        NfcManager* manager = nfc_adapter_get_manager(priv);
         NfcPeer* peer = nfc_peer_new_target(initiator, technology, param,
-            priv->services);
+            nfc_manager_peer_services(manager));
 
+        nfc_manager_unref(manager);
         if (peer) {
             return nfc_adapter_add_peer(self, peer);
         }
     }
     return NULL;
+}
+
+static
+void
+nfc_adapter_host_gone(
+    NfcHost* host,
+    void* adapter)
+{
+    NfcAdapter* self = THIS(adapter);
+    NfcAdapterPriv* priv = self->priv;
+
+    nfc_host_ref(host);
+    if (g_hash_table_remove(priv->host_table, host->name)) {
+        nfc_adapter_ref(self);
+        nfc_adapter_update_hosts(priv);
+        nfc_adapter_update_presence(self);
+        g_signal_emit(self, nfc_adapter_signals[SIGNAL_HOST_REMOVED], 0, host);
+        nfc_adapter_emit_pending_signals(self);
+        nfc_adapter_unref(self);
+    }
+    nfc_host_unref(host);
 }
 
 /*==========================================================================*
@@ -558,7 +636,7 @@ nfc_adapter_request_mode(
             }
             ok = TRUE;
         } else {
-            GDEBUG("Poll mode %d is not supported by %s %s", mode,
+            GDEBUG("Mode 0x%02x is not supported by %s %s", mode,
                 G_OBJECT_TYPE_NAME(self), self->name);
         }
     }
@@ -570,6 +648,13 @@ nfc_adapter_peers(
     NfcAdapter* self) /* Since 1.1.0 */
 {
     return G_LIKELY(self) ? self->priv->peers : NULL;
+}
+
+NfcHost**
+nfc_adapter_hosts(
+    NfcAdapter* self) /* Since 1.2.0 */
+{
+    return G_LIKELY(self) ? self->priv->hosts : NULL;
 }
 
 NfcTag*
@@ -697,10 +782,11 @@ nfc_adapter_remove_tag(
 {
     if (G_LIKELY(self) && G_LIKELY(name)) {
         NfcAdapterPriv* priv = self->priv;
-        NfcAdapterTagEntry* entry = g_hash_table_lookup(priv->tag_table, name);
+        NfcAdapterObjectEntry* entry = g_hash_table_lookup(priv->tag_table,
+            name);
 
         if (entry) {
-            NfcTag* tag = nfc_tag_ref(entry->tag);
+            NfcTag* tag = nfc_tag_ref(entry->obj);
 
             g_hash_table_remove(priv->tag_table, name);
             nfc_adapter_update_tags(self);
@@ -716,15 +802,15 @@ nfc_adapter_remove_tag(
 void
 nfc_adapter_remove_peer(
     NfcAdapter* self,
-    const char* name)
+    const char* name) /* Since 1.1.0 */
 {
     if (G_LIKELY(self) && G_LIKELY(name)) {
         NfcAdapterPriv* priv = self->priv;
-        NfcAdapterPeerEntry* entry =
-            g_hash_table_lookup(priv->peer_table, name);
+        NfcAdapterObjectEntry* entry = g_hash_table_lookup(priv->peer_table,
+            name);
 
         if (entry) {
-            NfcPeer* peer = nfc_peer_ref(entry->peer);
+            NfcPeer* peer = nfc_peer_ref(entry->obj);
 
             g_hash_table_remove(priv->peer_table, name);
             nfc_adapter_update_peers(priv);
@@ -735,6 +821,37 @@ nfc_adapter_remove_peer(
             nfc_peer_unref(peer);
         }
     }
+}
+
+NfcHost*
+nfc_adapter_add_host(
+    NfcAdapter* self,
+    NfcInitiator* initiator) /* Since 1.2.0 */
+{
+    if (G_LIKELY(self) && G_LIKELY(initiator) && initiator->present) {
+        NfcAdapterPriv* priv = self->priv;
+        GHashTable* table = priv->host_table;
+        NfcAdapterObjectEntry* entry = g_slice_new0(NfcAdapterObjectEntry);
+        char* name = nfc_adapter_make_name(table, NFC_HOST_NAME_FORMAT,
+            &priv->next_host_index);
+        NfcManager* manager = nfc_adapter_get_manager(priv);
+        NfcHost* host = nfc_host_new(name, initiator,
+            nfc_manager_host_services(manager),
+            nfc_manager_host_apps(manager));
+
+        entry->obj = host;
+        entry->gone_id = nfc_host_add_gone_handler(host, nfc_adapter_host_gone,
+            self);
+        g_hash_table_insert(table, name, entry);
+        nfc_adapter_update_hosts(priv);
+        nfc_adapter_update_presence(self);
+        nfc_adapter_emit_pending_signals(self);
+        g_signal_emit(self, nfc_adapter_signals[SIGNAL_HOST_ADDED], 0, host);
+        nfc_manager_unref(manager);
+        nfc_host_start(host);
+        return host;
+    }
+    return NULL;
 }
 
 gulong
@@ -785,6 +902,26 @@ nfc_adapter_add_peer_removed_handler(
 {
     return (G_LIKELY(self) && G_LIKELY(func)) ? g_signal_connect(self,
         SIGNAL_PEER_REMOVED_NAME, G_CALLBACK(func), user_data) : 0;
+}
+
+gulong
+nfc_adapter_add_host_added_handler(
+    NfcAdapter* self,
+    NfcAdapterHostFunc func,
+    void* user_data) /* Since 1.2.0 */
+{
+    return (G_LIKELY(self) && G_LIKELY(func)) ? g_signal_connect(self,
+        SIGNAL_HOST_ADDED_NAME, G_CALLBACK(func), user_data) : 0;
+}
+
+gulong
+nfc_adapter_add_host_removed_handler(
+    NfcAdapter* self,
+    NfcAdapterHostFunc func,
+    void* user_data) /* Since 1.2.0 */
+{
+    return (G_LIKELY(self) && G_LIKELY(func)) ? g_signal_connect(self,
+        SIGNAL_HOST_REMOVED_NAME, G_CALLBACK(func), user_data) : 0;
 }
 
 gulong
@@ -856,36 +993,6 @@ nfc_adapter_remove_handlers(
     gutil_disconnect_handlers(self, ids, count);
 }
 
-/*==========================================================================*
- * Internal interface
- *==========================================================================*/
-
-void
-nfc_adapter_set_name(
-    NfcAdapter* self,
-    const char* name)
-{
-    if (G_LIKELY(self)) {
-        NfcAdapterPriv* priv = self->priv;
-
-        g_free(priv->name);
-        self->name = priv->name = g_strdup(name);
-    }
-}
-
-void
-nfc_adapter_set_services(
-    NfcAdapter* self,
-    NfcPeerServices* services)
-{
-    if (G_LIKELY(self)) {
-        NfcAdapterPriv* priv = self->priv;
-
-        nfc_peer_services_unref(priv->services);
-        priv->services = nfc_peer_services_ref(services);
-    }
-}
-
 void
 nfc_adapter_mode_notify(
     NfcAdapter* self,
@@ -955,12 +1062,59 @@ nfc_adapter_target_notify(
 }
 
 /*==========================================================================*
+ * Internal interface
+ *==========================================================================*/
+
+void
+nfc_adapter_set_manager_ref(
+    NfcAdapter* self,
+    GUtilWeakRef* ref)
+{
+    if (G_LIKELY(self)) {
+        NfcAdapterPriv* priv = self->priv;
+
+        gutil_weakref_unref(priv->manager_ref);
+        priv->manager_ref = gutil_weakref_ref(ref);
+    }
+}
+
+void
+nfc_adapter_set_name(
+    NfcAdapter* self,
+    const char* name)
+{
+    if (G_LIKELY(self)) {
+        NfcAdapterPriv* priv = self->priv;
+
+        g_free(priv->name);
+        self->name = priv->name = g_strdup(name);
+    }
+}
+
+NFC_TECHNOLOGY
+nfc_adapter_get_supported_techs(
+    NfcAdapter* self)
+{
+    return G_LIKELY(self) ?
+        GET_THIS_CLASS(self)->get_supported_techs(self) :
+        NFC_TECHNOLOGY_UNKNOWN;
+}
+
+void
+nfc_adapter_set_allowed_techs(
+    NfcAdapter* self,
+    NFC_TECHNOLOGY techs)
+{
+    GET_THIS_CLASS(self)->set_allowed_techs(self, techs);
+}
+
+/*==========================================================================*
  * Internals
  *==========================================================================*/
 
 static
 gboolean
-nfc_adapter_submit_power_request(
+nfc_adapter_default_submit_power_request(
     NfcAdapter* self,
     gboolean on)
 {
@@ -969,7 +1123,7 @@ nfc_adapter_submit_power_request(
 
 static
 gboolean
-nfc_adapter_submit_mode_request(
+nfc_adapter_default_submit_mode_request(
     NfcAdapter* self,
     NFC_MODE mode)
 {
@@ -978,8 +1132,24 @@ nfc_adapter_submit_mode_request(
 
 static
 void
-nfc_adapter_cancel_request(
+nfc_adapter_default_cancel_request(
     NfcAdapter* self)
+{
+}
+
+static
+NFC_TECHNOLOGY
+nfc_adapter_default_get_supported_techs(
+    NfcAdapter* self)
+{
+    return NFC_TECHNOLOGY_A | NFC_TECHNOLOGY_B;
+}
+
+static
+void
+nfc_adapter_default_set_allowed_techs(
+    NfcAdapter* self,
+    NFC_TECHNOLOGY techs)
 {
 }
 
@@ -994,10 +1164,13 @@ nfc_adapter_init(
     self->priv = priv;
     self->tags = g_new0(NfcTag*, 1);
     priv->peers = g_new0(NfcPeer*, 1);
+    priv->hosts = g_new0(NfcHost*, 1);
     priv->tag_table = g_hash_table_new_full(g_str_hash, g_str_equal,
-        g_free, nfc_adapter_tag_free);
+        g_free, nfc_adapter_object_entry_free);
     priv->peer_table = g_hash_table_new_full(g_str_hash, g_str_equal,
-        g_free, nfc_adapter_peer_free);
+        g_free, nfc_adapter_object_entry_free);
+    priv->host_table = g_hash_table_new_full(g_str_hash, g_str_equal,
+        g_free, nfc_adapter_object_entry_free);
 }
 
 static
@@ -1018,6 +1191,7 @@ nfc_adapter_dispose(
         c->cancel_power_request(self);
     }
     g_hash_table_remove_all(priv->tag_table);
+    gutil_weakref_unref(priv->manager_ref);
     G_OBJECT_CLASS(PARENT_CLASS)->dispose(object);
 }
 
@@ -1029,9 +1203,10 @@ nfc_adapter_finalize(
     NfcAdapter* self = THIS(object);
     NfcAdapterPriv* priv = self->priv;
 
-    nfc_peer_services_unref(priv->services);
     g_hash_table_destroy(priv->tag_table);
     g_hash_table_destroy(priv->peer_table);
+    g_hash_table_destroy(priv->host_table);
+    g_free(priv->hosts);
     g_free(priv->peers);
     g_free(self->tags);
     g_free(priv->name);
@@ -1049,33 +1224,25 @@ nfc_adapter_class_init(
     g_type_class_add_private(klass, sizeof(NfcAdapterPriv));
     object_class->dispose = nfc_adapter_dispose;
     object_class->finalize = nfc_adapter_finalize;
-    klass->submit_power_request = nfc_adapter_submit_power_request;
-    klass->cancel_power_request = nfc_adapter_cancel_request;
-    klass->submit_mode_request = nfc_adapter_submit_mode_request;
-    klass->cancel_mode_request = nfc_adapter_cancel_request;
+    klass->submit_power_request = nfc_adapter_default_submit_power_request;
+    klass->cancel_power_request = nfc_adapter_default_cancel_request;
+    klass->submit_mode_request = nfc_adapter_default_submit_mode_request;
+    klass->cancel_mode_request = nfc_adapter_default_cancel_request;
+    klass->get_supported_techs = nfc_adapter_default_get_supported_techs;
+    klass->set_allowed_techs = nfc_adapter_default_set_allowed_techs;
 
-    nfc_adapter_signals[SIGNAL_TAG_ADDED] =
-        g_signal_new(SIGNAL_TAG_ADDED_NAME, type,
-            G_SIGNAL_RUN_FIRST, 0, NULL, NULL, NULL, G_TYPE_NONE, 1,
-            G_TYPE_OBJECT);
-    nfc_adapter_signals[SIGNAL_TAG_REMOVED] =
-        g_signal_new(SIGNAL_TAG_REMOVED_NAME, type,
-            G_SIGNAL_RUN_FIRST, 0, NULL, NULL, NULL, G_TYPE_NONE, 1,
-            G_TYPE_OBJECT);
-    nfc_adapter_signals[SIGNAL_PEER_ADDED] =
-        g_signal_new(SIGNAL_PEER_ADDED_NAME, type,
-            G_SIGNAL_RUN_FIRST, 0, NULL, NULL, NULL, G_TYPE_NONE, 1,
-            G_TYPE_OBJECT);
-    nfc_adapter_signals[SIGNAL_PEER_REMOVED] =
-        g_signal_new(SIGNAL_PEER_REMOVED_NAME, type,
-            G_SIGNAL_RUN_FIRST, 0, NULL, NULL, NULL, G_TYPE_NONE, 1,
-            G_TYPE_OBJECT);
     NEW_SIGNAL(ENABLED_CHANGED, type);
     NEW_SIGNAL(POWERED, type);
     NEW_SIGNAL(POWER_REQUESTED, type);
     NEW_SIGNAL(MODE, type);
     NEW_SIGNAL(MODE_REQUESTED, type);
     NEW_SIGNAL(TARGET_PRESENCE, type);
+    NEW_OBJECT_SIGNAL(TAG_ADDED, type);
+    NEW_OBJECT_SIGNAL(TAG_REMOVED, type);
+    NEW_OBJECT_SIGNAL(PEER_ADDED, type);
+    NEW_OBJECT_SIGNAL(PEER_REMOVED, type);
+    NEW_OBJECT_SIGNAL(HOST_ADDED, type);
+    NEW_OBJECT_SIGNAL(HOST_REMOVED, type);
 }
 
 /*

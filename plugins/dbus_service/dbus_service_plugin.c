@@ -10,23 +10,27 @@
  *
  *  1. Redistributions of source code must retain the above copyright
  *     notice, this list of conditions and the following disclaimer.
+ *
  *  2. Redistributions in binary form must reproduce the above copyright
  *     notice, this list of conditions and the following disclaimer
  *     in the documentation and/or other materials provided with the
  *     distribution.
+ *
  *  3. Neither the names of the copyright holders nor the names of its
  *     contributors may be used to endorse or promote products derived
  *     from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) ARISING
- * IN ANY WAY OUT OF THE USE OR INABILITY TO USE THIS SOFTWARE, EVEN
- * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * The views and conclusions contained in the software and documentation
  * are those of the authors and should not be interpreted as representing
@@ -51,25 +55,46 @@
 
 GLOG_MODULE_DEFINE("dbus-service");
 
+/* x(DBUS_CALL,dbus_call,dbus-call) */
+#define DBUS_CALLS(x) \
+    x(GET_ALL, get_all, get-all) \
+    x(GET_INTERFACE_VERSION, get_interface_version, get-interface-version) \
+    x(GET_ADAPTERS, get_adapters, get-adapters) \
+    x(GET_ALL2, get_all2, get-all2) \
+    x(GET_DAEMON_VERSION, get_daemon_version, get-daemon-version) \
+    x(GET_ALL3, get_all3, get-all3) \
+    x(GET_MODE, get_mode, get-mode) \
+    x(REQUEST_MODE, request_mode, request-mode) \
+    x(RELEASE_MODE, release_mode, release-mode) \
+    x(REGISTER_LOCAL_SERVICE, register_local_service, \
+      register-local-service) \
+    x(UNREGISTER_LOCAL_SERVICE, unregister_local_service, \
+      unregister-local-service) \
+    x(GET_ALL4, get_all4, get-all4) \
+    x(GET_TECHS, get_techs, get-techs) \
+    x(REQUEST_TECHS, request_techs, request-techs) \
+    x(RELEASE_TECHS, release_techs, release-techs) \
+    x(REGISTER_LOCAL_HOST_SERVICE, register_local_host_service, \
+      register-local-host-service) \
+    x(UNREGISTER_LOCAL_HOST_SERVICE, unregister_local_host_service, \
+      unregister-local-host-service) \
+    x(REGISTER_LOCAL_HOST_APP, register_local_host_app, \
+      register-local-host-app) \
+    x(UNREGISTER_LOCAL_HOST_APP, unregister_local_host_app, \
+      unregister-local-host-app)
+
 enum {
     EVENT_ADAPTER_ADDED,
     EVENT_ADAPTER_REMOVED,
     EVENT_MODE_CHANGED,
+    EVENT_TECHS_CHANGED,
     EVENT_COUNT
 };
 
 enum {
-    CALL_GET_ALL,
-    CALL_GET_INTERFACE_VERSION,
-    CALL_GET_ADAPTERS,
-    CALL_GET_ALL2,
-    CALL_GET_DAEMON_VERSION,
-    CALL_GET_ALL3,
-    CALL_GET_MODE,
-    CALL_REQUEST_MODE,
-    CALL_RELEASE_MODE,
-    CALL_REGISTER_LOCAL_SERVICE,
-    CALL_UNREGISTER_LOCAL_SERVICE,
+    #define DEFINE_ENUM(CALL,call,name) CALL_##CALL,
+    DBUS_CALLS(DEFINE_ENUM)
+    #undef DEFINE_ENUM
     CALL_COUNT
 };
 
@@ -78,14 +103,17 @@ typedef struct dbus_service_client {
     guint watch_id;
     DBusServicePlugin* plugin;
     GHashTable* peer_services;  /* objpath => DBusServiceLocal */
+    GHashTable* host_services;  /* objpath => DBusServiceLocalHost */
+    GHashTable* host_apps;      /* objpath => DBusServiceLocalApp */
     GHashTable* mode_requests;  /* id => NfcModeRequest */
+    GHashTable* tech_requests;  /* id => NfcTechRequest */
 } DBusServiceClient;
 
 typedef NfcPluginClass DBusServicePluginClass;
 struct dbus_service_plugin {
     NfcPlugin parent;
     guint own_name_id;
-    guint last_mode_request_id;
+    guint last_request_id;
     GUtilIdlePool* pool;
     GDBusConnection* connection;
     GHashTable* adapters;
@@ -107,7 +135,7 @@ G_DEFINE_TYPE(DBusServicePlugin, dbus_service_plugin, PARENT_TYPE)
 #define NFC_SERVICE     "org.sailfishos.nfc.daemon"
 #define NFC_DAEMON_PATH "/"
 
-#define NFC_DBUS_PLUGIN_INTERFACE_VERSION  (3)
+#define NFC_DBUS_PLUGIN_INTERFACE_VERSION  (4)
 
 static
 gboolean
@@ -139,14 +167,42 @@ void
 dbus_service_plugin_peer_service_destroy(
     gpointer user_data)
 {
-    DBusServiceLocal* local = user_data;
-    DBusServicePlugin* plugin = local->plugin;
-    NfcPeerService* service = &local->service;
+    DBusServiceLocal* obj = user_data;
+    DBusServicePlugin* plugin = obj->plugin;
+    NfcPeerService* service = &obj->service;
 
-    local->plugin = NULL;
+    obj->plugin = NULL;
     nfc_manager_unregister_service(plugin->manager, service);
     nfc_peer_service_disconnect_all(service);
     nfc_peer_service_unref(service);
+}
+
+static
+void
+dbus_service_plugin_host_service_destroy(
+    gpointer user_data)
+{
+    DBusServiceLocalHost* obj = user_data;
+    DBusServicePlugin* plugin = obj->plugin;
+    NfcHostService* service = &obj->service;
+
+    obj->plugin = NULL;
+    nfc_manager_unregister_host_service(plugin->manager, service);
+    nfc_host_service_unref(service);
+}
+
+static
+void
+dbus_service_plugin_host_app_destroy(
+    gpointer user_data)
+{
+    DBusServiceLocalApp* obj = user_data;
+    DBusServicePlugin* plugin = obj->plugin;
+    NfcHostApp* app = &obj->app;
+
+    obj->plugin = NULL;
+    nfc_manager_unregister_host_app(plugin->manager, app);
+    nfc_host_app_unref(app);
 }
 
 static
@@ -159,8 +215,17 @@ dbus_service_plugin_client_destroy(
     if (client->peer_services) {
         g_hash_table_destroy(client->peer_services);
     }
+    if (client->host_services) {
+        g_hash_table_destroy(client->host_services);
+    }
+    if (client->host_apps) {
+        g_hash_table_destroy(client->host_apps);
+    }
     if (client->mode_requests) {
         g_hash_table_destroy(client->mode_requests);
+    }
+    if (client->tech_requests) {
+        g_hash_table_destroy(client->tech_requests);
     }
     g_bus_unwatch_name(client->watch_id);
     g_free(client->dbus_name);
@@ -258,17 +323,17 @@ dbus_service_plugin_client_get(
 
 static
 DBusServiceLocal*
-dbus_service_plugin_register_local_service(
+dbus_service_plugin_register_local_peer_service(
     DBusServicePlugin* self,
     const char* peer_name,
     const char* obj_path,
     const char* dbus_name)
 {
-    DBusServiceLocal* local = dbus_service_local_new(self->connection,
+    DBusServiceLocal* obj = dbus_service_local_new(self->connection,
         obj_path, peer_name, dbus_name);
 
-    if (local) {
-        NfcPeerService* service = &local->service;
+    if (obj) {
+        NfcPeerService* service = &obj->service;
 
         if (nfc_manager_register_service(self->manager, service)) {
             DBusServiceClient* client = dbus_service_plugin_client_get
@@ -280,13 +345,106 @@ dbus_service_plugin_register_local_service(
                         dbus_service_plugin_peer_service_destroy);
             }
             g_hash_table_insert(client->peer_services, (gpointer)
-                local->obj_path, local);
-            local->plugin = self;
-            return local;
+                obj->obj_path, obj);
+            obj->plugin = self;
+            return obj;
         }
         nfc_peer_service_unref(service);
     }
     return NULL;
+}
+
+static
+DBusServiceLocalHost*
+dbus_service_plugin_register_local_host_service(
+    DBusServicePlugin* self,
+    const char* name,
+    const char* obj_path,
+    const char* dbus_name)
+{
+    DBusServiceLocalHost* obj = dbus_service_local_host_new(self->connection,
+        obj_path, name, dbus_name);
+
+    if (obj) {
+        NfcHostService* service = &obj->service;
+
+        if (nfc_manager_register_host_service(self->manager, service)) {
+            DBusServiceClient* client = dbus_service_plugin_client_get
+                (self, dbus_name);
+
+            if (!client->host_services) {
+                client->host_services =
+                    g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
+                        dbus_service_plugin_host_service_destroy);
+            }
+            g_hash_table_insert(client->host_services, (gpointer)
+                obj->obj_path, obj);
+            obj->plugin = self;
+            return obj;
+        }
+        nfc_host_service_unref(service);
+    }
+    return NULL;
+}
+
+static
+DBusServiceLocalApp*
+dbus_service_plugin_register_local_host_app(
+    DBusServicePlugin* self,
+    GDBusConnection* connection,
+    const char* name,
+    const GUtilData* aid,
+    NFC_HOST_APP_FLAGS flags,
+    const char* obj_path,
+    const char* dbus_name)
+{
+    DBusServiceLocalApp* obj = dbus_service_local_app_new(self->connection,
+        obj_path, name, aid, flags, dbus_name);
+
+    if (obj) {
+        NfcHostApp* app = &obj->app;
+
+        if (nfc_manager_register_host_app(self->manager, app)) {
+            DBusServiceClient* client = dbus_service_plugin_client_get
+                (self, dbus_name);
+
+            if (!client->host_apps) {
+                client->host_apps =
+                    g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
+                        dbus_service_plugin_host_app_destroy);
+            }
+            g_hash_table_insert(client->host_apps, (gpointer)
+                obj->obj_path, obj);
+            obj->plugin = self;
+            return obj;
+        }
+        nfc_host_app_unref(app);
+    }
+    return NULL;
+}
+
+static
+guint
+dbus_service_plugin_next_request_id(
+    DBusServicePlugin* self,
+    const char* sender)
+{
+    DBusServiceClient* client = dbus_service_plugin_client_get(self, sender);
+    gconstpointer key;
+
+    self->last_request_id++;
+    key = GUINT_TO_POINTER(self->last_request_id);
+
+    while ((client->mode_requests &&
+            g_hash_table_contains(client->mode_requests, key)) ||
+           (client->tech_requests &&
+            g_hash_table_contains(client->tech_requests, key)) ||
+           !self->last_request_id) {
+        self->last_request_id++;
+        key = GUINT_TO_POINTER(self->last_request_id);
+    }
+
+    return self->last_request_id;
 }
 
 /*==========================================================================*
@@ -333,6 +491,18 @@ dbus_service_plugin_event_mode_changed(
 
     org_sailfishos_nfc_daemon_emit_mode_changed(self->iface,
         self->manager->mode);
+}
+
+static
+void
+dbus_service_plugin_event_techs_changed(
+    NfcManager* manager,
+    void* plugin)
+{
+    DBusServicePlugin* self = THIS(plugin);
+
+    org_sailfishos_nfc_daemon_emit_techs_changed(self->iface,
+        self->manager->techs);
 }
 
 /*==========================================================================*
@@ -416,8 +586,7 @@ dbus_service_plugin_handle_get_all3(
     org_sailfishos_nfc_daemon_complete_get_all3(iface, call,
         NFC_DBUS_PLUGIN_INTERFACE_VERSION,
         dbus_service_plugin_get_adapter_paths(self),
-        nfc_core_version(),
-        self->manager->mode);
+        nfc_core_version(), self->manager->mode);
     return TRUE;
 }
 
@@ -446,24 +615,18 @@ dbus_service_plugin_handle_request_mode(
     DBusServiceClient* client = dbus_service_plugin_client_get(self, sender);
     NfcModeRequest* req = nfc_manager_mode_request_new(self->manager,
         enable, disable);
+    guint id = dbus_service_plugin_next_request_id(self, sender);
 
     if (!client->mode_requests) {
         client->mode_requests = g_hash_table_new_full(g_direct_hash,
             g_direct_equal, NULL, (GDestroyNotify)
             nfc_manager_mode_request_free);
     }
-    self->last_mode_request_id++;
-    while (g_hash_table_contains(client->mode_requests, GUINT_TO_POINTER
-        (self->last_mode_request_id)) || !self->last_mode_request_id) {
-        self->last_mode_request_id++;
-    }
-    g_hash_table_insert(client->mode_requests,
-        GUINT_TO_POINTER(self->last_mode_request_id), req);
+    g_hash_table_insert(client->mode_requests, GUINT_TO_POINTER(id), req);
     GDEBUG("Mode request 0x%02x/0x%02x => %s/%u", enable, disable,
-        sender, self->last_mode_request_id);
+        sender, id);
 
-    org_sailfishos_nfc_daemon_complete_request_mode(iface, call,
-        self->last_mode_request_id);
+    org_sailfishos_nfc_daemon_complete_request_mode(iface, call, id);
     return TRUE;
 }
 
@@ -521,7 +684,7 @@ dbus_service_plugin_handle_register_local_service(
             DBUS_SERVICE_ERROR, DBUS_SERVICE_ERROR_ALREADY_EXISTS,
             "Service '%s' already registered", obj_path);
     } else {
-        local = dbus_service_plugin_register_local_service(self, sn,
+        local = dbus_service_plugin_register_local_peer_service(self, sn,
             obj_path, sender);
         if (local) {
             GDEBUG("Registered service %s%s (SAP %u)", sender, obj_path,
@@ -563,6 +726,238 @@ dbus_service_plugin_handle_unregister_local_service(
         g_dbus_method_invocation_return_error(call,
             DBUS_SERVICE_ERROR, DBUS_SERVICE_ERROR_NOT_FOUND,
                 "Service %s%s is not registered", sender, obj_path);
+    }
+    return TRUE;
+}
+
+/* Interface version 4 */
+
+static
+gboolean
+dbus_service_plugin_handle_get_all4(
+    OrgSailfishosNfcDaemon* iface,
+    GDBusMethodInvocation* call,
+    DBusServicePlugin* self)
+{
+    NfcManager* manager = self->manager;
+
+    org_sailfishos_nfc_daemon_complete_get_all4(iface, call,
+        NFC_DBUS_PLUGIN_INTERFACE_VERSION,
+        dbus_service_plugin_get_adapter_paths(self),
+        nfc_core_version(), manager->mode, manager->techs);
+    return TRUE;
+}
+
+static
+gboolean
+dbus_service_plugin_handle_get_techs(
+    OrgSailfishosNfcDaemon* iface,
+    GDBusMethodInvocation* call,
+    DBusServicePlugin* self)
+{
+    org_sailfishos_nfc_daemon_complete_get_techs(iface, call,
+        self->manager->techs);
+    return TRUE;
+}
+
+static
+gboolean
+dbus_service_plugin_handle_request_techs(
+    OrgSailfishosNfcDaemon* iface,
+    GDBusMethodInvocation* call,
+    guint enable,
+    guint disable,
+    DBusServicePlugin* self)
+{
+    const char* sender = g_dbus_method_invocation_get_sender(call);
+    DBusServiceClient* client = dbus_service_plugin_client_get(self, sender);
+    NfcTechRequest* req = nfc_manager_tech_request_new(self->manager,
+        enable, disable);
+    guint id = dbus_service_plugin_next_request_id(self, sender);
+
+    if (!client->tech_requests) {
+        client->tech_requests = g_hash_table_new_full(g_direct_hash,
+            g_direct_equal, NULL, (GDestroyNotify)
+            nfc_manager_tech_request_free);
+    }
+    g_hash_table_insert(client->tech_requests, GUINT_TO_POINTER(id), req);
+    GDEBUG("Tech request 0x%02x/0x%02x => %s/%u", enable, disable,
+        sender, id);
+
+    org_sailfishos_nfc_daemon_complete_request_techs(iface, call, id);
+    return TRUE;
+}
+
+static
+gboolean
+dbus_service_plugin_handle_release_techs(
+    OrgSailfishosNfcDaemon* iface,
+    GDBusMethodInvocation* call,
+    guint id,
+    DBusServicePlugin* self)
+{
+    const char* sender = g_dbus_method_invocation_get_sender(call);
+    gboolean released = FALSE;
+
+    if (self->clients) {
+        DBusServiceClient* client = g_hash_table_lookup(self->clients, sender);
+
+        released = (client && client->tech_requests &&
+            g_hash_table_remove(client->tech_requests, GUINT_TO_POINTER(id)));
+    }
+    if (released) {
+        GDEBUG("Tech request %s/%u released", sender, id);
+        org_sailfishos_nfc_daemon_complete_release_techs(iface, call);
+    } else {
+        GDEBUG("Tech request %s/%u not found", sender, id);
+        g_dbus_method_invocation_return_error(call,
+            DBUS_SERVICE_ERROR, DBUS_SERVICE_ERROR_NOT_FOUND,
+                "Invalid tech request %s/%u", sender, id);
+    }
+    return TRUE;
+}
+
+static
+gboolean
+dbus_service_plugin_handle_register_local_host_service(
+    OrgSailfishosNfcDaemon* iface,
+    GDBusMethodInvocation* call,
+    const char* obj_path,
+    const char* name,
+    DBusServicePlugin* self)
+{
+    DBusServiceLocalHost* obj = NULL;
+    const char* sender = g_dbus_method_invocation_get_sender(call);
+
+    if (self->clients) {
+        DBusServiceClient* client = g_hash_table_lookup(self->clients, sender);
+
+        if (client && client->host_services) {
+            obj = g_hash_table_lookup(client->host_services, obj_path);
+        }
+    }
+    if (obj) {
+        GWARN("Duplicate host service %s%s", sender, obj_path);
+        g_dbus_method_invocation_return_error(call,
+            DBUS_SERVICE_ERROR, DBUS_SERVICE_ERROR_ALREADY_EXISTS,
+            "Host service '%s' is already registered", obj_path);
+    } else {
+        obj = dbus_service_plugin_register_local_host_service(self, name,
+            obj_path, sender);
+        if (obj) {
+            GDEBUG("Host service '%s' %s%s", name, sender, obj_path);
+            org_sailfishos_nfc_daemon_complete_register_local_host_service
+                (iface, call);
+        } else {
+            g_dbus_method_invocation_return_error(call,
+                DBUS_SERVICE_ERROR, DBUS_SERVICE_ERROR_FAILED,
+                "Failed to register host service %s%s", sender, obj_path);
+        }
+    }
+    return TRUE;
+}
+
+static
+gboolean
+dbus_service_plugin_handle_unregister_local_host_service(
+    OrgSailfishosNfcDaemon* iface,
+    GDBusMethodInvocation* call,
+    const char* obj_path,
+    DBusServicePlugin* self)
+{
+    const char* sender = g_dbus_method_invocation_get_sender(call);
+    gboolean removed = FALSE;
+
+    if (self->clients) {
+        DBusServiceClient* client = g_hash_table_lookup(self->clients, sender);
+
+        removed = (client && client->host_services &&
+            g_hash_table_remove(client->host_services, obj_path));
+    }
+    if (removed) {
+        GDEBUG("Unregistered host service %s%s", sender, obj_path);
+        org_sailfishos_nfc_daemon_complete_unregister_local_host_service
+            (iface, call);
+    } else {
+        GDEBUG("Host service %s%s is not registered", sender, obj_path);
+        g_dbus_method_invocation_return_error(call,
+            DBUS_SERVICE_ERROR, DBUS_SERVICE_ERROR_NOT_FOUND,
+                "Host service %s%s is not registered", sender, obj_path);
+    }
+    return TRUE;
+}
+
+static
+gboolean
+dbus_service_plugin_handle_register_local_host_app(
+    OrgSailfishosNfcDaemon* iface,
+    GDBusMethodInvocation* call,
+    const char* obj_path,
+    const char* name,
+    GVariant* aid_var,
+    guint flags,
+    DBusServicePlugin* self)
+{
+    DBusServiceLocalApp* obj = NULL;
+    const char* sender = g_dbus_method_invocation_get_sender(call);
+    GUtilData aid;
+
+    aid.size = g_variant_get_size(aid_var);
+    aid.bytes = g_variant_get_data(aid_var);
+    if (self->clients) {
+        DBusServiceClient* client = g_hash_table_lookup(self->clients, sender);
+
+        if (client && client->host_apps) {
+            obj = g_hash_table_lookup(client->host_apps, obj_path);
+        }
+    }
+    if (obj) {
+        GWARN("Duplicate app %s%s", sender, obj_path);
+        g_dbus_method_invocation_return_error(call,
+            DBUS_SERVICE_ERROR, DBUS_SERVICE_ERROR_ALREADY_EXISTS,
+            "App '%s' is already registered", obj_path);
+    } else {
+        obj = dbus_service_plugin_register_local_host_app(self,
+            self->connection, name, &aid, flags, obj_path, sender);
+        if (obj) {
+            GDEBUG("App '%s' %s%s", name, sender, obj_path);
+            org_sailfishos_nfc_daemon_complete_register_local_host_app
+                (iface, call);
+        } else {
+            g_dbus_method_invocation_return_error(call,
+                DBUS_SERVICE_ERROR, DBUS_SERVICE_ERROR_FAILED,
+                "Failed to register app %s%s", sender, obj_path);
+        }
+    }
+    return TRUE;
+}
+
+static
+gboolean
+dbus_service_plugin_handle_unregister_local_host_app(
+    OrgSailfishosNfcDaemon* iface,
+    GDBusMethodInvocation* call,
+    const char* obj_path,
+    DBusServicePlugin* self)
+{
+    const char* sender = g_dbus_method_invocation_get_sender(call);
+    gboolean removed = FALSE;
+
+    if (self->clients) {
+        DBusServiceClient* client = g_hash_table_lookup(self->clients, sender);
+
+        removed = (client && client->host_apps &&
+            g_hash_table_remove(client->host_apps, obj_path));
+    }
+    if (removed) {
+        GDEBUG("App %s%s is unregistered", sender, obj_path);
+        org_sailfishos_nfc_daemon_complete_unregister_local_host_app
+            (iface, call);
+    } else {
+        GDEBUG("App %s%s is not registered", sender, obj_path);
+        g_dbus_method_invocation_return_error(call,
+            DBUS_SERVICE_ERROR, DBUS_SERVICE_ERROR_NOT_FOUND,
+                "App %s%s is not registered", sender, obj_path);
     }
     return TRUE;
 }
@@ -652,41 +1047,16 @@ dbus_service_plugin_start(
     self->event_id[EVENT_MODE_CHANGED] =
         nfc_manager_add_mode_changed_handler(manager,
             dbus_service_plugin_event_mode_changed, self);
+    self->event_id[EVENT_TECHS_CHANGED] =
+        nfc_manager_add_techs_changed_handler(manager,
+            dbus_service_plugin_event_techs_changed, self);
 
-    /* D-Bus calls */
-    self->call_id[CALL_GET_ALL] =
-        g_signal_connect(self->iface, "handle-get-all",
-        G_CALLBACK(dbus_service_plugin_handle_get_all), self);
-    self->call_id[CALL_GET_INTERFACE_VERSION] =
-        g_signal_connect(self->iface, "handle-get-interface-version",
-        G_CALLBACK(dbus_service_plugin_handle_get_interface_version), self);
-    self->call_id[CALL_GET_ADAPTERS] =
-        g_signal_connect(self->iface, "handle-get-adapters",
-        G_CALLBACK(dbus_service_plugin_handle_get_adapters), self);
-    self->call_id[CALL_GET_ALL2] =
-        g_signal_connect(self->iface, "handle-get-all2",
-        G_CALLBACK(dbus_service_plugin_handle_get_all2), self);
-    self->call_id[CALL_GET_DAEMON_VERSION] =
-        g_signal_connect(self->iface, "handle-get-daemon-version",
-        G_CALLBACK(dbus_service_plugin_handle_get_daemon_version), self);
-    self->call_id[CALL_GET_ALL3] =
-        g_signal_connect(self->iface, "handle-get-all3",
-        G_CALLBACK(dbus_service_plugin_handle_get_all3), self);
-    self->call_id[CALL_GET_MODE] =
-        g_signal_connect(self->iface, "handle-get-mode",
-        G_CALLBACK(dbus_service_plugin_handle_get_mode), self);
-    self->call_id[CALL_REQUEST_MODE] =
-        g_signal_connect(self->iface, "handle-request-mode",
-        G_CALLBACK(dbus_service_plugin_handle_request_mode), self);
-    self->call_id[CALL_RELEASE_MODE] =
-        g_signal_connect(self->iface, "handle-release-mode",
-        G_CALLBACK(dbus_service_plugin_handle_release_mode), self);
-    self->call_id[CALL_REGISTER_LOCAL_SERVICE] =
-        g_signal_connect(self->iface, "handle-register-local-service",
-        G_CALLBACK(dbus_service_plugin_handle_register_local_service), self);
-    self->call_id[CALL_UNREGISTER_LOCAL_SERVICE] =
-        g_signal_connect(self->iface, "handle-unregister-local-service",
-        G_CALLBACK(dbus_service_plugin_handle_unregister_local_service), self);
+    /* Hook up D-Bus calls */
+    #define CONNECT_HANDLER(CALL,call,name) self->call_id[CALL_##CALL] = \
+        g_signal_connect(self->iface, "handle-"#name, \
+        G_CALLBACK(dbus_service_plugin_handle_##call), self);
+    DBUS_CALLS(CONNECT_HANDLER)
+    #undef CONNECT_HANDLER
 
     return TRUE;
 }
@@ -728,6 +1098,26 @@ dbus_service_plugin_find_peer(
 
         if (dbus_peer) {
             return dbus_peer;
+        }
+    }
+    return NULL;
+}
+
+DBusServiceHost*
+dbus_service_plugin_find_host(
+    DBusServicePlugin* self,
+    NfcHost* host)
+{
+    GHashTableIter it;
+    gpointer value;
+
+    g_hash_table_iter_init(&it, self->adapters);
+    while (g_hash_table_iter_next(&it, NULL, &value)) {
+        DBusServiceHost* dbus_host = dbus_service_adapter_find_host
+            ((DBusServiceAdapter*)value, host);
+
+        if (dbus_host) {
+            return dbus_host;
         }
     }
     return NULL;

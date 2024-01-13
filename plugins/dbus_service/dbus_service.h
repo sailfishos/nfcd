@@ -46,6 +46,8 @@
 #include <gutil_log.h>
 
 #include <nfc_peer_service.h>
+#include <nfc_host_service.h>
+#include <nfc_host_app.h>
 
 #include <nfcdef.h>
 
@@ -58,6 +60,7 @@ typedef struct dbus_service_tag DBusServiceTag;
 typedef struct dbus_service_tag_t2 DBusServiceTagType2;
 typedef struct dbus_service_isodep DBusServiceIsoDep;
 typedef struct dbus_service_peer DBusServicePeer;
+typedef struct dbus_service_host DBusServiceHost;
 
 #define DBUS_SERVICE_ERROR (dbus_service_error_quark())
 GQuark dbus_service_error_quark(void);
@@ -85,6 +88,11 @@ dbus_service_plugin_find_peer(
     DBusServicePlugin* plugin,
     NfcPeer* peer);
 
+DBusServiceHost*
+dbus_service_plugin_find_host(
+    DBusServicePlugin* plugin,
+    NfcHost* host);
+
 /* org.sailfishos.nfc.LocalService */
 
 typedef struct dbus_service_local {
@@ -99,6 +107,40 @@ dbus_service_local_new(
     GDBusConnection* connection,
     const char* obj_path,
     const char* llc_name,
+    const char* dbus_name);
+
+/* org.sailfishos.nfc.LocalHostService */
+
+typedef struct dbus_service_local_host {
+    NfcHostService service;
+    DBusServicePlugin* plugin;
+    const char* dbus_name;
+    const char* obj_path;
+} DBusServiceLocalHost;
+
+DBusServiceLocalHost*
+dbus_service_local_host_new(
+    GDBusConnection* connection,
+    const char* obj_path,
+    const char* name,
+    const char* dbus_name);
+
+/* org.sailfishos.nfc.LocalHostApp */
+
+typedef struct dbus_service_local_app {
+    NfcHostApp app;
+    DBusServicePlugin* plugin;
+    const char* dbus_name;
+    const char* obj_path;
+} DBusServiceLocalApp;
+
+DBusServiceLocalApp*
+dbus_service_local_app_new(
+    GDBusConnection* connection,
+    const char* obj_path,
+    const char* name,
+    const GUtilData* aid,
+    NFC_HOST_APP_FLAGS flags,
     const char* dbus_name);
 
 /* org.sailfishos.nfc.Adapter */
@@ -116,6 +158,11 @@ DBusServicePeer*
 dbus_service_adapter_find_peer(
     DBusServiceAdapter* self,
     NfcPeer* peer);
+
+DBusServiceHost*
+dbus_service_adapter_find_host(
+    DBusServiceAdapter* self,
+    NfcHost* host);
 
 void
 dbus_service_adapter_free(
@@ -199,6 +246,24 @@ dbus_service_peer_new(
 void
 dbus_service_peer_free(
     DBusServicePeer* peer);
+
+/* org.sailfishos.nfc.Host */
+
+struct dbus_service_host {
+    GDBusConnection* connection;
+    const char* path;
+    NfcHost* host;
+};
+
+DBusServiceHost*
+dbus_service_host_new(
+    NfcHost* host,
+    const char* parent_path,
+    GDBusConnection* connection);
+
+void
+dbus_service_host_free(
+    DBusServiceHost* host);
 
 #endif /* DBUS_SERVICE_H */
 

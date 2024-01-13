@@ -3,5 +3,5 @@ NFC daemon
 Arbitrates access to NFC hardware and provides D-Bus interfaces
 to NFC-aware applications.
 
-Reader/writer (ISO-DEP and Type 2 tags) and Peer-to-Peer (NFC-DEP)
-modes are supported. No Card Emulation yet.
+Reader/writer (ISO-DEP and Type 2 tags), Peer-to-Peer (NFC-DEP)
+and Card Emulation modes are supported.

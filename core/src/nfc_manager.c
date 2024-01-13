@@ -2,37 +2,46 @@
  * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  *
- *   1. Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *   2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in the
- *      documentation and/or other materials provided with the distribution.
- *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived
- *      from this software without specific prior written permission.
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer
+ *     in the documentation and/or other materials provided with the
+ *     distribution.
+ *
+ *  3. Neither the names of the copyright holders nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation
+ * are those of the authors and should not be interpreted as representing
+ * any official policies, either expressed or implied.
  */
 
 #include "nfc_manager_p.h"
 #include "internal/nfc_manager_i.h"
 #include "nfc_adapter_p.h"
+#include "nfc_host_app.h"
+#include "nfc_host_service.h"
 #include "nfc_peer_service.h"
 #include "nfc_peer_services.h"
 #include "nfc_plugins.h"
@@ -40,6 +49,8 @@
 
 #include <gutil_misc.h>
 #include <gutil_macros.h>
+#include <gutil_objv.h>
+#include <gutil_weakref.h>
 
 #include <stdlib.h>
 
@@ -48,21 +59,31 @@ GLOG_MODULE_DEFINE("nfc-core");
 #define NFC_ADAPTER_NAME_FORMAT "nfc%u"
 
 struct nfc_mode_request {
-    NfcModeRequest* next;
     NfcManager* manager;
     NFC_MODE enable;
     NFC_MODE disable;
 };
 
+struct nfc_tech_request {
+    NfcManager* manager;
+    NFC_TECHNOLOGY enable;
+    NFC_TECHNOLOGY disable;
+};
+
 struct nfc_manager_priv {
+    GUtilWeakRef* ref;
     NfcPlugins* plugins;
-    NfcPeerServices* services;
+    NfcPeerServices* peer_services;
+    NfcHostService** host_services;
+    NfcHostApp** host_apps;
     NfcModeRequest* p2p_request;
+    NfcModeRequest* host_request;
     GHashTable* adapters;
     guint next_adapter_index;
     gboolean requested_power;
     NFC_MODE default_mode;
-    NfcModeRequest* mode_requests;
+    GQueue mode_requests;
+    GQueue tech_requests;
 };
 
 #define THIS(obj) NFC_MANAGER(obj)
@@ -80,6 +101,7 @@ enum nfc_manager_signal {
     SIGNAL_SERVICE_UNREGISTERED,
     SIGNAL_ENABLED_CHANGED,
     SIGNAL_MODE_CHANGED,
+    SIGNAL_TECHS_CHANGED,
     SIGNAL_STOPPED,
     SIGNAL_COUNT
 };
@@ -90,9 +112,17 @@ enum nfc_manager_signal {
 #define SIGNAL_SERVICE_UNREGISTERED_NAME  "nfc-manager-service-unregistered"
 #define SIGNAL_ENABLED_CHANGED_NAME       "nfc-manager-enabled-changed"
 #define SIGNAL_MODE_CHANGED_NAME          "nfc-manager-mode-changed"
+#define SIGNAL_TECHS_CHANGED_NAME         "nfc-manager-techs-changed"
 #define SIGNAL_STOPPED_NAME               "nfc-manager-stopped"
 
 static guint nfc_manager_signals[SIGNAL_COUNT] = { 0 };
+
+#define NEW_SIGNAL(name,type) nfc_manager_signals[SIGNAL_##name] = \
+    g_signal_new(SIGNAL_##name##_NAME, type, G_SIGNAL_RUN_FIRST, \
+    0, NULL, NULL, NULL, G_TYPE_NONE, 0)
+#define NEW_OBJECT_SIGNAL(name,type) nfc_manager_signals[SIGNAL_##name] = \
+    g_signal_new(SIGNAL_##name##_NAME, type, G_SIGNAL_RUN_FIRST, \
+    0, NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_OBJECT)
 
 /*==========================================================================*
  * Implementation
@@ -167,20 +197,41 @@ nfc_manager_unref_adapters(
 
 static
 void
-nfc_manager_update_adapter_modes(
-    NfcManager* self)
+nfc_manager_foreach_adapter(
+    NfcManager* self,
+    void (*fn)(NfcManager*, NfcAdapter*))
 {
     NfcAdapter** adapters = nfc_manager_ref_adapters(self->priv);
 
     if (adapters) {
-        const NFC_MODE mode = self->mode;
         NfcAdapter** ptr = adapters;
 
         while (*ptr) {
-            nfc_adapter_request_mode(*ptr++, mode);
+            fn(self, *ptr++);
         }
         nfc_manager_unref_adapters(adapters);
     }
+}
+
+static
+void
+nfc_manager_update_adapter_mode(
+    NfcManager* manager,
+    NfcAdapter* adapter)
+{
+    nfc_adapter_request_mode(adapter, manager->mode);
+}
+
+static
+void
+nfc_manager_update_mode_cb(
+    gpointer list_data,
+    gpointer user_data)
+{
+    const NfcModeRequest* req = list_data;
+    NfcManager* self = THIS(user_data);
+
+    self->mode = (self->mode & ~req->disable) | req->enable;
 }
 
 static
@@ -190,15 +241,70 @@ nfc_manager_update_mode(
 {
     NfcManagerPriv* priv = self->priv;
     const NFC_MODE prev_mode = self->mode;
-    const NfcModeRequest* req = priv->mode_requests;
 
     self->mode = priv->default_mode;
-    for (req = priv->mode_requests; req; req = req->next) {
-        self->mode = (self->mode & ~req->disable) | req->enable;
-    }
+    g_queue_foreach(&priv->mode_requests, nfc_manager_update_mode_cb, self);
     if (self->mode != prev_mode) {
         GDEBUG("NFC mode 0x%02x", self->mode);
         g_signal_emit(self, nfc_manager_signals[SIGNAL_MODE_CHANGED], 0);
+        return TRUE;
+    } else {
+        return FALSE;
+    }
+}
+
+static
+NFC_TECHNOLOGY
+nfc_manager_get_supported_techs(
+    NfcManagerPriv* priv)
+{
+    NFC_TECHNOLOGY techs = NFC_TECHNOLOGY_UNKNOWN;
+    GHashTableIter it;
+    gpointer adapter;
+
+    g_hash_table_iter_init(&it, priv->adapters);
+    while (g_hash_table_iter_next(&it, NULL, &adapter)) {
+        techs |= nfc_adapter_get_supported_techs(NFC_ADAPTER(adapter));
+    }
+
+    return techs;
+}
+
+static
+void
+nfc_manager_update_adapter_techs(
+    NfcManager* manager,
+    NfcAdapter* adapter)
+{
+    nfc_adapter_set_allowed_techs(adapter, manager->techs);
+}
+
+static
+void
+nfc_manager_update_techs_cb(
+    gpointer list_data,
+    gpointer user_data)
+{
+    const NfcTechRequest* req = list_data;
+    NfcManager* self = THIS(user_data);
+
+    self->techs = (self->techs & ~req->disable) | req->enable;
+}
+
+static
+gboolean
+nfc_manager_update_techs(
+    NfcManager* self)
+{
+    NfcManagerPriv* priv = self->priv;
+    const NFC_TECHNOLOGY prev = self->techs;
+    const NFC_TECHNOLOGY supported = nfc_manager_get_supported_techs(priv);
+
+    self->techs = supported;
+    g_queue_foreach(&priv->tech_requests, nfc_manager_update_techs_cb, self);
+    self->techs &= supported;
+    if (self->techs != prev) {
+        GDEBUG("NFC techs 0x%02x", self->techs);
         return TRUE;
     } else {
         return FALSE;
@@ -214,17 +320,14 @@ nfc_manager_mode_request_new_internal(
     NFC_MODE disable)
 {
     NfcManagerPriv* priv = self->priv;
-    NfcModeRequest* req = g_slice_new0(NfcModeRequest);
+    NfcModeRequest* req = g_slice_new(NfcModeRequest);
 
-    if (!internal) {
-        req->manager = nfc_manager_ref(self);
-    }
+    req->manager = internal ? NULL : nfc_manager_ref(self);
     req->enable = enable;
     req->disable = disable;
-    req->next = priv->mode_requests;
-    priv->mode_requests = req;
+    g_queue_push_tail(&priv->mode_requests, req);
     if (nfc_manager_update_mode(self)) {
-        nfc_manager_update_adapter_modes(self);
+        nfc_manager_foreach_adapter(self, nfc_manager_update_adapter_mode);
     }
     return req;
 }
@@ -237,34 +340,20 @@ nfc_manager_mode_request_free_internal(
 {
     NfcManagerPriv* priv = self->priv;
 
-    /* Remove it from the list */
-    if (priv->mode_requests == req) {
-        priv->mode_requests = req->next;
-    } else {
-        NfcModeRequest* prev = priv->mode_requests;
-
-        while (prev) {
-            if (prev->next == req) {
-                prev->next = req->next;
-                break;
-            }
-            prev = prev->next;
-        }
-    }
+    g_queue_remove(&priv->mode_requests, req);
 
     /* Update the effective mode */
     if (nfc_manager_update_mode(self)) {
-        nfc_manager_update_adapter_modes(self);
+        nfc_manager_foreach_adapter(self, nfc_manager_update_adapter_mode);
     }
 
     nfc_manager_unref(req->manager); /* Can be NULL */
-    req->next = NULL;
     gutil_slice_free(req);
 }
 
 static
 void
-nfc_manager_release_p2p_mode_request(
+nfc_manager_release_internal_p2p_mode_request(
     NfcManager* self)
 {
     NfcManagerPriv* priv = self->priv;
@@ -276,6 +365,24 @@ nfc_manager_release_p2p_mode_request(
          * we need to NULLify the pointer beforehand.
          */
         priv->p2p_request = NULL;
+        nfc_manager_mode_request_free_internal(self, req);
+    }
+}
+
+static
+void
+nfc_manager_release_internal_host_mode_request(
+    NfcManager* self)
+{
+    NfcManagerPriv* priv = self->priv;
+    NfcModeRequest* req = priv->host_request;
+
+    if (req) {
+        /*
+         * Since nfc_manager_mode_request_free_internal() may emit signals,
+         * we need to NULLify the pointer beforehand.
+         */
+        priv->host_request = NULL;
         nfc_manager_mode_request_free_internal(self, req);
     }
 }
@@ -337,6 +444,7 @@ nfc_manager_add_adapter(
         /* Name is assigned to adapter only once in its lifetime */
         if (!adapter->name) {
             NfcManagerPriv* priv = self->priv;
+            gboolean techs_changed;
             char* name = g_strdup_printf(NFC_ADAPTER_NAME_FORMAT,
                 priv->next_adapter_index);
 
@@ -349,16 +457,22 @@ nfc_manager_add_adapter(
                 priv->next_adapter_index++;
             }
 
+            nfc_adapter_set_manager_ref(adapter, priv->ref);
             nfc_adapter_set_name(adapter, name);
-            nfc_adapter_set_services(adapter, priv->services);
             nfc_adapter_set_enabled(adapter, self->enabled);
             nfc_adapter_request_mode(adapter, self->mode);
             nfc_adapter_request_power(adapter, priv->requested_power);
             g_hash_table_insert(priv->adapters, name, nfc_adapter_ref(adapter));
             g_free(self->adapters);
             self->adapters = nfc_manager_adapters(priv);
+            techs_changed = nfc_manager_update_techs(self);
+            nfc_adapter_set_allowed_techs(adapter, self->techs);
             g_signal_emit(self, nfc_manager_signals
                 [SIGNAL_ADAPTER_ADDED], 0, adapter);
+            if (techs_changed) {
+                g_signal_emit(self, nfc_manager_signals
+                    [SIGNAL_TECHS_CHANGED], 0);
+            }
         }
         return adapter->name;
     }
@@ -375,12 +489,19 @@ nfc_manager_remove_adapter(
         NfcAdapter* adapter = g_hash_table_lookup(priv->adapters, name);
 
         if (adapter) {
+            gboolean techs_changed;
+
             nfc_adapter_ref(adapter);
             g_hash_table_remove(priv->adapters, name);
             g_free(self->adapters);
             self->adapters = nfc_manager_adapters(priv);
+            techs_changed = nfc_manager_update_techs(self);
             g_signal_emit(self, nfc_manager_signals
                 [SIGNAL_ADAPTER_REMOVED], 0, adapter);
+            if (techs_changed) {
+                g_signal_emit(self, nfc_manager_signals
+                    [SIGNAL_TECHS_CHANGED], 0);
+            }
             nfc_adapter_unref(adapter);
         }
     }
@@ -440,8 +561,10 @@ nfc_manager_request_mode(
         if (priv->default_mode != mode) {
             GDEBUG("Default mode 0x%02x", mode);
             priv->default_mode = mode;
-            nfc_manager_update_mode(self);
-            nfc_manager_update_adapter_modes(self);
+            if (nfc_manager_update_mode(self)) {
+                nfc_manager_foreach_adapter(self,
+                    nfc_manager_update_adapter_mode);
+            }
         }
     }
 }
@@ -475,9 +598,9 @@ nfc_manager_register_service(
     if (G_LIKELY(self)) {
         NfcManagerPriv* priv = self->priv;
 
-        if (nfc_peer_services_add(priv->services, service)) {
+        if (nfc_peer_services_add(priv->peer_services, service)) {
             nfc_peer_service_ref(service);
-            self->services = priv->services->list;
+            self->services = priv->peer_services->list;
             if (!priv->p2p_request) {
                 priv->p2p_request = nfc_manager_mode_request_new_internal(self,
                     TRUE, NFC_MODES_P2P, NFC_MODE_NONE);
@@ -500,15 +623,115 @@ nfc_manager_unregister_service(
         NfcManagerPriv* priv = self->priv;
 
         nfc_peer_service_ref(service);
-        if (nfc_peer_services_remove(priv->services, service)) {
-            self->services = priv->services->list;
-            if (!priv->services->list[0]) {
-                nfc_manager_release_p2p_mode_request(self);
+        if (nfc_peer_services_remove(priv->peer_services, service)) {
+            self->services = priv->peer_services->list;
+            if (!priv->peer_services->list[0]) {
+                nfc_manager_release_internal_p2p_mode_request(self);
             }
             g_signal_emit(self, nfc_manager_signals
                 [SIGNAL_SERVICE_UNREGISTERED], 0, service);
         }
         nfc_peer_service_unref(service);
+    }
+}
+
+gboolean
+nfc_manager_register_host_service(
+    NfcManager* self,
+    NfcHostService* service) /* Since 1.2.0 */
+{
+    if (G_LIKELY(self) && G_LIKELY(service)) {
+        NfcManagerPriv* priv = self->priv;
+        GObject** objv = (GObject**) priv->host_services;
+        GObject* obj = G_OBJECT(service);
+
+        if (!gutil_objv_contains(objv, obj)) {
+            GDEBUG("Registered service '%s'", service->name);
+            priv->host_services = (NfcHostService**)
+                gutil_objv_add(objv, obj);
+            if (!priv->host_request) {
+                priv->host_request =
+                    nfc_manager_mode_request_new_internal(self, TRUE,
+                        NFC_MODE_CARD_EMULATION, NFC_MODE_NONE);
+            }
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+void
+nfc_manager_unregister_host_service(
+    NfcManager* self,
+    NfcHostService* service) /* Since 1.2.0 */
+{
+    if (G_LIKELY(self) && G_LIKELY(service)) {
+        NfcManagerPriv* priv = self->priv;
+        GObject** objv = (GObject**) priv->host_services;
+        GObject* obj = G_OBJECT(service);
+
+        if (gutil_objv_contains(objv, obj)) {
+            GDEBUG("Unregistered service '%s'", service->name);
+            priv->host_services = (NfcHostService**)
+                gutil_objv_remove(objv, obj, FALSE);
+            if (gutil_ptrv_is_empty(priv->host_apps) &&
+                gutil_ptrv_is_empty(priv->host_services)) {
+                nfc_manager_release_internal_host_mode_request(self);
+            }
+        }
+    }
+}
+
+gboolean
+nfc_manager_register_host_app(
+    NfcManager* self,
+    NfcHostApp* app) /* Since 1.2.0 */
+{
+    if (G_LIKELY(self) && G_LIKELY(app)) {
+        NfcManagerPriv* priv = self->priv;
+        GObject** objv = (GObject**) priv->host_apps;
+        GObject* obj = G_OBJECT(app);
+
+        if (!gutil_objv_contains(objv, obj)) {
+            priv->host_apps = (NfcHostApp**) gutil_objv_add(objv, obj);
+ #if GUTIL_LOG_DEBUG
+            if (GLOG_ENABLED(GLOG_LEVEL_DEBUG)) {
+                char* aid = gutil_data2hex(&app->aid, FALSE);
+
+                GDEBUG("Registered app '%s' %s", app->name, aid);
+                g_free(aid);
+            }
+#endif
+            if (!priv->host_request) {
+                priv->host_request =
+                    nfc_manager_mode_request_new_internal(self, TRUE,
+                        NFC_MODE_CARD_EMULATION, NFC_MODE_NONE);
+            }
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+void
+nfc_manager_unregister_host_app(
+    NfcManager* self,
+    NfcHostApp* app) /* Since 1.2.0 */
+{
+    if (G_LIKELY(self)) {
+        NfcManagerPriv* priv = self->priv;
+        GObject** objv = (GObject**) priv->host_apps;
+        GObject* obj = G_OBJECT(app);
+
+        if (gutil_objv_contains(objv, obj)) {
+            GDEBUG("Unregistered app '%s'", app->name);
+            priv->host_apps = (NfcHostApp**)
+                gutil_objv_remove(objv, obj, FALSE);
+            if (gutil_ptrv_is_empty(priv->host_apps) &&
+                gutil_ptrv_is_empty(priv->host_services)) {
+                nfc_manager_release_internal_host_mode_request(self);
+            }
+        }
     }
 }
 
@@ -573,6 +796,16 @@ nfc_manager_add_service_unregistered_handler(
 }
 
 gulong
+nfc_manager_add_techs_changed_handler(
+    NfcManager* self,
+    NfcManagerFunc func,
+    void* user_data) /* Since 1.2.0 */
+{
+    return (G_LIKELY(self) && G_LIKELY(func)) ? g_signal_connect(self,
+        SIGNAL_TECHS_CHANGED_NAME, G_CALLBACK(func), user_data) : 0;
+}
+
+gulong
 nfc_manager_add_stopped_handler(
     NfcManager* self,
     NfcManagerFunc func,
@@ -621,6 +854,51 @@ nfc_manager_mode_request_free(
     }
 }
 
+NfcTechRequest*
+nfc_manager_tech_request_new(
+    NfcManager* self,
+    NFC_TECHNOLOGY enable,
+    NFC_TECHNOLOGY disable) /* Since 1.2.0 */
+{
+    if (G_LIKELY(self) && G_LIKELY(enable || disable)) {
+        NfcManagerPriv* priv = self->priv;
+        NfcTechRequest* req = g_slice_new0(NfcTechRequest);
+
+        req->manager = nfc_manager_ref(self);
+        req->enable = enable;
+        req->disable = disable;
+        g_queue_push_tail(&priv->tech_requests, req);
+
+        if (nfc_manager_update_techs(self)) {
+            g_signal_emit(self, nfc_manager_signals[SIGNAL_TECHS_CHANGED], 0);
+            nfc_manager_foreach_adapter(self,
+                nfc_manager_update_adapter_techs);
+        }
+        return req;
+    }
+    return NULL;
+}
+
+void
+nfc_manager_tech_request_free(
+    NfcTechRequest* req) /* Since 1.2.0 */
+{
+    if (G_LIKELY(req)) {
+        NfcManager* self = req->manager;
+        NfcManagerPriv* priv = self->priv;
+
+        g_queue_remove(&priv->tech_requests, req);
+
+        if (nfc_manager_update_techs(self)) {
+            g_signal_emit(self, nfc_manager_signals[SIGNAL_TECHS_CHANGED], 0);
+            nfc_manager_foreach_adapter(self,
+                nfc_manager_update_adapter_techs);
+        }
+        nfc_manager_unref(req->manager);
+        gutil_slice_free(req);
+    }
+}
+
 /*==========================================================================*
  * Internal interface
  *==========================================================================*/
@@ -648,6 +926,27 @@ nfc_manager_start(
     return FALSE;
 }
 
+NfcPeerServices*
+nfc_manager_peer_services(
+    NfcManager* self)
+{
+    return G_LIKELY(self) ? self->priv->peer_services : NULL;
+}
+
+NfcHostService* const*
+nfc_manager_host_services(
+    NfcManager* self)
+{
+    return G_LIKELY(self) ? self->priv->host_services : NULL;
+}
+
+NfcHostApp* const*
+nfc_manager_host_apps(
+    NfcManager* self)
+{
+    return G_LIKELY(self) ? self->priv->host_apps : NULL;
+}
+
 /*==========================================================================*
  * Internals
  *==========================================================================*/
@@ -660,7 +959,8 @@ nfc_manager_init(
     NfcManagerPriv* priv = G_TYPE_INSTANCE_GET_PRIVATE(self, THIS_TYPE,
         NfcManagerPriv);
 
-    priv->services = nfc_peer_services_new();
+    priv->ref = gutil_weakref_new(self);
+    priv->peer_services = nfc_peer_services_new();
     priv->adapters = g_hash_table_new_full(g_str_hash, g_str_equal,
         g_free, g_object_unref);
     self->priv = priv;
@@ -668,7 +968,9 @@ nfc_manager_init(
     self->enabled = TRUE;
     self->mode = priv->default_mode = NFC_MODE_READER_WRITER;
     self->llcp_version = NFC_LLCP_VERSION_1_1;
-    self->services = priv->services->list;
+    self->services = priv->peer_services->list;
+    g_queue_init(&priv->mode_requests);
+    g_queue_init(&priv->tech_requests);
 }
 
 static
@@ -679,9 +981,13 @@ nfc_manager_finalize(
     NfcManager* self = THIS(object);
     NfcManagerPriv* priv = self->priv;
 
-    nfc_manager_release_p2p_mode_request(self);
+    gutil_weakref_unref(priv->ref);
     nfc_plugins_free(priv->plugins);
-    nfc_peer_services_unref(priv->services);
+    gutil_objv_free((GObject**) priv->host_services);
+    gutil_objv_free((GObject**) priv->host_apps);
+    nfc_manager_release_internal_p2p_mode_request(self);
+    nfc_manager_release_internal_host_mode_request(self);
+    nfc_peer_services_unref(priv->peer_services);
     g_hash_table_destroy(priv->adapters);
     g_free(self->adapters);
     G_OBJECT_CLASS(nfc_manager_parent_class)->finalize(object);
@@ -698,27 +1004,14 @@ nfc_manager_class_init(
     g_type_class_add_private(klass, sizeof(NfcManagerPriv));
     object_class->finalize = nfc_manager_finalize;
 
-    nfc_manager_signals[SIGNAL_ADAPTER_ADDED] =
-        g_signal_new(SIGNAL_ADAPTER_ADDED_NAME, type, G_SIGNAL_RUN_FIRST,
-            0, NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_OBJECT);
-    nfc_manager_signals[SIGNAL_ADAPTER_REMOVED] =
-        g_signal_new(SIGNAL_ADAPTER_REMOVED_NAME, type, G_SIGNAL_RUN_FIRST,
-            0, NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_OBJECT);
-    nfc_manager_signals[SIGNAL_SERVICE_REGISTERED] =
-        g_signal_new(SIGNAL_SERVICE_REGISTERED_NAME, type, G_SIGNAL_RUN_FIRST,
-            0, NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_OBJECT);
-    nfc_manager_signals[SIGNAL_SERVICE_UNREGISTERED] =
-        g_signal_new(SIGNAL_SERVICE_UNREGISTERED_NAME, type, G_SIGNAL_RUN_FIRST,
-            0, NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_OBJECT);
-    nfc_manager_signals[SIGNAL_ENABLED_CHANGED] =
-        g_signal_new(SIGNAL_ENABLED_CHANGED_NAME, type, G_SIGNAL_RUN_FIRST,
-            0, NULL, NULL, NULL, G_TYPE_NONE, 0);
-    nfc_manager_signals[SIGNAL_MODE_CHANGED] =
-        g_signal_new(SIGNAL_MODE_CHANGED_NAME, type, G_SIGNAL_RUN_FIRST,
-            0, NULL, NULL, NULL, G_TYPE_NONE, 0);
-    nfc_manager_signals[SIGNAL_STOPPED] =
-        g_signal_new(SIGNAL_STOPPED_NAME, type, G_SIGNAL_RUN_FIRST,
-            0, NULL, NULL, NULL, G_TYPE_NONE, 0);
+    NEW_SIGNAL(ENABLED_CHANGED, type);
+    NEW_SIGNAL(MODE_CHANGED, type);
+    NEW_SIGNAL(TECHS_CHANGED, type);
+    NEW_SIGNAL(STOPPED, type);
+    NEW_OBJECT_SIGNAL(ADAPTER_ADDED, type);
+    NEW_OBJECT_SIGNAL(ADAPTER_REMOVED, type);
+    NEW_OBJECT_SIGNAL(SERVICE_REGISTERED, type);
+    NEW_OBJECT_SIGNAL(SERVICE_UNREGISTERED, type);
 }
 
 /*
