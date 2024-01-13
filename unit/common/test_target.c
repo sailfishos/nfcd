@@ -1,39 +1,46 @@
 /*
+ * Copyright (C) 2019-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2019-2020 Jolla Ltd.
- * Copyright (C) 2019-2020 Slava Monich <slava.monich@jolla.com>
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  *
- *   1. Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *   2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in the
- *      documentation and/or other materials provided with the distribution.
- *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived
- *      from this software without specific prior written permission.
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer
+ *     in the documentation and/or other materials provided with the
+ *     distribution.
+ *
+ *  3. Neither the names of the copyright holders nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation
+ * are those of the authors and should not be interpreted as representing
+ * any official policies, either expressed or implied.
  */
 
-#include "test_common.h"
 #include "test_target.h"
 
 #include <gutil_log.h>
+#include <gutil_misc.h>
 
 #define THIS_TYPE TEST_TYPE_TARGET
 #define THIS(obj) TEST_TARGET(obj)
@@ -127,7 +134,7 @@ test_target_deactivate(
 {
     nfc_target_gone(target);
 }
- 
+
 static
 void
 test_target_init(
@@ -197,8 +204,8 @@ test_target_new_tech_with_data(
 
     self->target.technology = tech;
     self->fail_transmit = TEST_TARGET_FAIL_NONE;
-    g_ptr_array_add(self->cmd_resp, test_alloc_data(cmd_bytes, cmd_len));
-    g_ptr_array_add(self->cmd_resp, test_alloc_data(resp_bytes, resp_len));
+    g_ptr_array_add(self->cmd_resp, gutil_data_new(cmd_bytes, cmd_len));
+    g_ptr_array_add(self->cmd_resp, gutil_data_new(resp_bytes, resp_len));
     return &self->target;
 }
 
@@ -213,8 +220,10 @@ test_target_add_data(
     TestTarget* self = TEST_TARGET(target);
 
     self->fail_transmit = TEST_TARGET_FAIL_NONE;
-    g_ptr_array_add(self->cmd_resp, test_alloc_data(cmd_bytes, cmd_len));
-    g_ptr_array_add(self->cmd_resp, test_alloc_data(resp_bytes, resp_len));
+    g_ptr_array_add(self->cmd_resp, gutil_data_new(cmd_bytes, cmd_len));
+    if (resp_bytes) {
+        g_ptr_array_add(self->cmd_resp, gutil_data_new(resp_bytes, resp_len));
+    }
 }
 
 NfcTarget*
@@ -232,9 +241,9 @@ test_target_new_with_tx(
         const GUtilData* out = &tx->out;
 
         if (in->bytes) {
-            g_ptr_array_add(self->cmd_resp, test_clone_data(in));
+            g_ptr_array_add(self->cmd_resp, gutil_data_copy(in));
             if (out->bytes) {
-                g_ptr_array_add(self->cmd_resp, test_clone_data(out));
+                g_ptr_array_add(self->cmd_resp, gutil_data_copy(out));
             }
         }
     }

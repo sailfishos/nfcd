@@ -65,5 +65,59 @@
     <method name="UnregisterLocalService">
       <arg name="path" type="o" direction="in"/>
     </method>
+    <!-- Interface version 4 (since 1.2.0) -->
+    <method name="GetAll4">
+      <arg name="version" type="i" direction="out"/>
+      <arg name="adapters" type="ao" direction="out"/>
+      <arg name="daemon_version" type="i" direction="out"/>
+      <arg name="mode" type="u" direction="out"/>
+      <arg name="techs" type="u" direction="out"/>
+    </method>
+    <!--
+      Techs is a bitmask:
+
+        0x01 - NFC-A
+        0x02 - NFC-B
+        0x04 - NFC-F
+    -->
+    <method name="GetTechs">
+      <arg name="techs" type="u" direction="out"/>
+    </method>
+    <signal name="TechsChanged">
+      <arg name="techs" type="u"/>
+    </signal>
+    <method name="RequestTechs">
+      <arg name="allow" type="u" direction="in"/>
+      <arg name="disallow" type="u" direction="in"/>
+      <arg name="id" type="u" direction="out"/>
+    </method>
+    <method name="ReleaseTechs">
+      <arg name="id" type="u" direction="in"/>
+    </method>
+    <method name="RegisterLocalHostService">
+      <!-- Registers instance of org.sailfishos.nfc.LocalHostService -->
+      <arg name="path" type="o" direction="in"/>
+      <arg name="name" type="s" direction="in"/>
+    </method>
+    <method name="UnregisterLocalHostService">
+      <arg name="path" type="o" direction="in"/>
+    </method>
+    <method name="RegisterLocalHostApp">
+      <!-- Registers instance of org.sailfishos.nfc.LocalHostApp -->
+      <arg name="path" type="o" direction="in"/>
+      <arg name="name" type="s" direction="in"/>
+      <arg name="aid" type="ay" direction="in">
+        <annotation name="org.gtk.GDBus.C.ForceGVariant" value="true"/>
+      </arg>
+      <!--
+        Flags is a bitmask.
+
+        0x01 - Allow implicit selection
+      -->
+      <arg name="flags" type="u" direction="in"/>
+    </method>
+    <method name="UnregisterLocalHostApp">
+      <arg name="path" type="o" direction="in"/>
+    </method>
   </interface>
 </node>

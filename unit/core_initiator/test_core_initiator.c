@@ -10,23 +10,27 @@
  *
  *  1. Redistributions of source code must retain the above copyright
  *     notice, this list of conditions and the following disclaimer.
+ *
  *  2. Redistributions in binary form must reproduce the above copyright
  *     notice, this list of conditions and the following disclaimer
  *     in the documentation and/or other materials provided with the
  *     distribution.
+ *
  *  3. Neither the names of the copyright holders nor the names of its
  *     contributors may be used to endorse or promote products derived
  *     from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) ARISING
- * IN ANY WAY OUT OF THE USE OR INABILITY TO USE THIS SOFTWARE, EVEN
- * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * The views and conclusions contained in the software and documentation
  * are those of the authors and should not be interpreted as representing
@@ -39,6 +43,7 @@
 #include "nfc_initiator_impl.h"
 
 #include <gutil_log.h>
+#include <gutil_misc.h>
 
 static TestOpt test_opt;
 
@@ -101,9 +106,9 @@ typedef struct test_initiator1 {
 
 } TestInitiator1;
 
-#define TEST_TYPE_INITIATOR1 (test_initiator1_get_type())
-#define TEST_INITIATOR1(obj) (G_TYPE_CHECK_INSTANCE_CAST(obj, \
-        TEST_TYPE_INITIATOR1, TestInitiator1))
+#define TEST_TYPE_INITIATOR1 test_initiator1_get_type()
+#define TEST_INITIATOR1(obj) G_TYPE_CHECK_INSTANCE_CAST(obj, \
+        TEST_TYPE_INITIATOR1, TestInitiator1)
 #define PARENT_CLASS test_initiator1_parent_class
 G_DEFINE_TYPE(TestInitiator1, test_initiator1, NFC_TYPE_INITIATOR)
 
@@ -116,7 +121,7 @@ test_initiator1_respond(
 {
     TestInitiator1* self = TEST_INITIATOR1(initiator);
 
-    g_ptr_array_add(self->resp, test_alloc_data(data, len));
+    g_ptr_array_add(self->resp, gutil_data_new(data, len));
     if (self->flags & TEST_INITIATOR_FAIL_RESPONSE) {
         /* Default callback return FALSE */
         return NFC_INITIATOR_CLASS(test_initiator1_parent_class)->respond
@@ -198,6 +203,8 @@ test_null(
     g_assert(!nfc_initiator_ref(NULL));
     g_assert(!nfc_initiator_add_transmission_handler(NULL, NULL, NULL));
     g_assert(!nfc_initiator_add_transmission_handler(init, NULL, NULL));
+    g_assert(!nfc_initiator_add_reactivated_handler(init, NULL, NULL));
+    g_assert(!nfc_initiator_add_reactivated_handler(NULL, NULL, NULL));
     g_assert(!nfc_initiator_add_gone_handler(init, NULL, NULL));
     g_assert(!nfc_initiator_add_gone_handler(NULL, NULL, NULL));
     nfc_initiator_deactivate(NULL);
@@ -208,6 +215,7 @@ test_null(
     nfc_initiator_transmit(NULL, NULL, 0);
     nfc_initiator_response_sent(NULL, NFC_TRANSMIT_STATUS_ERROR);
     nfc_initiator_gone(NULL);
+    nfc_initiator_reactivated(NULL);
     nfc_initiator_unref(NULL);
 
     g_assert(!nfc_transmission_respond_bytes(NULL, NULL, NULL, NULL));

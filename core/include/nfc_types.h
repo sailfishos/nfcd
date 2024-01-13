@@ -11,23 +11,27 @@
  *
  *  1. Redistributions of source code must retain the above copyright
  *     notice, this list of conditions and the following disclaimer.
+ *
  *  2. Redistributions in binary form must reproduce the above copyright
  *     notice, this list of conditions and the following disclaimer
  *     in the documentation and/or other materials provided with the
  *     distribution.
+ *
  *  3. Neither the names of the copyright holders nor the names of its
  *     contributors may be used to endorse or promote products derived
  *     from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) ARISING
- * IN ANY WAY OUT OF THE USE OR INABILITY TO USE THIS SOFTWARE, EVEN
- * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * The views and conclusions contained in the software and documentation
  * are those of the authors and should not be interpreted as representing
@@ -45,6 +49,9 @@ G_BEGIN_DECLS
 
 typedef struct nfc_adapter NfcAdapter;
 typedef struct nfc_configurable NfcConfigurable;        /* Since 1.1.10 */
+typedef struct nfc_host NfcHost;                        /* Since 1.2.0 */
+typedef struct nfc_host_app NfcHostApp;                 /* Since 1.2.0 */
+typedef struct nfc_host_service NfcHostService;         /* Since 1.2.0 */
 typedef struct nfc_initiator NfcInitiator;              /* Since 1.1.0 */
 typedef struct nfc_language NfcLanguage;                /* Since 1.0.15 */
 typedef struct nfc_peer_connection NfcPeerConnection;   /* Since 1.1.0 */
@@ -102,7 +109,7 @@ typedef enum nfc_protocol {
     NFC_PROTOCOL_T2_TAG  = 0x02,   /* Type 2 Tag */
     NFC_PROTOCOL_T3_TAG  = 0x04,   /* Type 3 Tag */
     NFC_PROTOCOL_T4A_TAG = 0x08,   /* Type 4A Tag (ISO-DEP, ISO 14443) */
-    NFC_PROTOCOL_T4B_TAG = 0x10,   /* Type 4B Tag,(ISO-DEP, ISO 14443) */
+    NFC_PROTOCOL_T4B_TAG = 0x10,   /* Type 4B Tag (ISO-DEP, ISO 14443) */
     NFC_PROTOCOL_NFC_DEP = 0x20    /* NFC-DEP Protocol (ISO 18092) */
 } NFC_PROTOCOL;
 
@@ -149,9 +156,9 @@ typedef struct nfc_param_poll_b {
     GUtilData nfcid0;
     /* Since 1.0.40 */
     /*
-    * NFCForum-TS-DigitalProtocol-1.0
-    * Table 25: SENSB_RES Format
-    */
+     * NFCForum-TS-DigitalProtocol-1.0
+     * Table 25: SENSB_RES Format
+     */
     guint8 app_data[4];
     GUtilData prot_info;
 } NfcParamPollB; /* Since 1.0.20 */
@@ -171,6 +178,25 @@ typedef union nfc_param_poll {
     NfcParamPollF f;
 } NfcParamPoll; /* Since 1.0.33 */
 
+/* Parsed ISO-DEP APDU */
+typedef struct nfc_apdu {
+    guint8 cla;         /* Class byte */
+    guint8 ins;         /* Instruction byte */
+    guint8 p1;          /* Parameter byte 1 */
+    guint8 p2;          /* Parameter byte 2 */
+    GUtilData data;     /* Command data */
+    guint le;           /* Expected length, zero if none */
+} NfcApdu; /* Since 1.2.0 */
+
+/*
+ * Some APIs that support both synchronous and synchronous completion
+ * use NFCD_ID_SYNC return value to indicate synchronous successful
+ * completion.  When this value is returned, the completion and destroy
+ * callbacks have already been invoked on the same stack.
+ */
+#define NFCD_ID_FAIL (0)
+#define NFCD_ID_SYNC ((unsigned int)-1)
+
 /* Mark functions exported to plugins as weak */
 #ifndef NFCD_EXPORT
 #  define NFCD_EXPORT __attribute__((weak))
@@ -181,10 +207,12 @@ typedef union nfc_param_poll {
 #define NFC_LLC_LOG_MODULE nfc_llc_log
 #define NFC_PEER_LOG_MODULE nfc_peer_log
 #define NFC_SNEP_LOG_MODULE nfc_snep_log
+#define NFC_HOST_LOG_MODULE nfc_host_log
 extern GLogModule NFC_CORE_LOG_MODULE NFCD_EXPORT;
 extern GLogModule NFC_LLC_LOG_MODULE NFCD_EXPORT;  /* Since 1.1.0 */
 extern GLogModule NFC_PEER_LOG_MODULE NFCD_EXPORT; /* Since 1.1.0 */
 extern GLogModule NFC_SNEP_LOG_MODULE NFCD_EXPORT; /* Since 1.1.0 */
+extern GLogModule NFC_HOST_LOG_MODULE NFCD_EXPORT; /* Since 1.2.0 */
 
 G_END_DECLS
 

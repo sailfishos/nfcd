@@ -7,6 +7,7 @@ TESTS="\
 core_adapter \
 core_config \
 core_crc \
+core_host \
 core_initiator \
 core_llc \
 core_llc_param \
@@ -35,7 +36,10 @@ plugins_dbus_handlers_type_sp \
 plugins_dbus_handlers_type_text \
 plugins_dbus_handlers_type_uri \
 plugins_dbus_service_adapter \
+plugins_dbus_service_host \
 plugins_dbus_service_isodep \
+plugins_dbus_service_local_app \
+plugins_dbus_service_local_host \
 plugins_dbus_service_ndef \
 plugins_dbus_service_peer \
 plugins_dbus_service_plugin \

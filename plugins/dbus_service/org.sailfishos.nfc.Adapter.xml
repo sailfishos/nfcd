@@ -76,5 +76,34 @@
     <signal name="PeersChanged">
       <arg name="peers" type="ao"/>
     </signal>
+    <!-- Interface version 3 (since 1.2.0) -->
+    <method name="GetAll3">
+      <arg name="version" type="i" direction="out"/>
+      <arg name="enabled" type="b" direction="out"/>
+      <arg name="powered" type="b" direction="out"/>
+      <arg name="supported_modes" type="u" direction="out"/>
+      <arg name="mode" type="u" direction="out"/>
+      <arg name="present" type="b" direction="out"/>
+      <arg name="tags" type="ao" direction="out"/>
+      <arg name="peers" type="ao" direction="out"/>
+      <arg name="hosts" type="ao" direction="out"/>
+      <arg name="supported_techs" type="u" direction="out"/>
+    </method>
+    <method name="GetHosts">
+      <arg name="hosts" type="ao" direction="out"/>
+    </method>
+    <signal name="HostsChanged">
+      <arg name="hosts" type="ao"/>
+    </signal>
+    <!--
+      Techs is a bitmask:
+
+        0x01 - NFC-A
+        0x02 - NFC-B
+        0x04 - NFC-F
+    -->
+    <method name="GetSupportedTechs">
+      <arg name="techs" type="u" direction="out"/>
+    </method>
   </interface>
 </node>

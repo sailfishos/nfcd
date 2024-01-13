@@ -29,12 +29,6 @@ PLUGINS_DIR = ../../plugins
 CLEAN_DIRS += $(PLUGINS_DIR)
 
 #
-# Tools and flags
-#
-
-INCLUDES += -I$(PLUGINS_DIR)
-
-#
 # libnfc-plugins.a
 #
 
@@ -47,6 +41,12 @@ COVERAGE_PLUGINS_LIB = $(PLUGINS_BUILD_DIR)/coverage/$(PLUGINS_LIB)
 DEBUG_LIBS += $(DEBUG_PLUGINS_LIB)
 RELEASE_LIBS += $(RELEASE_PLUGINS_LIB)
 COVERAGE_LIBS += $(COVERAGE_PLUGINS_LIB)
+
+#
+# Tools and flags
+#
+
+INCLUDES += -I$(PLUGINS_DIR) -I$(PLUGINS_BUILD_DIR)/gen
 
 #
 # Dependencies
