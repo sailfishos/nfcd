@@ -61,6 +61,9 @@
 #define NFC_VERSION_NANO        NFC_VERSION_RELEASE
 #define NFC_VERSION_GET_NANO(v) NFC_VERSION_GET_RELEASE(v)
 
+/* Specific versions */
+#define NCI_CORE_VERSION_1_2_0  NFC_VERSION_WORD(1,2,0)
+
 #endif /* NFC_VERSION_H */
 
 /*
