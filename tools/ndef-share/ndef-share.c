@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2023-2024 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of the BSD license as follows:
  *
@@ -107,7 +107,9 @@ static const guchar cc_data_template[] = {
 #define ISO_P2_RESPONSE_NONE (0x0c)
 
 /* x(DBUS_CALL,dbus_call,dbus-call) */
+#define APP_INTERFACE_VERSION 1
 #define APP_DBUS_CALLS(x) \
+    x(GET_INTERFACE_VERSION,get_interface_version,get-interface-version) \
     x(START,start,start) \
     x(RESTART,restart,restart) \
     x(STOP,stop,stop) \
@@ -353,6 +355,18 @@ ndef_share_process_select(
     }
 
     ndef_share_respond_empty(service, call, sw);
+    return TRUE;
+}
+
+static
+gboolean
+ndef_share_handle_get_interface_version(
+    OrgSailfishosNfcLocalHostApp* service,
+    GDBusMethodInvocation* call,
+    NdefShare* app)
+{
+    org_sailfishos_nfc_local_host_app_complete_get_interface_version(service,
+        call, APP_INTERFACE_VERSION);
     return TRUE;
 }
 
