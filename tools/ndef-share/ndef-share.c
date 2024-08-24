@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2023-2024 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of the BSD license as follows:
  *
@@ -55,7 +55,7 @@
 #define NFC_SERVICE "org.sailfishos.nfc.daemon"
 #define NFC_DAEMON_PATH "/"
 #define NFC_DAEMON_MIN_INTERFACE_VERSION 4
-#define LAST_RESPONSE_ID (1)
+#define NDEF_RESPONSE_ID (1)
 
 static const guchar ndef_aid[] = { 0xD2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01 };
 
@@ -107,7 +107,9 @@ static const guchar cc_data_template[] = {
 #define ISO_P2_RESPONSE_NONE (0x0c)
 
 /* x(DBUS_CALL,dbus_call,dbus-call) */
+#define APP_INTERFACE_VERSION 1
 #define APP_DBUS_CALLS(x) \
+    x(GET_INTERFACE_VERSION,get_interface_version,get-interface-version) \
     x(START,start,start) \
     x(RESTART,restart,restart) \
     x(STOP,stop,stop) \
@@ -139,14 +141,16 @@ typedef struct elem_file {
     const char* name;
     GUtilData fid;
     GBytes* data;
-    gboolean last;
+    gboolean responded;
+    guint id;
 } ElemFile;
 
 typedef struct ndef_share {
     const char* path;
     const char* name;
     ElemFile ef[2];
-    const ElemFile* selected_file;
+    const ElemFile* ndef_ef;
+    const ElemFile* selected_ef;
     GMainLoop* loop;
     NDEF_SHARE_FLAGS flags;
     gboolean stopped;
@@ -190,8 +194,8 @@ ndef_share_init_cc_file(
     ef->data = g_bytes_new_take(file, size);
     ef->fid.bytes = cc_ef;
     ef->fid.size = sizeof(cc_ef);
-    ef->name = "NDEF Capability Container";
-    ef->last = FALSE;
+    ef->name = "CC";
+    ef->id = 0;
 }
 
 static
@@ -212,7 +216,7 @@ ndef_share_init_ndef_file(
     ef->fid.bytes = cc_data_template + CC_NDEF_FID_OFFSET;
     ef->fid.size = 2;
     ef->name = "NDEF";
-    ef->last = TRUE;
+    ef->id = NDEF_RESPONSE_ID;
     return ef;
 }
 
@@ -278,8 +282,7 @@ ndef_share_read_binary(
         org_sailfishos_nfc_local_host_app_complete_process(service, call,
            g_variant_new_from_data(G_VARIANT_TYPE_BYTESTRING, data + off,
            count, TRUE, (GDestroyNotify) g_bytes_unref, g_bytes_ref(ef->data)),
-           0x90, 0x00,  (ef->last && off + count == size) ?
-           LAST_RESPONSE_ID : 0);
+           0x90, 0x00,  ef->id);
     }
     return TRUE;
 }
@@ -298,8 +301,8 @@ ndef_share_process_read_binary(
      * If bit 1 of INS is set to 0 and bit 8 of P1 to 0, then P1-P2
      * (fifteen bits) encodes an offset from zero to 32767.
      */
-    if (!(p1 & 0x80) && app->selected_file) {
-        return ndef_share_read_binary(app, app->selected_file,
+    if (!(p1 & 0x80) && app->selected_ef) {
+        return ndef_share_read_binary(app, app->selected_ef,
             ((guint) p1 << 8) | p2, le, service, call);
     } else {
         /* 6F00 - Failure (No precise diagnosis) */
@@ -313,8 +316,26 @@ void
 ndef_share_reset(
     NdefShare* app)
 {
+    guint i;
+
     /* Reset the state */
-    app->selected_file = NULL;
+    app->selected_ef = NULL;
+    for (i = 0; i < G_N_ELEMENTS(app->ef); i++) {
+        app->ef[i].responded = FALSE;
+    }
+}
+
+static
+void
+ndef_share_exit_check(
+    NdefShare* app)
+{
+    if (!(app->flags & NDEF_SHARE_FLAG_KEEP_SHARING) &&
+        app->ndef_ef->responded) {
+        GDEBUG("NDEF has been requested, exiting...");
+        g_main_loop_quit(app->loop);
+        app->ret = RET_OK;
+    }
 }
 
 static
@@ -341,8 +362,8 @@ ndef_share_process_select(
             const ElemFile* ef = app->ef + i;
 
             if (gutil_data_equal(fid, &ef->fid)) {
-                if (app->selected_file != ef) {
-                    app->selected_file = ef;
+                if (app->selected_ef != ef) {
+                    app->selected_ef = ef;
                     GDEBUG("Selected %s", ef->name);
                 }
                 /* 9000 - Normal processing */
@@ -353,6 +374,18 @@ ndef_share_process_select(
     }
 
     ndef_share_respond_empty(service, call, sw);
+    return TRUE;
+}
+
+static
+gboolean
+ndef_share_handle_get_interface_version(
+    OrgSailfishosNfcLocalHostApp* service,
+    GDBusMethodInvocation* call,
+    NdefShare* app)
+{
+    org_sailfishos_nfc_local_host_app_complete_get_interface_version(service,
+        call, APP_INTERFACE_VERSION);
     return TRUE;
 }
 
@@ -379,6 +412,7 @@ ndef_share_handle_restart(
     NdefShare* app)
 {
     GINFO("Host %s has been restarted", host);
+    ndef_share_exit_check(app);
     ndef_share_reset(app);
     org_sailfishos_nfc_local_host_app_complete_restart(service, call);
     return TRUE;
@@ -393,6 +427,7 @@ ndef_share_handle_stop(
     NdefShare* app)
 {
     GINFO("Host %s left", host);
+    ndef_share_exit_check(app);
     org_sailfishos_nfc_local_host_app_complete_stop(service, call);
     return TRUE;
 }
@@ -490,17 +525,21 @@ ndef_share_handle_response_status(
     gboolean ok,
     NdefShare* app)
 {
-    GASSERT(response_id == LAST_RESPONSE_ID);
-    if (ok) {
-        if (!(app->flags & NDEF_SHARE_FLAG_KEEP_SHARING)) {
-            GDEBUG("Response sent, exiting...");
-            g_main_loop_quit(app->loop);
-            app->ret = RET_OK;
-        } else {
-            GDEBUG("Response sent");
+    guint i;
+
+    for (i = 0; i < G_N_ELEMENTS(app->ef); i++) {
+        ElemFile* ef = app->ef + i;
+
+        if (ef->id == response_id) {
+            if (ok) {
+                GDEBUG("%s read response sent", ef->name);
+                ef->responded = TRUE;
+            } else {
+                GWARN("Failed to deliver %s read response", ef->name);
+                ef->responded = FALSE;
+            }
+            break;
         }
-    } else {
-        GWARN("Failed to deliver response");
     }
     org_sailfishos_nfc_local_host_app_complete_response_status(service, call);
     return TRUE;
@@ -650,7 +689,6 @@ ndef_share_rec(
     NDEF_SHARE_FLAGS flags)
 {
     NdefShare app;
-    const ElemFile* ndef_ef;
     guint i;
 
 #if GUTIL_LOG_DEBUG
@@ -675,8 +713,8 @@ ndef_share_rec(
     app.path = "/ndefshare";
     app.name = "NDEF Tag Application";
     app.flags = flags;
-    ndef_ef = ndef_share_init_ndef_file(app.ef + 0, ndef);
-    ndef_share_init_cc_file(app.ef + 1, g_bytes_get_size(ndef_ef->data));
+    app.ndef_ef = ndef_share_init_ndef_file(app.ef + 0, ndef);
+    ndef_share_init_cc_file(app.ef + 1, g_bytes_get_size(app.ndef_ef->data));
 
     ndef_share_run(&app);
 
