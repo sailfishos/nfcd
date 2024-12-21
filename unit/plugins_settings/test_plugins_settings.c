@@ -523,6 +523,7 @@ void
 test_access_denied(
     TestDBusStartFunc start)
 {
+#ifdef HAVE_DBUSACCESS
     TestData test;
     TestDBus* dbus;
 
@@ -532,6 +533,7 @@ test_access_denied(
     test_run(&test_opt, test.loop);
     test_data_cleanup(&test);
     test_dbus_free(dbus);
+#endif
 }
 
 static
