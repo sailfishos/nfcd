@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2019 Jolla Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -85,6 +85,7 @@ test_invalid_prefix(
 
     g_assert(rec);
     g_assert(!NFC_IS_NDEF_REC_U(rec));
+    g_assert(G_OBJECT_TYPE(rec) == nfc_ndef_rec_get_type());
     nfc_ndef_rec_unref(rec);
 }
 
@@ -112,6 +113,7 @@ test_empty(
     g_assert(urec);
     g_assert(urec->uri);
     g_assert(!urec->uri[0]);
+    g_assert(G_OBJECT_TYPE(rec) == nfc_ndef_rec_u_get_type());
     g_assert_cmpint(rec->tnf, == ,NFC_NDEF_TNF_WELL_KNOWN);
     g_assert_cmpint(rec->rtd, == ,NFC_NDEF_RTD_URI);
     nfc_ndef_rec_unref(rec);
@@ -190,6 +192,7 @@ test_from_uri(
     rec = nfc_ndef_rec_new(&urec->rec.raw);
     g_assert(rec);
     g_assert(NFC_IS_NDEF_REC_U(rec));
+    g_assert(G_OBJECT_TYPE(rec) == nfc_ndef_rec_u_get_type());
     g_assert(!g_strcmp0(NFC_NDEF_REC_U(rec)->uri, uri));
     nfc_ndef_rec_unref(&urec->rec);
     nfc_ndef_rec_unref(rec);

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2019 Jolla Ltd.
  * Copyright (C) 2018 Bogdan Pankovsky <b.pankovsky@omprussia.ru>
  *
@@ -86,6 +86,7 @@ test_empty(
     NfcNdefRecT* trec = nfc_ndef_rec_t_new(NULL, NULL);
 
     g_assert(trec);
+    g_assert(G_OBJECT_TYPE(trec) == nfc_ndef_rec_t_get_type());
     g_assert_cmpstr(trec->text, == ,"");
     nfc_ndef_rec_unref(&trec->rec);
 }
@@ -191,6 +192,7 @@ test_utf16_decode(
     g_assert(rec);
     g_assert(rec->tnf == NFC_NDEF_TNF_WELL_KNOWN);
     g_assert(rec->rtd == NFC_NDEF_RTD_TEXT);
+    g_assert(G_OBJECT_TYPE(rec) == nfc_ndef_rec_t_get_type());
 
     trec = NFC_NDEF_REC_T(rec);
     g_assert(trec);
@@ -211,6 +213,7 @@ test_utf16_encode(
         test->enc);
 
     g_assert(trec);
+    g_assert(G_OBJECT_TYPE(trec) == nfc_ndef_rec_t_get_type());
     g_assert(trec->rec.tnf == NFC_NDEF_TNF_WELL_KNOWN);
     g_assert(trec->rec.rtd == NFC_NDEF_RTD_TEXT);
 
@@ -352,6 +355,7 @@ test_utf8(
 
     trec = nfc_ndef_rec_t_new(test->text, test->lang);
     g_assert(trec);
+    g_assert(G_OBJECT_TYPE(trec) == nfc_ndef_rec_t_get_type());
     g_assert(trec->rec.tnf == NFC_NDEF_TNF_WELL_KNOWN);
     g_assert(trec->rec.rtd == NFC_NDEF_RTD_TEXT);
     g_assert(!g_strcmp0(trec->lang, test->lang));

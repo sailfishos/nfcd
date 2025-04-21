@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2019-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2019 Jolla Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -653,6 +653,7 @@ test_valid_check(
     const TestValidData* test)
 {
     g_assert(sp);
+    g_assert(G_OBJECT_TYPE(sp) == nfc_ndef_rec_sp_get_type());
     g_assert(sp->rec.tnf == NFC_NDEF_TNF_WELL_KNOWN);
     g_assert(sp->rec.rtd == NFC_NDEF_RTD_SMART_POSTER);
     g_assert(!g_strcmp0(sp->uri, test->uri));
