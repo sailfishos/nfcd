@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2019-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2019-2021 Jolla Ltd.
  * Copyright (C) 2020 Open Mobile Platform LLC.
  *
@@ -306,10 +306,10 @@ test_null(
     NfcTarget* target = g_object_new(TEST_TYPE_TARGET, NULL);
 
     /* Public interfaces are NULL tolerant */
-    g_assert(!nfc_tag_t4a_new(NULL, NULL, NULL));
-    g_assert(!nfc_tag_t4b_new(NULL, NULL, NULL));
-    g_assert(!nfc_tag_t4a_new(target, NULL, NULL));
-    g_assert(!nfc_tag_t4b_new(target, NULL, NULL));
+    g_assert(!nfc_tag_t4a_new(NULL, FALSE, NULL, NULL));
+    g_assert(!nfc_tag_t4b_new(NULL, FALSE, NULL, NULL));
+    g_assert(!nfc_tag_t4a_new(target, FALSE, NULL, NULL));
+    g_assert(!nfc_tag_t4b_new(target, FALSE, NULL, NULL));
     g_assert(!nfc_isodep_transmit(NULL, 0, 0, 0, 0, NULL, 0,
         NULL, NULL, NULL, NULL));
     g_assert(!nfc_isodep_reset(NULL, NULL, NULL, NULL, NULL));
@@ -333,11 +333,11 @@ test_basic(
 
     memset(&iso_dep_poll_a, 0, sizeof(iso_dep_poll_a));
     iso_dep_poll_a.fsc = 256;
-    t4a = NFC_TAG_T4(nfc_tag_t4a_new(target, NULL, &iso_dep_poll_a));
+    t4a = NFC_TAG_T4(nfc_tag_t4a_new(target, FALSE, NULL, &iso_dep_poll_a));
     g_assert(NFC_IS_TAG_T4A(t4a));
     tag = &t4a->tag;
 
-    /* If the target doesn't support reactivation, tag gets initialized
+    /* NDEF reading isn't requested, tag gets initialized
      * right away (and obviously there won't be any NDEF) */
     g_assert(tag->flags & NFC_TAG_FLAG_INITIALIZED);
     g_assert(!tag->ndef);
@@ -367,20 +367,20 @@ test_basic_a(
     iso_dep_poll_a.fsc = 256;
     target->technology = NFC_TECHNOLOGY_A;
 
-    t4a = NFC_TAG_T4(nfc_tag_t4a_new(target, NULL, &iso_dep_poll_a));
+    t4a = NFC_TAG_T4(nfc_tag_t4a_new(target, TRUE, NULL, &iso_dep_poll_a));
     g_assert(NFC_IS_TAG_T4A(t4a));
     tag = &t4a->tag;
     nfc_tag_unref(tag);
 
     /* Handle case with Historical Bytes present */
     iso_dep_poll_a.t1 = t1_data;
-    t4a = NFC_TAG_T4(nfc_tag_t4a_new(target, NULL, &iso_dep_poll_a));
+    t4a = NFC_TAG_T4(nfc_tag_t4a_new(target, TRUE, NULL, &iso_dep_poll_a));
     g_assert(NFC_IS_TAG_T4A(t4a));
     tag = &t4a->tag;
     nfc_tag_unref(tag);
 
     /* Handle case with Poll parameter present */
-    t4a = NFC_TAG_T4(nfc_tag_t4a_new(target, &poll_a, &iso_dep_poll_a));
+    t4a = NFC_TAG_T4(nfc_tag_t4a_new(target, TRUE, &poll_a, &iso_dep_poll_a));
     g_assert(NFC_IS_TAG_T4A(t4a));
     tag = &t4a->tag;
     nfc_tag_unref(tag);
@@ -409,20 +409,20 @@ test_basic_b(
     memset(&iso_dep_poll_b, 0, sizeof(iso_dep_poll_b));
     target->technology = NFC_TECHNOLOGY_B;
 
-    t4b = NFC_TAG_T4(nfc_tag_t4b_new(target, &poll_b, &iso_dep_poll_b));
+    t4b = NFC_TAG_T4(nfc_tag_t4b_new(target, TRUE, &poll_b, &iso_dep_poll_b));
     g_assert(NFC_IS_TAG_T4B(t4b));
     tag = &t4b->tag;
     nfc_tag_unref(tag);
 
     /* Handle case with HILR present */
     iso_dep_poll_b.hlr = hlr_data;
-    t4b = NFC_TAG_T4(nfc_tag_t4b_new(target, &poll_b, &iso_dep_poll_b));
+    t4b = NFC_TAG_T4(nfc_tag_t4b_new(target, TRUE, &poll_b, &iso_dep_poll_b));
     g_assert(NFC_IS_TAG_T4B(t4b));
     tag = &t4b->tag;
     nfc_tag_unref(tag);
 
     /* Handle case with no ISO-DEP param */
-    t4b = NFC_TAG_T4(nfc_tag_t4b_new(target, &poll_b, NULL));
+    t4b = NFC_TAG_T4(nfc_tag_t4b_new(target, TRUE, &poll_b, NULL));
     g_assert(NFC_IS_TAG_T4B(t4b));
     tag = &t4b->tag;
     nfc_tag_unref(tag);
@@ -444,25 +444,22 @@ test_basic_reset(
     NfcParamIsoDepPollA iso_dep_poll_a;
     NfcTagType4* t4a;
     NfcTag* tag;
+    gulong id;
 
     memset(&iso_dep_poll_a, 0, sizeof(iso_dep_poll_a));
     iso_dep_poll_a.fsc = 256;
     target->technology = NFC_TECHNOLOGY_A;
-    t4a = NFC_TAG_T4(nfc_tag_t4a_new(target, NULL, &iso_dep_poll_a));
+    t4a = NFC_TAG_T4(nfc_tag_t4a_new(target, TRUE, NULL, &iso_dep_poll_a));
     g_assert(NFC_IS_TAG_T4A(t4a));
     tag = &t4a->tag;
 
-    /* If the target supports reactivation, tag doesn't get initialized
-     * right away (and obviously there won't be any NDEF) */
+    /* The tag isn't initialized yet */
     g_assert(!(tag->flags & NFC_TAG_FLAG_INITIALIZED));
     g_assert(!tag->ndef);
 
-    const gulong id = nfc_tag_add_initialized_handler(tag,
-            test_tag_quit_loop_cb, loop);
-
+    id = nfc_tag_add_initialized_handler(tag, test_tag_quit_loop_cb, loop);
     test_run(&test_opt, loop);
     nfc_tag_remove_handler(tag, id);
-
 
     /* Now it must be initialized  */
     g_assert(tag->flags & NFC_TAG_FLAG_INITIALIZED);
@@ -873,7 +870,7 @@ test_init_seq(
 
     memset(&poll_b, 0, sizeof(poll_b));
     poll_b.fsc = 0x0b; /* i.e. 256 */
-    t4b = NFC_TAG_T4(nfc_tag_t4b_new(target, &poll_b, NULL));
+    t4b = NFC_TAG_T4(nfc_tag_t4b_new(target, TRUE, &poll_b, NULL));
     g_assert(NFC_IS_TAG_T4B(t4b));
     tag = &t4b->tag;
 
@@ -1002,7 +999,7 @@ test_apdu_ok(
 
     memset(&poll_b, 0, sizeof(poll_b));
     poll_b.fsc = 0x0b; /* i.e. 256 */
-    t4b = NFC_TAG_T4(nfc_tag_t4b_new(target, &poll_b, NULL));
+    t4b = NFC_TAG_T4(nfc_tag_t4b_new(target, TRUE, &poll_b, NULL));
     g_assert(NFC_IS_TAG_T4B(t4b));
     tag = &t4b->tag;
 
@@ -1059,7 +1056,7 @@ test_apdu_fail(
 
     memset(&poll_b, 0, sizeof(poll_b));
     poll_b.fsc = 0x0b; /* i.e. 256 */
-    t4b = NFC_TAG_T4(nfc_tag_t4b_new(target, &poll_b, NULL));
+    t4b = NFC_TAG_T4(nfc_tag_t4b_new(target, TRUE, &poll_b, NULL));
     g_assert(NFC_IS_TAG_T4B(t4b));
     tag = NFC_TAG(t4b);
 

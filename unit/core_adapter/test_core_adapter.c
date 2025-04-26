@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -111,6 +111,7 @@ typedef struct test_adapter {
     gboolean fail_mode_request;
     gboolean mode_request_pending;
     NFC_MODE mode_requested;
+    const NFC_ADAPTER_PARAM* params;
 } TestAdapter;
 
 G_DEFINE_TYPE(TestAdapter, test_adapter, NFC_TYPE_ADAPTER)
@@ -229,6 +230,17 @@ test_adapter_cancel_mode_request(
 }
 
 static
+const NFC_ADAPTER_PARAM*
+test_adapter_list_params(
+    NfcAdapter* adapter)
+{
+    TestAdapter* self = TEST_ADAPTER(adapter);
+
+    return self->params ? self->params :
+        NFC_ADAPTER_CLASS(test_adapter_parent_class)->list_params(adapter);
+}
+
+static
 void
 test_adapter_init(
     TestAdapter* self)
@@ -244,6 +256,7 @@ test_adapter_class_init(
     klass->cancel_power_request = test_adapter_cancel_power_request;
     klass->submit_mode_request = test_adapter_submit_mode_request;
     klass->cancel_mode_request = test_adapter_cancel_mode_request;
+    klass->list_params = test_adapter_list_params;
 }
 
 /*==========================================================================*
@@ -260,6 +273,9 @@ test_null(
     g_assert(!nfc_adapter_hosts(NULL));
     g_assert(!nfc_adapter_peers(NULL));
     g_assert(!nfc_adapter_request_mode(NULL, 0));
+    g_assert(!nfc_adapter_get_supported_techs(NULL));
+    g_assert(!nfc_adapter_param_list(NULL));
+    g_assert(!nfc_adapter_param_get(NULL, NFC_ADAPTER_PARAM_NONE));
     g_assert(!nfc_adapter_add_host(NULL, NULL));
     g_assert(!nfc_adapter_add_tag_t2(NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_tag_t4a(NULL, NULL, NULL, NULL));
@@ -273,25 +289,32 @@ test_null(
     g_assert(!nfc_adapter_add_tag_removed_handler(NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_peer_added_handler(NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_peer_removed_handler(NULL, NULL, NULL));
+    g_assert(!nfc_adapter_add_host_added_handler(NULL, NULL, NULL));
+    g_assert(!nfc_adapter_add_host_removed_handler(NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_powered_changed_handler(NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_power_requested_handler(NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_mode_changed_handler(NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_mode_requested_handler(NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_enabled_changed_handler(NULL, NULL, NULL));
+    g_assert(!nfc_adapter_add_param_changed_handler(NULL, 0, NULL, NULL));
+    g_assert(!nfc_adapter_param_request_new(NULL, NULL, FALSE));
     G_GNUC_BEGIN_IGNORE_DEPRECATIONS
     g_assert(!nfc_adapter_add_other_tag(NULL, NULL));
     G_GNUC_END_IGNORE_DEPRECATIONS
 
     nfc_adapter_set_name(NULL, NULL);
+    nfc_adapter_set_manager_ref(NULL, NULL);
     nfc_adapter_mode_notify(NULL, 0, FALSE);
     nfc_adapter_target_notify(NULL, FALSE);
     nfc_adapter_power_notify(NULL, FALSE, FALSE);
+    nfc_adapter_param_change_notify(NULL, 0);
     nfc_adapter_set_enabled(NULL, TRUE);
     nfc_adapter_request_power(NULL, TRUE);
     nfc_adapter_remove_tag(NULL, NULL);
     nfc_adapter_remove_peer(NULL, NULL);
     nfc_adapter_remove_handler(NULL, 0);
     nfc_adapter_remove_handlers(NULL, NULL, 0);
+    nfc_adapter_param_request_free(NULL);
     nfc_adapter_unref(NULL);
 }
 
@@ -312,6 +335,8 @@ test_basic(
     g_assert(!nfc_adapter_add_target_presence_handler(adapter, NULL, NULL));
     g_assert(!nfc_adapter_add_tag_added_handler(adapter, NULL, NULL));
     g_assert(!nfc_adapter_add_tag_removed_handler(adapter, NULL, NULL));
+    g_assert(!nfc_adapter_add_host_added_handler(adapter, NULL, NULL));
+    g_assert(!nfc_adapter_add_host_removed_handler(adapter, NULL, NULL));
     g_assert(!nfc_adapter_add_powered_changed_handler(adapter, NULL, NULL));
     g_assert(!nfc_adapter_add_power_requested_handler(adapter, NULL, NULL));
     g_assert(!nfc_adapter_add_mode_changed_handler(adapter, NULL, NULL));
@@ -319,6 +344,7 @@ test_basic(
     g_assert(!nfc_adapter_add_enabled_changed_handler(adapter, NULL, NULL));
     g_assert(!nfc_adapter_add_peer_added_handler(adapter, NULL, NULL));
     g_assert(!nfc_adapter_add_peer_removed_handler(adapter, NULL, NULL));
+    g_assert(!nfc_adapter_add_param_changed_handler(adapter, 0, NULL, NULL));
     g_assert(!nfc_adapter_add_tag_t2(adapter, NULL, NULL));
     g_assert(!nfc_adapter_add_tag_t4a(adapter, NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_tag_t4b(adapter, NULL, NULL, NULL));
@@ -327,6 +353,10 @@ test_basic(
     g_assert(!nfc_adapter_add_peer_target_a(adapter, NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_peer_target_f(adapter, NULL, NULL, NULL));
     g_assert(!nfc_adapter_add_other_tag2(adapter, NULL, NULL));
+    g_assert(nfc_adapter_param_list(adapter));
+    g_assert_cmpint(nfc_adapter_param_list(adapter)[0], == ,
+        NFC_ADAPTER_PARAM_T4_NDEF); /* This one is always first */
+    g_assert(!nfc_adapter_param_get(adapter, NFC_ADAPTER_PARAM_COUNT));
     G_GNUC_BEGIN_IGNORE_DEPRECATIONS
     g_assert(!nfc_adapter_add_other_tag(adapter, NULL));
     G_GNUC_END_IGNORE_DEPRECATIONS
@@ -339,6 +369,167 @@ test_basic(
     nfc_adapter_unref(adapter);
     nfc_adapter_unref(adapter);
     nfc_peer_services_unref(services);
+}
+
+/*==========================================================================*
+ * param_list
+ *==========================================================================*/
+
+static
+void
+test_param_list(
+    void)
+{
+    static NFC_ADAPTER_PARAM p0[] = {
+        NFC_ADAPTER_PARAM_NONE
+    };
+    static NFC_ADAPTER_PARAM p1[] = {
+        NFC_ADAPTER_PARAM_T4_NDEF,
+        NFC_ADAPTER_PARAM_NONE
+    };
+    NFC_ADAPTER_PARAM* p = nfc_adapter_param_list_merge(NULL, NULL);
+
+    g_assert(p);
+    g_assert_cmpint(p[0], == ,0);
+    g_free(p);
+
+    p = nfc_adapter_param_list_merge(p1, NULL);
+    g_assert(p);
+    g_assert_cmpint(p[0], == ,p1[0]);
+    g_assert_cmpint(p[1], == ,0);
+    g_free(p);
+
+    p = nfc_adapter_param_list_merge(p0, p1, NULL);
+    g_assert(p);
+    g_assert_cmpint(p[0], == ,p1[0]);
+    g_assert_cmpint(p[1], == ,0);
+    g_free(p);
+
+    p = nfc_adapter_param_list_merge(p1, p1, NULL);
+    g_assert(p);
+    g_assert_cmpint(p[0], == ,p1[0]);
+    g_assert_cmpint(p[1], == ,0);
+    g_free(p);
+
+    p = nfc_adapter_param_list_merge(p1, p0, NULL);
+    g_assert(p);
+    g_assert_cmpint(p[0], == ,p1[0]);
+    g_assert_cmpint(p[1], == ,0);
+    g_free(p);
+}
+
+/*==========================================================================*
+ * params
+ *==========================================================================*/
+
+static
+void
+test_params_change_cb(
+    NfcAdapter* adapter,
+    NFC_ADAPTER_PARAM id,
+    void* user_data)
+{
+    int* count = user_data;
+
+    g_assert_cmpint(id, == ,NFC_ADAPTER_PARAM_T4_NDEF);
+    (*count)++;
+}
+
+static
+void
+test_params(
+    void)
+{
+    int count = 0;
+    NfcAdapterParamValue* v;
+    TestAdapter* test = test_adapter_new();
+    NfcAdapter* adapter = &test->adapter;
+    NfcAdapterParam param;
+    const NfcAdapterParam* pa[2];
+    NfcAdapterParamRequest* req1;
+    NfcAdapterParamRequest* req2;
+    gulong id = nfc_adapter_add_param_changed_handler(adapter,
+        NFC_ADAPTER_PARAM_ALL, test_params_change_cb, &count);
+    static const NfcAdapterParam t4t_ndef_true = {
+        .id = NFC_ADAPTER_PARAM_T4_NDEF,
+        .value.b = TRUE
+    };
+    static const NfcAdapterParam t4t_ndef_false = {
+        .id = NFC_ADAPTER_PARAM_T4_NDEF,
+        .value.b = FALSE
+    };
+    static const NfcAdapterParam* no_params[] = {
+        NULL
+    };
+
+    /* Matches NFC_ADAPTER_PARAMS in core/src/nfc_adapter.c */
+    #define PARAMS(p) p(T4_NDEF) p(LA_NFCID1)
+
+    g_assert(!nfc_adapter_param_name(NFC_ADAPTER_PARAM_NONE));
+    g_assert(!nfc_adapter_param_name(NFC_ADAPTER_PARAM_COUNT));
+    #define _P(p) g_assert_cmpstr \
+        (nfc_adapter_param_name(NFC_ADAPTER_PARAM_##p), == , #p);
+    PARAMS(_P)
+    #undef _P
+
+    g_assert_cmpint(nfc_adapter_param_id(NULL), == ,NFC_ADAPTER_PARAM_NONE);
+    g_assert_cmpint(nfc_adapter_param_id(""), == ,NFC_ADAPTER_PARAM_NONE);
+    #define _P(p) g_assert_cmpint\
+        (nfc_adapter_param_id(#p), == ,NFC_ADAPTER_PARAM_##p);
+    PARAMS(_P)
+    #undef _P
+
+    g_assert(id);
+    memset(&v, 0, sizeof(v));
+    g_assert(!nfc_adapter_param_get(adapter, NFC_ADAPTER_PARAM_NONE));
+    g_assert((v = nfc_adapter_param_get(adapter, NFC_ADAPTER_PARAM_T4_NDEF)));
+    g_assert_true(v->b);
+    g_free(v);
+
+    req1 = nfc_adapter_param_request_new(adapter, NULL, TRUE);
+    g_assert_cmpint(count, == ,0); /* Nothing has changed */
+    g_assert((v = nfc_adapter_param_get(adapter, NFC_ADAPTER_PARAM_T4_NDEF)));
+    g_assert_true(v->b);
+    g_free(v);
+
+    nfc_adapter_param_request_free(req1);
+    req1 = nfc_adapter_param_request_new(adapter, no_params, TRUE);
+    g_assert_cmpint(count, == ,0); /* Still nothing changed */
+
+    memset(&param, 0, sizeof(param));
+    param.id = NFC_ADAPTER_PARAM_LA_NFCID1;
+    pa[0] = &param;
+    pa[1] = NULL;
+    req2 = nfc_adapter_param_request_new(adapter, pa, TRUE);
+    g_assert_cmpint(count, == ,0); /* Still nothing changed because it's not
+                                      handled by TestAdapter */
+
+    /* Out-of-range ids are ignored */
+    g_assert(!nfc_adapter_add_param_changed_handler(adapter,
+        NFC_ADAPTER_PARAM_COUNT, test_params_change_cb, &count));
+    nfc_adapter_param_change_notify(adapter, NFC_ADAPTER_PARAM_COUNT);
+    g_assert_cmpint(count, == ,0);
+
+    nfc_adapter_param_request_free(req1);
+    nfc_adapter_param_request_free(req2);
+    pa[0] = &t4t_ndef_false;
+    req1 = nfc_adapter_param_request_new(adapter, pa, FALSE);
+    g_assert_cmpint(count, == ,1); /* Change has been signaled */
+    g_assert((v = nfc_adapter_param_get(adapter, NFC_ADAPTER_PARAM_T4_NDEF)));
+    g_assert_false(v->b);
+    g_free(v);
+
+    pa[0] = &t4t_ndef_true;
+    req2 = nfc_adapter_param_request_new(adapter, pa, FALSE);
+    g_assert_cmpint(count, == ,2); /* Another change has been signaled */
+    g_assert((v = nfc_adapter_param_get(adapter, NFC_ADAPTER_PARAM_T4_NDEF)));
+    g_assert_true(v->b);
+    g_free(v);
+
+    nfc_adapter_param_request_free(req1);
+    nfc_adapter_param_request_free(req2);
+    nfc_adapter_remove_handler(adapter, id);
+    nfc_adapter_unref(adapter);
 }
 
 /*==========================================================================*
@@ -950,6 +1141,8 @@ int main(int argc, char* argv[])
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("null"), test_null);
     g_test_add_func(TEST_("basic"), test_basic);
+    g_test_add_func(TEST_("param_list"), test_param_list);
+    g_test_add_func(TEST_("params"), test_params);
     g_test_add_func(TEST_("enabled"), test_enabled);
     g_test_add_func(TEST_("power"), test_power);
     g_test_add_func(TEST_("mode"), test_mode);

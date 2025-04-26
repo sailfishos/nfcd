@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2019-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2019-2021 Jolla Ltd.
  * Copyright (C) 2020 Open Mobile Platform LLC.
  *
@@ -636,6 +636,7 @@ nfc_tag_t4_init_base(
     NfcTagType4* self,
     NfcTarget* target,
     guint mtu,
+    gboolean read_ndef,
     const NfcParamPoll* poll,
     const NfcParamIsoDep* iso_dep)
 {
@@ -686,10 +687,6 @@ nfc_tag_t4_init_base(
     }
 
     /*
-     * We only try to read NDEF Tag file if the target can be reactivated.
-     * Reactivation is supported by most commonly used NCI-based adapter
-     * implementations.
-     *
      * Reactivation is required in order to reset the card back to its
      * pristine initial state (with default application selected). Since
      * we have no reliable way to determine the default application, the
@@ -698,7 +695,7 @@ nfc_tag_t4_init_base(
      * selection of a non-default application may be an irreversible
      * action (which of course depends on how the card is programmed).
      */
-    if (nfc_target_can_reactivate(tag->target)) {
+    if (read_ndef && nfc_target_can_reactivate(tag->target)) {
         priv->init_seq = nfc_target_sequence_new(target);
 
         /*

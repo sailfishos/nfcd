@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -60,15 +60,27 @@ typedef struct nfc_adapter_class {
     NFC_TECHNOLOGY (*get_supported_techs)(NfcAdapter* adapter);
     void (*set_allowed_techs)(NfcAdapter* adapter, NFC_TECHNOLOGY techs);
 
+    /* Since 1.2.2 */
+    const NFC_ADAPTER_PARAM* (*list_params)(NfcAdapter* adapter);
+    NfcAdapterParamValue* (*get_param)(NfcAdapter* adapter,
+        NFC_ADAPTER_PARAM id); /* Caller frees the result with g_free() */
+    /*
+     * Setting multiple parameters at once is more efficient because
+     * doing it one by one would require full (or at least partial)
+     * reinitialization in order to apply each paramter. Reset obviously
+     * requires reinitialization too, at least if some parameters were in
+     * a non-default state. This API allows to do a lot of that in one shot.
+     */
+    void (*set_params)(NfcAdapter* adapter,
+        const NfcAdapterParam* const* params, /* NULL terminated list */
+        gboolean reset); /* Reset all params that are not being set */
+
     /* Padding for future expansion */
     void (*_reserved1)(void);
     void (*_reserved2)(void);
     void (*_reserved3)(void);
     void (*_reserved4)(void);
     void (*_reserved5)(void);
-    void (*_reserved6)(void);
-    void (*_reserved7)(void);
-    void (*_reserved8)(void);
 } NfcAdapterClass;
 
 #define NFC_ADAPTER_CLASS(klass) G_TYPE_CHECK_CLASS_CAST((klass), \
@@ -92,6 +104,19 @@ void
 nfc_adapter_target_notify(
     NfcAdapter* adapter,
     gboolean present)
+    NFCD_EXPORT;
+
+void
+nfc_adapter_param_change_notify(
+    NfcAdapter* adapter,
+    NFC_ADAPTER_PARAM id) /* Since 1.2.2 */
+    NFCD_EXPORT;
+
+NFC_ADAPTER_PARAM*
+nfc_adapter_param_list_merge(
+    const NFC_ADAPTER_PARAM* params,
+    ...) /* Since 1.2.2 */
+    G_GNUC_NULL_TERMINATED
     NFCD_EXPORT;
 
 G_END_DECLS

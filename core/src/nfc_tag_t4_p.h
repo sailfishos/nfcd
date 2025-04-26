@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2019-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2019-2021 Jolla Ltd.
  * Copyright (C) 2020 Open Mobile Platform LLC.
  *
@@ -51,6 +51,7 @@ typedef struct nfc_tag_t4_class {
 NfcTagType4a*
 nfc_tag_t4a_new(
     NfcTarget* target,
+    gboolean read_ndef,
     const NfcParamPollA* poll_a,
     const NfcParamIsoDepPollA* iso_dep_param)
     NFCD_INTERNAL;
@@ -58,6 +59,7 @@ nfc_tag_t4a_new(
 NfcTagType4b*
 nfc_tag_t4b_new(
     NfcTarget* target,
+    gboolean read_ndef,
     const NfcParamPollB* poll_b,
     const NfcParamIsoDepPollB* iso_dep_param)
     NFCD_INTERNAL;
@@ -67,6 +69,7 @@ nfc_tag_t4_init_base(
     NfcTagType4* tag,
     NfcTarget* target,
     guint mtu,
+    gboolean read_ndef,
     const NfcParamPoll* poll,
     const NfcParamIsoDep* iso_dep)
     NFCD_INTERNAL;
