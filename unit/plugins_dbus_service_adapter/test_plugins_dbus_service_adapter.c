@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2019-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2019-2021 Jolla Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -56,9 +56,10 @@
 #include "test_dbus.h"
 
 #define NFC_ADAPTER_INTERFACE "org.sailfishos.nfc.Adapter"
-#define NFC_ADAPTER_INTERFACE_VERSION  (3)
+#define MIN_INTERFACE_VERSION  (4)
 
 static TestOpt test_opt;
+static const char* test_sender = ":1.1";
 
 typedef struct test_data {
     GMainLoop* loop;
@@ -152,6 +153,17 @@ test_signal_subscribe(
 }
 
 /*==========================================================================*
+ * Stubs
+ *==========================================================================*/
+
+const char*
+g_dbus_method_invocation_get_sender(
+    GDBusMethodInvocation* call)
+{
+    return test_sender;
+}
+
+/*==========================================================================*
  * null
  *==========================================================================*/
 
@@ -229,7 +241,7 @@ test_get_all_done(
     GDEBUG("version=%d, enabled=%d, powered=%d, modes=0x%04X, mode=0x%04X, "
         "target_present=%d, %u tags", version, enabled, powered, modes, mode,
          target_present, g_strv_length(tags));
-    g_assert_cmpint(version, >= ,NFC_ADAPTER_INTERFACE_VERSION);
+    g_assert_cmpint(version, >= ,MIN_INTERFACE_VERSION);
     g_assert(enabled);
     g_assert(!powered);
     g_assert(!target_present);
@@ -292,7 +304,7 @@ test_get_all2_done(
         "target_present=%d, %u tags, %u peers", version, enabled, powered,
         modes, mode, target_present, g_strv_length(tags),
         g_strv_length(peers));
-    g_assert_cmpint(version, >= ,NFC_ADAPTER_INTERFACE_VERSION);
+    g_assert_cmpint(version, >= ,MIN_INTERFACE_VERSION);
     g_assert(enabled);
     g_assert(!powered);
     g_assert(!target_present);
@@ -359,7 +371,7 @@ test_get_all3_done(
         "target_present=%d, techs=0x%02X, %u tags, %u peers, %u hosts",
         version, enabled, powered, modes, mode, target_present, techs,
         g_strv_length(tags), g_strv_length(peers), g_strv_length(hosts));
-    g_assert_cmpint(version, >= ,NFC_ADAPTER_INTERFACE_VERSION);
+    g_assert_cmpint(version, >= ,MIN_INTERFACE_VERSION);
     g_assert_cmpint(techs, == ,NFC_TECHNOLOGY_A|NFC_TECHNOLOGY_B);
     g_assert(enabled);
     g_assert(!powered);
@@ -1512,6 +1524,351 @@ test_host_removed(
 }
 
 /*==========================================================================*
+ * get_all4
+ *==========================================================================*/
+
+static
+void
+test_get_all4_done(
+    GObject* object,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    gint version = 0;
+    gboolean enabled = FALSE, powered = TRUE, target_present = FALSE;
+    guint modes, mode, techs;
+    gchar** tags = NULL;
+    gchar** peers = NULL;
+    gchar** hosts = NULL;
+    GVariant* params = NULL;
+    GVariantIter it;
+    gchar* s = NULL;
+    GVariant* v = NULL;
+    gboolean t4_ndef = FALSE;
+    GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
+        result, NULL);
+
+    g_assert(var);
+    g_variant_get(var, "(ibbuub^ao^ao^aou@a{sv})", &version, &enabled, &powered,
+        &modes, &mode, &target_present, &tags, &peers, &hosts, &techs, &params);
+    GDEBUG("version=%d, enabled=%d, powered=%d, modes=0x%04X, mode=0x%04X, "
+        "target_present=%d, techs=0x%02X, %u tags, %u peers, %u hosts, "
+         "%u param(s)", version, enabled, powered, modes, mode, target_present,
+         techs, g_strv_length(tags), g_strv_length(peers),
+         g_strv_length(hosts), (guint) g_variant_n_children(params));
+    g_assert_cmpint(version, >= ,MIN_INTERFACE_VERSION);
+    g_assert_cmpint(techs, == ,NFC_TECHNOLOGY_A|NFC_TECHNOLOGY_B);
+    g_assert(enabled);
+    g_assert(!powered);
+    g_assert(!target_present);
+    g_assert(tags);
+    g_assert(peers);
+    g_assert(hosts);
+    g_assert(params);
+    g_variant_unref(var);
+
+    g_variant_iter_init(&it, params);
+    while (g_variant_iter_loop(&it, "{sv}", &s, &v)) {
+        if (!g_strcmp0(s, "T4_NDEF")) {
+            g_assert(g_variant_is_of_type(v, G_VARIANT_TYPE_BOOLEAN));
+            t4_ndef = g_variant_get_boolean(v);
+            GDEBUG("%s = %s", s, t4_ndef ? "true" : "false");
+        } else {
+            GDEBUG("Param '%s' type '%s'", s, g_variant_get_type_string(v));
+        }
+    }
+    g_assert(t4_ndef); /* T4_NDEF is true by default */
+    g_variant_unref(params);
+
+    g_strfreev(tags);
+    g_strfreev(peers);
+    g_strfreev(hosts);
+    test_quit_later(test->loop);
+}
+
+static
+void
+test_get_all4_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    test_start_call((TestData*)user_data, client, server,
+        "GetAll4", test_get_all4_done);
+}
+
+static
+void
+test_get_all4(
+    void)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_data_init(&test);
+    dbus = test_dbus_new(test_get_all4_start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+/*==========================================================================*
+ * get_params
+ *==========================================================================*/
+
+static
+void
+test_get_params_done(
+    GObject* object,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    GVariant* params = NULL;
+    GVariantIter it;
+    gchar* s = NULL;
+    GVariant* v = NULL;
+    gboolean t4_ndef = FALSE;
+    GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
+        result, NULL);
+
+    g_assert(var);
+    g_variant_get(var, "(@a{sv})", &params);
+    g_variant_unref(var);
+    GDEBUG("%u param(s)", (guint) g_variant_n_children(params));
+    g_assert(params);
+
+    g_variant_iter_init(&it, params);
+    while (g_variant_iter_loop(&it, "{sv}", &s, &v)) {
+        if (!g_strcmp0(s, "T4_NDEF")) {
+            g_assert(g_variant_is_of_type(v, G_VARIANT_TYPE_BOOLEAN));
+            t4_ndef = g_variant_get_boolean(v);
+            GDEBUG("%s = %s", s, t4_ndef ? "true" : "false");
+        } else {
+            GDEBUG("Param '%s' type '%s'", s, g_variant_get_type_string(v));
+        }
+    }
+    g_assert(t4_ndef); /* T4_NDEF is true by default */
+    g_variant_unref(params);
+    test_quit_later(test->loop);
+}
+
+static
+void
+test_get_params_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    test_start_call((TestData*)user_data, client, server,
+        "GetParams", test_get_params_done);
+}
+
+static
+void
+test_get_params(
+    void)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_data_init(&test);
+    dbus = test_dbus_new(test_get_params_start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+/*==========================================================================*
+ * request_params
+ *==========================================================================*/
+
+typedef struct test_data_ext_request_params {
+    guint changed;
+    gboolean value;
+} TestDataExtRequestParams;
+
+static
+void
+test_request_params_changed(
+    GDBusConnection* connection,
+    const char* sender,
+    const char* path,
+    const char* iface,
+    const char* name,
+    GVariant* args,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    TestDataExtRequestParams* ext = test->ext;
+    char* s = NULL;
+    GVariant* var = NULL;
+    GVariant* v = NULL;
+
+    g_variant_get(args, "(&s@v)", &s, &var);
+    g_assert(g_variant_is_of_type(var, G_VARIANT_TYPE_VARIANT));
+    v = g_variant_get_variant(var);
+    g_variant_unref(var);
+    g_assert(g_variant_is_of_type(v, G_VARIANT_TYPE_BOOLEAN));
+    g_assert(ext->value != g_variant_get_boolean(v));
+    ext->value = g_variant_get_boolean(v);
+    g_variant_unref(v);
+
+    GDEBUG("%s => %s", s, ext->value ? "true" : "false");
+    ext->changed++;
+}
+
+static
+void
+test_request_params_done(
+    GObject* object,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    TestDataExtRequestParams* ext = test->ext;
+    GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
+        result, NULL);
+
+    g_assert(var);
+    g_variant_unref(var);
+    g_assert_cmpuint(ext->changed, == ,2);
+
+    GDEBUG("Request released");
+    test_quit_later(test->loop);
+}
+
+static
+void
+test_request_params_ok(
+    GObject* object,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    TestDataExtRequestParams* ext = test->ext;
+    guint id = 0;
+    GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
+        result, NULL);
+
+    g_assert(var);
+    g_variant_get(var, "(u)", &id);
+    g_variant_unref(var);
+    GDEBUG("Request id %u", id);
+    g_assert_cmpuint(id, != ,0);
+    g_assert_cmpuint(ext->changed, == ,1);
+
+    /* And release this request */
+    g_dbus_connection_call(test->client, NULL,
+        dbus_service_adapter_path(test->service), NFC_ADAPTER_INTERFACE,
+        "ReleaseParams", g_variant_new("(u)", id),
+        NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+        test_request_params_done, test);
+}
+
+static
+void
+test_request_params_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+    GVariantBuilder builder;
+
+    test_started(test, client, server);
+    test_signal_subscribe(test, "ParamChanged", test_request_params_changed);
+    g_assert(test->client);
+    g_assert(test->service);
+
+    g_variant_builder_init(&builder, G_VARIANT_TYPE_VARDICT);
+    g_variant_builder_add(&builder, "{sv}", "T4_NDEF",
+        g_variant_new_boolean(FALSE));
+    g_dbus_connection_call(test->client, NULL,
+        dbus_service_adapter_path(test->service),
+        NFC_ADAPTER_INTERFACE, "RequestParams",
+        g_variant_new("(@a{sv}b)", g_variant_builder_end(&builder), FALSE),
+        NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+        test_request_params_ok, test);
+}
+
+static
+void
+test_request_params(
+    void)
+{
+    TestDataExtRequestParams ext;
+    TestData test;
+    TestDBus* dbus;
+
+    memset(&ext, 0, sizeof(ext));
+    ext.value = TRUE; /* default */
+    test_data_init(&test)->ext = &ext;
+    dbus = test_dbus_new(test_request_params_start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+/*==========================================================================*
+ * release_params/fail
+ *==========================================================================*/
+
+static
+void
+test_release_params_fail_done(
+    GObject* object,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    GError* error = NULL;
+
+    g_assert(!g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
+        result, &error));
+    g_assert(error);
+    GDEBUG("%s (expected)", GERRMSG(error));
+    g_assert_error(error, DBUS_SERVICE_ERROR, DBUS_SERVICE_ERROR_NOT_FOUND);
+    g_error_free(error);
+    test_quit_later(test->loop);
+}
+
+static
+void
+test_release_params_fail_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+
+    test_started(test, client, server);
+    g_assert(test->client);
+    g_assert(test->service);
+    g_dbus_connection_call(test->client, NULL,
+        dbus_service_adapter_path(test->service), NFC_ADAPTER_INTERFACE,
+        "ReleaseParams", g_variant_new("(u)", 0),
+        NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+        test_release_params_fail_done, test);
+}
+
+static
+void
+test_release_params_fail(
+    void)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_data_init(&test);
+    dbus = test_dbus_new(test_release_params_fail_start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -1547,6 +1904,10 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("peer_removed"), test_peer_removed);
     g_test_add_func(TEST_("host_added"), test_host_added);
     g_test_add_func(TEST_("host_removed"), test_host_removed);
+    g_test_add_func(TEST_("get_all4"), test_get_all4);
+    g_test_add_func(TEST_("get_params"), test_get_params);
+    g_test_add_func(TEST_("request_params"), test_request_params);
+    g_test_add_func(TEST_("release_params/fail"), test_release_params_fail);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

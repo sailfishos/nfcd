@@ -43,7 +43,7 @@
     <method name="GetTags">
       <arg name="tags" type="ao" direction="out"/>
     </method>
-    <!-- Signals -->  
+    <!-- Signals -->
     <signal name="EnabledChanged">
       <arg name="enabled" type="b"/>
     </signal>
@@ -104,6 +104,40 @@
     -->
     <method name="GetSupportedTechs">
       <arg name="techs" type="u" direction="out"/>
+    </method>
+    <!-- Interface version 4 (since 1.2.2) -->
+    <method name="GetAll4">
+      <arg name="version" type="i" direction="out"/>
+      <arg name="enabled" type="b" direction="out"/>
+      <arg name="powered" type="b" direction="out"/>
+      <arg name="supported_modes" type="u" direction="out"/>
+      <arg name="mode" type="u" direction="out"/>
+      <arg name="present" type="b" direction="out"/>
+      <arg name="tags" type="ao" direction="out"/>
+      <arg name="peers" type="ao" direction="out"/>
+      <arg name="hosts" type="ao" direction="out"/>
+      <arg name="supported_techs" type="u" direction="out"/>
+      <arg name="params" type="a{sv}" direction="out"/>
+    </method>
+    <method name="GetParams">
+      <!--
+      Parameters:
+      "_T4_NDEF" - "b", Request NDEF from Type4 tags
+      "LA_NFCID1" - "ay", NFCID1 in NFC-A Listen mode
+      -->
+      <arg name="params" type="a{sv}" direction="out"/>
+    </method>
+    <signal name="ParamChanged">
+      <arg name="name" type="s"/>
+      <arg name="value" type="v"/>
+    </signal>
+    <method name="RequestParams">
+      <arg name="set" type="a{sv}" direction="in"/>
+      <arg name="reset" type="b" direction="in"/>
+      <arg name="id" type="u" direction="out"/>
+    </method>
+    <method name="ReleaseParams">
+      <arg name="id" type="u" direction="in"/>
     </method>
   </interface>
 </node>

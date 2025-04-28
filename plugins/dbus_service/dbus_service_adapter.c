@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2020 Jolla Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -38,6 +38,7 @@
  */
 
 #include "dbus_service.h"
+#include "dbus_service_util.h"
 #include "dbus_service/org.sailfishos.nfc.Adapter.h"
 
 #include <nfc_adapter.h>
@@ -46,6 +47,7 @@
 #include <nfc_tag.h>
 
 #include <gutil_idlepool.h>
+#include <gutil_macros.h>
 #include <gutil_misc.h>
 
 #include <stdlib.h>
@@ -64,7 +66,11 @@
     x(GET_PEERS, get_peers, get-peers) \
     x(GET_ALL3, get_all3, get-all3) \
     x(GET_HOSTS, get_hosts, get-hosts) \
-    x(GET_SUPPORTED_TECHS, get_supported_techs, get-supported-techs)
+    x(GET_SUPPORTED_TECHS, get_supported_techs, get-supported-techs) \
+    x(GET_ALL4, get_all4, get-all4) \
+    x(GET_PARAMS, get_params, get-params) \
+    x(REQUEST_PARAMS, request_params, request-params) \
+    x(RELEASE_PARAMS, release_params, release-params)
 
 enum {
     EVENT_ENABLED_CHANGED,
@@ -77,6 +83,7 @@ enum {
     EVENT_PEER_REMOVED,
     EVENT_HOST_ADDED,
     EVENT_HOST_REMOVED,
+    EVENT_PARAM_CHANGED,
     EVENT_COUNT
 };
 
@@ -87,6 +94,13 @@ enum {
     CALL_COUNT
 };
 
+typedef struct dbus_service_adapter_client {
+    char* dbus_name;
+    guint watch_id;
+    DBusServiceAdapter* service;
+    GHashTable* param_requests;  /* id => NfcAdapterParamRequest */
+} DBusServiceAdapterClient;
+
 struct dbus_service_adapter {
     char* path;
     GDBusConnection* connection;
@@ -96,11 +110,77 @@ struct dbus_service_adapter {
     GHashTable* peers;
     GHashTable* hosts;
     NfcAdapter* adapter;
+    GHashTable* clients;
+    guint last_request_id;
     gulong event_id[EVENT_COUNT];
     gulong call_id[CALL_COUNT];
 };
 
-#define NFC_DBUS_ADAPTER_INTERFACE_VERSION  (3)
+#define NFC_DBUS_ADAPTER_INTERFACE_VERSION  (4)
+
+static
+void
+dbus_service_adapter_client_gone(
+    GDBusConnection* bus,
+    const char* name,
+    gpointer service)
+{
+    DBusServiceAdapter* self = service;
+
+    GDEBUG("Name '%s' has disappeared", name);
+    g_hash_table_remove(self->clients, name);
+}
+
+static
+DBusServiceAdapterClient*
+dbus_service_adapter_client_new(
+    DBusServiceAdapter* self,
+    const char* dbus_name)
+{
+    DBusServiceAdapterClient* client = g_slice_new0(DBusServiceAdapterClient);
+
+    client->dbus_name = g_strdup(dbus_name);
+    client->watch_id = g_bus_watch_name_on_connection(self->connection,
+        client->dbus_name, G_BUS_NAME_WATCHER_FLAGS_NONE, NULL,
+        dbus_service_adapter_client_gone, self, NULL);
+    return client;
+}
+
+static
+void
+dbus_service_adapter_client_destroy(
+    gpointer value)
+{
+    DBusServiceAdapterClient* client = value;
+
+    if (client->param_requests) {
+        g_hash_table_destroy(client->param_requests);
+    }
+    g_bus_unwatch_name(client->watch_id);
+    g_free(client->dbus_name);
+    gutil_slice_free(client);
+}
+
+static
+DBusServiceAdapterClient*
+dbus_service_adapter_client_get(
+    DBusServiceAdapter* self,
+    const char* dbus_name)
+{
+    DBusServiceAdapterClient* client = NULL;
+
+    if (self->clients) {
+        client = g_hash_table_lookup(self->clients, dbus_name);
+    } else {
+        self->clients = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
+            dbus_service_adapter_client_destroy);
+    }
+    if (!client) {
+        client = dbus_service_adapter_client_new(self, dbus_name);
+        g_hash_table_insert(self->clients, client->dbus_name, client);
+    }
+    return client;
+}
 
 static
 int
@@ -264,6 +344,142 @@ dbus_service_adapter_hosts_changed(
         dbus_service_adapter_get_host_paths(self));
 }
 
+static
+GVariant*
+dbus_service_adapter_get_param_value(
+    NfcAdapter* adapter,
+    NFC_ADAPTER_PARAM id)
+{
+    NfcAdapterParamValue* v = nfc_adapter_param_get(adapter, id);
+    GVariant* var = NULL;
+
+    if (v) {
+        const char* name = nfc_adapter_param_name(id);
+
+        if (name) {
+            switch (id) {
+            case NFC_ADAPTER_PARAM_NONE:
+            case NFC_ADAPTER_PARAM_COUNT:
+                /* These are not real ids */
+                break;
+            case NFC_ADAPTER_PARAM_T4_NDEF:
+                /* b */
+                var = g_variant_new_boolean(v->b);
+                break;
+            case NFC_ADAPTER_PARAM_LA_NFCID1:
+                /* nfcid1 */
+                switch (v->nfcid1.len) {
+                case 0: case 4: case 7: case 10:
+                    var = dbus_service_dup_byte_array_as_variant
+                        (v->nfcid1.bytes, v->nfcid1.len);
+                    break;
+                }
+                break;
+            }
+        }
+        g_free(v);
+    }
+    return var;
+}
+
+static
+GVariant*
+dbus_service_adapter_get_params(
+    NfcAdapter* adapter)
+{
+    GVariantBuilder builder;
+    g_variant_builder_init(&builder, G_VARIANT_TYPE_VARDICT);
+
+    if (G_LIKELY(adapter)) {
+        const NFC_ADAPTER_PARAM* ids = nfc_adapter_param_list(adapter);
+        NFC_ADAPTER_PARAM id;
+
+        while ((id = *ids++) != NFC_ADAPTER_PARAM_NONE) {
+            const char* name = nfc_adapter_param_name(id);
+
+            if (name) {
+                dbus_service_dict_add_value(&builder, name,
+                    dbus_service_adapter_get_param_value(adapter, id));
+            }
+        }
+    }
+    return g_variant_builder_end(&builder);
+}
+
+static
+NfcAdapterParamRequest*
+dbus_service_adapter_param_request_new(
+    NfcAdapter* adapter,
+    GVariant* dict,
+    gboolean reset)
+{
+    GArray* params = g_array_new(FALSE, FALSE, sizeof(NfcAdapterParam));
+    const NfcAdapterParam** req_params = NULL;
+    NfcAdapterParamRequest* req;
+    GVariantIter it;
+    GVariant* entry;
+    guint i;
+
+    g_variant_iter_init(&it, dict);
+    while ((entry = g_variant_iter_next_value(&it)) != NULL) {
+        if (g_variant_n_children(entry) == 2) {
+            GVariant* tmp = NULL;
+            GVariant* s = g_variant_get_child_value(entry, 0);
+            GVariant* val = g_variant_get_child_value(entry, 1);
+            const char* name = g_variant_get_string(s, NULL);
+            GVariant* v = (g_variant_is_of_type(val, G_VARIANT_TYPE_VARIANT)) ?
+                (tmp = g_variant_get_variant(val)) : val;
+            NfcAdapterParam p;
+
+            memset(&p, 0, sizeof(p));
+            switch (p.id = nfc_adapter_param_id(name)) {
+            case NFC_ADAPTER_PARAM_NONE:
+            case NFC_ADAPTER_PARAM_COUNT:
+                /* These are not real ids */
+                break;
+            case NFC_ADAPTER_PARAM_T4_NDEF:
+                /* b */
+                if (g_variant_is_of_type(v, G_VARIANT_TYPE_BOOLEAN)) {
+                    p.value.b = g_variant_get_boolean(v);
+                    g_array_append_vals(params, &p, 1);
+                }
+                break;
+            case NFC_ADAPTER_PARAM_LA_NFCID1:
+                /* nfcid1 */
+                if (g_variant_is_of_type(v, G_VARIANT_TYPE_BYTESTRING)) {
+                    NfcId1* nfcid1 = &p.value.nfcid1;
+
+                    /* Empty NFCID1 means dynamic */
+                    switch ((nfcid1->len = g_variant_get_size(v))) {
+                    case 0: case 4: case 7: case 10:
+                        memcpy(nfcid1->bytes, g_variant_get_data(v),
+                            nfcid1->len);
+                        g_array_append_vals(params, &p, 1);
+                        break;
+                    }
+                }
+                break;
+            }
+            if (tmp) {
+                g_variant_unref(tmp);
+            }
+            g_variant_unref(val);
+            g_variant_unref(s);
+        }
+        g_variant_unref(entry);
+    }
+
+    req_params = g_new(const NfcAdapterParam*, params->len + 1);
+    for (i = 0; i < params->len; i++) {
+        req_params[i] = ((NfcAdapterParam*) params->data) + i;
+    }
+    req_params[i] = NULL;
+    req = nfc_adapter_param_request_new(adapter, req_params, reset);
+    g_array_free(params, TRUE);
+    g_free(req_params);
+    return req;
+}
+
 /*==========================================================================*
  * NfcAdapter events
  *==========================================================================*/
@@ -400,6 +616,26 @@ dbus_service_adapter_host_removed(
     }
 }
 
+static
+void
+dbus_service_adapter_param_changed(
+    NfcAdapter* adapter,
+    NFC_ADAPTER_PARAM id,
+    void* user_data)
+{
+    const char* name = nfc_adapter_param_name(id);
+
+    if (name) {
+        DBusServiceAdapter* self = user_data;
+        GVariant* v = dbus_service_adapter_get_param_value(self->adapter, id);
+
+        if (v) {
+            org_sailfishos_nfc_adapter_emit_param_changed(self->iface, name,
+                g_variant_new_variant(v));
+        }
+    }
+}
+
 /*==========================================================================*
  * D-Bus calls
  *==========================================================================*/
@@ -520,7 +756,7 @@ dbus_service_adapter_handle_get_tags(
     return TRUE;
 }
 
-/* Interface verson 2 */
+/* Interface version 2 */
 
 /* GetAll2 */
 
@@ -555,7 +791,7 @@ dbus_service_adapter_handle_get_peers(
     return TRUE;
 }
 
-/* Interface verson 3 */
+/* Interface version 3 */
 
 /* GetAll3 */
 
@@ -606,6 +842,119 @@ dbus_service_adapter_handle_get_supported_techs(
     return TRUE;
 }
 
+/* Interface version 4 */
+
+/* GetAll4 */
+
+static
+gboolean
+dbus_service_adapter_handle_get_all4(
+    OrgSailfishosNfcAdapter* iface,
+    GDBusMethodInvocation* call,
+    DBusServiceAdapter* self)
+{
+    NfcAdapter* adapter = self->adapter;
+
+    org_sailfishos_nfc_adapter_complete_get_all4(iface, call,
+        NFC_DBUS_ADAPTER_INTERFACE_VERSION, adapter->enabled, adapter->powered,
+        adapter->supported_modes, adapter->mode, adapter->target_present,
+        dbus_service_adapter_get_tag_paths(self),
+        dbus_service_adapter_get_peer_paths(self),
+        dbus_service_adapter_get_host_paths(self),
+        nfc_adapter_get_supported_techs(adapter),
+        dbus_service_adapter_get_params(adapter));
+    return TRUE;
+}
+
+/* GetParams */
+
+static
+gboolean
+dbus_service_adapter_handle_get_params(
+    OrgSailfishosNfcAdapter* iface,
+    GDBusMethodInvocation* call,
+    DBusServiceAdapter* self)
+{
+    org_sailfishos_nfc_adapter_complete_get_params(iface, call,
+        dbus_service_adapter_get_params(self->adapter));
+    return TRUE;
+}
+
+/* RequestParams */
+
+static
+gboolean
+dbus_service_adapter_handle_request_params(
+    OrgSailfishosNfcAdapter* iface,
+    GDBusMethodInvocation* call,
+    GVariant* dict,
+    gboolean reset,
+    DBusServiceAdapter* self)
+{
+    gpointer key;
+    const char* sender = g_dbus_method_invocation_get_sender(call);
+    NfcAdapterParamRequest* req = dbus_service_adapter_param_request_new
+        (self->adapter, dict, reset);
+    DBusServiceAdapterClient* client = dbus_service_adapter_client_get
+        (self, sender);
+
+    /* Lazily allocate request table */
+    if (!client->param_requests) {
+        client->param_requests = g_hash_table_new_full(g_direct_hash,
+            g_direct_equal, NULL, (GDestroyNotify)
+            nfc_adapter_param_request_free);
+    }
+
+    /* Generate unique id for this request */
+    self->last_request_id++;
+    key = GUINT_TO_POINTER(self->last_request_id);
+    while ((client->param_requests &&
+        g_hash_table_contains(client->param_requests, key)) ||
+        !self->last_request_id) {
+        self->last_request_id++;
+        key = GUINT_TO_POINTER(self->last_request_id);
+    }
+
+    GDEBUG("Param request %s/%u", sender, self->last_request_id);
+    g_hash_table_insert(client->param_requests, key, req);
+    org_sailfishos_nfc_adapter_complete_request_params(iface, call,
+        self->last_request_id);
+    return TRUE;
+}
+
+/* ReleaseParams */
+
+static
+gboolean
+dbus_service_adapter_handle_release_params(
+    OrgSailfishosNfcAdapter* iface,
+    GDBusMethodInvocation* call,
+    guint id,
+    DBusServiceAdapter* self)
+{
+    const char* sender = g_dbus_method_invocation_get_sender(call);
+    gboolean released = FALSE;
+
+    if (self->clients) {
+        DBusServiceAdapterClient* client = g_hash_table_lookup(self->clients,
+            sender);
+
+        released = (client && client->param_requests &&
+            g_hash_table_remove(client->param_requests, GUINT_TO_POINTER(id)));
+    }
+
+    if (released) {
+        GDEBUG("Param request %s/%u released", sender, id);
+        org_sailfishos_nfc_adapter_complete_release_params(iface, call);
+    } else {
+        GDEBUG("Param request %s/%u not found", sender, id);
+        g_dbus_method_invocation_return_error(call,
+            DBUS_SERVICE_ERROR, DBUS_SERVICE_ERROR_NOT_FOUND,
+                "Invalid param request %s/%u", sender, id);
+    }
+    return TRUE;
+}
+
 /*==========================================================================*
  * Interface
  *==========================================================================*/
@@ -615,6 +964,9 @@ void
 dbus_service_adapter_free_unexported(
     DBusServiceAdapter* self)
 {
+    if (self->clients) {
+        g_hash_table_destroy(self->clients);
+    }
     g_hash_table_destroy(self->tags);
     g_hash_table_destroy(self->peers);
     g_hash_table_destroy(self->hosts);
@@ -735,6 +1087,9 @@ dbus_service_adapter_new(
     self->event_id[EVENT_HOST_REMOVED] =
         nfc_adapter_add_host_removed_handler(adapter,
             dbus_service_adapter_host_removed, self);
+    self->event_id[EVENT_PARAM_CHANGED] =
+        nfc_adapter_add_param_changed_handler(adapter, NFC_ADAPTER_PARAM_ALL,
+            dbus_service_adapter_param_changed, self);
 
     /* Hook up D-Bus calls */
     #define CONNECT_HANDLER(CALL,call,name) self->call_id[CALL_##CALL] = \
