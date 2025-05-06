@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2020-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2020 Jolla Ltd.
  * Copyright (C) 2020 Open Mobile Platform LLC.
  *
@@ -47,6 +47,12 @@ GVariant*
 dbus_service_dup_byte_array_as_variant(
     const void* data,
     guint size);
+
+void
+dbus_service_dict_add_value(
+    GVariantBuilder* builder,
+    const char* name,
+    GVariant* value);
 
 void
 dbus_service_dict_add_byte(

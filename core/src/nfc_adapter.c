@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -54,6 +54,12 @@
 #define NFC_PEER_NAME_FORMAT "peer%u"
 #define NFC_HOST_NAME_FORMAT "host%u"
 
+struct nfc_adapter_param_request {
+    NfcAdapter* adapter;
+    GArray* params; /* contains NfcAdapterParam */
+    gboolean reset;
+};
+
 typedef struct nfc_adapter_object_entry {
     gpointer obj;
     gulong gone_id;
@@ -75,6 +81,9 @@ struct nfc_adapter_priv {
     gboolean mode_pending;
     gboolean power_submitted;
     gboolean power_pending;
+    NFC_ADAPTER_PARAM* supported_params;
+    gboolean t4_ndef;
+    GQueue param_requests;
 };
 
 #define THIS(obj) NFC_ADAPTER(obj)
@@ -98,6 +107,7 @@ enum nfc_adapter_signal {
     SIGNAL_PEER_REMOVED,
     SIGNAL_HOST_ADDED,
     SIGNAL_HOST_REMOVED,
+    SIGNAL_PARAM_CHANGED,
     SIGNAL_COUNT
 };
 
@@ -115,6 +125,7 @@ enum nfc_adapter_signal {
 #define SIGNAL_PEER_REMOVED_NAME        "nfc-adapter-peer-removed"
 #define SIGNAL_HOST_ADDED_NAME          "nfc-adapter-host-added"
 #define SIGNAL_HOST_REMOVED_NAME        "nfc-adapter-host-removed"
+#define SIGNAL_PARAM_CHANGED_NAME       "nfc-adapter-param-changed"
 
 static guint nfc_adapter_signals[SIGNAL_COUNT] = { 0 };
 
@@ -124,6 +135,39 @@ static guint nfc_adapter_signals[SIGNAL_COUNT] = { 0 };
 #define NEW_OBJECT_SIGNAL(name,type) nfc_adapter_signals[SIGNAL_##name] = \
     g_signal_new(SIGNAL_##name##_NAME, type, G_SIGNAL_RUN_FIRST, \
     0, NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_OBJECT)
+
+/* This must match the NFC_ADAPTER_PARAM enum */
+#define NFC_ADAPTER_PARAMS(p) \
+    p(T4_NDEF) \
+    p(LA_NFCID1)
+
+static const char* nfc_adapter_param_names[] = {
+    NULL, /* NFC_ADAPTER_PARAM_NONE */
+    #define _P(p) #p,
+    NFC_ADAPTER_PARAMS(_P)
+    #undef _P
+};
+
+static const char* nfc_adapter_param_detailed_signals[] = {
+    SIGNAL_PARAM_CHANGED_NAME, /* NFC_ADAPTER_PARAM_NONE */
+    #define _P(p) SIGNAL_PARAM_CHANGED_NAME "::" #p,
+    NFC_ADAPTER_PARAMS(_P)
+    #undef _P
+};
+
+/* If these ASSERTs fail, PARAMS macro must be updated */
+G_STATIC_ASSERT(G_N_ELEMENTS(nfc_adapter_param_names) ==
+    NFC_ADAPTER_PARAM_COUNT);
+G_STATIC_ASSERT(G_N_ELEMENTS(nfc_adapter_param_detailed_signals) ==
+    NFC_ADAPTER_PARAM_COUNT);
+
+/* These are being handled internally by nfcd */
+static const NFC_ADAPTER_PARAM nfc_adapter_builtin_params[] = {
+    NFC_ADAPTER_PARAM_T4_NDEF,
+    NFC_ADAPTER_PARAM_NONE
+};
+
+#define NFC_ADAPTER_PARAM_DEFAULT_T4_NDEF TRUE
 
 static
 void
@@ -518,9 +562,7 @@ nfc_adapter_add_peer_initiator(
             nfc_manager_peer_services(manager));
 
         nfc_manager_unref(manager);
-        if (peer) {
-            return nfc_adapter_add_peer(self, peer);
-        }
+        return nfc_adapter_add_peer(self, peer);
     }
     return NULL;
 }
@@ -540,9 +582,7 @@ nfc_adapter_add_peer_target(
             nfc_manager_peer_services(manager));
 
         nfc_manager_unref(manager);
-        if (peer) {
-            return nfc_adapter_add_peer(self, peer);
-        }
+        return nfc_adapter_add_peer(self, peer);
     }
     return NULL;
 }
@@ -566,6 +606,117 @@ nfc_adapter_host_gone(
         nfc_adapter_unref(self);
     }
     nfc_host_unref(host);
+}
+
+static
+gboolean
+nfc_adapter_params_contains_id(
+    const NFC_ADAPTER_PARAM* ids,
+    guint n,
+    NFC_ADAPTER_PARAM id)
+{
+    guint i;
+
+    for (i = 0; i < n; i++) {
+        if (ids[i] == id) {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+static
+void
+nfc_adapter_param_append_unique_ids(
+    GArray* ids,  /* Contains NFC_ADAPTER_PARAM */
+    const NFC_ADAPTER_PARAM* params) /* Zero terminated array */
+{
+    const NFC_ADAPTER_PARAM* p;
+
+    /* Make sure each id in the list is unique */
+    for (p = params; *p; p++) {
+        if (!nfc_adapter_params_contains_id((const NFC_ADAPTER_PARAM*)
+            ids->data, ids->len, *p)) {
+            g_array_append_vals(ids, p, 1);
+        }
+    }
+}
+
+static
+NfcAdapterParam*
+nfc_adapter_params_find(
+    GArray* params,
+    NFC_ADAPTER_PARAM id)
+{
+    uint i;
+
+    for (i = 0; i < params->len; i++) {
+        NfcAdapterParam* p = ((NfcAdapterParam*) params->data) + i;
+
+        if (p->id == id) {
+            return p;
+        }
+    }
+    return NULL;
+}
+
+static
+void
+nfc_adapter_update_params(
+    NfcAdapter* self)
+{
+    NfcAdapterClass* c = GET_THIS_CLASS(self);
+    NfcAdapterPriv* priv = self->priv;
+    GArray* params = g_array_new(FALSE, FALSE, sizeof(NfcAdapterParam));
+    GList* l;
+    uint i;
+
+    /* Merge outstanding requests */
+    for (l = priv->param_requests.head; l; l = l->next) {
+        NfcAdapterParamRequest* req = l->data;
+        GArray* rp = req->params;
+
+        if (req->reset) {
+            /* Drop all params that we've seen so far */
+            g_array_set_size(params, 0);
+            if (rp) {
+                g_array_append_vals(params, rp->data, rp->len);
+            }
+        } else if (rp) {
+            for (i = 0; i < rp->len; i++) {
+                NfcAdapterParam* p = ((NfcAdapterParam*) rp->data) + i;;
+                NfcAdapterParam* p1 = nfc_adapter_params_find(params, p->id);
+
+                if (p1) {
+                    /* Overwrite the existing param */
+                    *p1 = *p;
+                } else {
+                    /* Add a new param */
+                    g_array_append_vals(params, p, 1);
+                }
+            }
+        }
+    }
+
+    if (params->len) {
+        const NfcAdapterParam** p = g_new0(const NfcAdapterParam*,
+            params->len + 1);
+
+        for (i = 0; i < params->len; i++) {
+            p[i] = ((NfcAdapterParam*) params->data) + i;
+        }
+        p[i] = NULL;
+        c->set_params(self, p, TRUE);
+        g_free(p);
+    } else {
+        const NfcAdapterParam* none[1];
+
+        /* Full reset */
+        none[0] = NULL;
+        c->set_params(self, none, TRUE);
+    }
+
+    g_array_free(params, TRUE);
 }
 
 /*==========================================================================*
@@ -681,7 +832,9 @@ nfc_adapter_add_tag_t4a(
     const NfcParamIsoDepPollA* iso_dep_param) /* Since 1.0.20 */
 {
     if (G_LIKELY(self) && G_LIKELY(target)) {
-        NfcTagType4a* t4a = nfc_tag_t4a_new(target, tech_param, iso_dep_param);
+        NfcAdapterPriv* priv = self->priv;
+        NfcTagType4a* t4a = nfc_tag_t4a_new(target, priv->t4_ndef,
+            tech_param, iso_dep_param);
 
         if (t4a) {
             return nfc_adapter_add_tag(self, NFC_TAG(t4a));
@@ -698,7 +851,9 @@ nfc_adapter_add_tag_t4b(
     const NfcParamIsoDepPollB* iso_dep_param) /* Since 1.0.20 */
 {
     if (G_LIKELY(self) && G_LIKELY(target)) {
-        NfcTagType4b* t4b = nfc_tag_t4b_new(target, tech_param, iso_dep_param);
+        NfcAdapterPriv* priv = self->priv;
+        NfcTagType4b* t4b = nfc_tag_t4b_new(target, priv->t4_ndef,
+            tech_param, iso_dep_param);
 
         if (t4b) {
             return nfc_adapter_add_tag(self, NFC_TAG(t4b));
@@ -854,6 +1009,58 @@ nfc_adapter_add_host(
     return NULL;
 }
 
+const char*
+nfc_adapter_param_name(
+    NFC_ADAPTER_PARAM id) /* Since 1.2.2 */
+{
+    return (id >= 0 && id < NFC_ADAPTER_PARAM_COUNT) ?
+        nfc_adapter_param_names[id] : NULL;
+}
+
+NFC_ADAPTER_PARAM
+nfc_adapter_param_id(
+    const char* name) /* Since 1.2.2 */
+{
+    if (name) {
+        NFC_ADAPTER_PARAM id = 0;
+
+        for (id = 0; id < NFC_ADAPTER_PARAM_COUNT; id++) {
+            if (!g_strcmp0(name, nfc_adapter_param_names[id])) {
+                return id;
+            }
+        }
+    }
+    return NFC_ADAPTER_PARAM_NONE;
+}
+
+const NFC_ADAPTER_PARAM* /* Zero terminated */
+nfc_adapter_param_list(
+    NfcAdapter* self) /* Since 1.2.2 */
+{
+    if (G_LIKELY(self)) {
+        NfcAdapterPriv* priv = self->priv;
+
+        /* Allocate the list on demand */
+        if (!priv->supported_params) {
+            /* Make sure our internal properties are included */
+            priv->supported_params =
+                nfc_adapter_param_list_merge(nfc_adapter_builtin_params,
+                    GET_THIS_CLASS(self)->list_params(self), NULL);
+        }
+        return priv->supported_params;
+    }
+    return NULL;
+}
+
+NfcAdapterParamValue*
+nfc_adapter_param_get(
+    NfcAdapter* self,
+    NFC_ADAPTER_PARAM id) /* Since 1.2.2 */
+{
+    /* N.B. Caller frees the result with g_free() */
+    return G_LIKELY(self) ? GET_THIS_CLASS(self)->get_param(self, id) : NULL;
+}
+
 gulong
 nfc_adapter_add_target_presence_handler(
     NfcAdapter* self,
@@ -974,6 +1181,18 @@ nfc_adapter_add_enabled_changed_handler(
         SIGNAL_ENABLED_CHANGED_NAME, G_CALLBACK(func), user_data) : 0;
 }
 
+gulong
+nfc_adapter_add_param_changed_handler(
+    NfcAdapter* self,
+    NFC_ADAPTER_PARAM id,
+    NfcAdapterParamIdFunc func,
+    void* user_data) /* Since 1.2.2 */
+{
+    return (self && func && id >= 0 && id < NFC_ADAPTER_PARAM_COUNT) ?
+        g_signal_connect(self, nfc_adapter_param_detailed_signals[id],
+            G_CALLBACK(func), user_data) : 0;
+}
+
 void
 nfc_adapter_remove_handler(
     NfcAdapter* self,
@@ -1058,6 +1277,89 @@ nfc_adapter_target_notify(
     if (G_LIKELY(self)) {
         nfc_adapter_update_presence(self);
         nfc_adapter_emit_pending_signals(self);
+    }
+}
+
+void
+nfc_adapter_param_change_notify(
+    NfcAdapter* self,
+    NFC_ADAPTER_PARAM id) /* Since 1.2.2 */
+{
+    /* NFC_ADAPTER_PARAM_ALL means that all params have changed */
+    if (G_LIKELY(self) && id >= 0 && id < NFC_ADAPTER_PARAM_COUNT) {
+        g_object_ref(self);
+        g_signal_emit(self, nfc_adapter_signals[SIGNAL_PARAM_CHANGED],
+            g_quark_from_static_string(nfc_adapter_param_names[id]), id);
+        g_object_unref(self);
+    }
+}
+
+NFC_ADAPTER_PARAM*
+nfc_adapter_param_list_merge(
+    const NFC_ADAPTER_PARAM* params,
+    ...) /* Since 1.2.2 */
+{
+    GArray* ids = g_array_new(TRUE, TRUE, sizeof(NFC_ADAPTER_PARAM));
+
+    if (params) {
+        const NFC_ADAPTER_PARAM* p;
+        va_list args;
+
+        nfc_adapter_param_append_unique_ids(ids, params);
+        va_start(args, params);
+        p = va_arg(args, const NFC_ADAPTER_PARAM*);
+        while (p) {
+            nfc_adapter_param_append_unique_ids(ids, p);
+            p = va_arg(args, const NFC_ADAPTER_PARAM*);
+        }
+    }
+    return (NFC_ADAPTER_PARAM*) g_array_free(ids, FALSE);
+}
+
+NfcAdapterParamRequest*
+nfc_adapter_param_request_new(
+    NfcAdapter* self,
+    const NfcAdapterParam* const* params,
+    gboolean reset) /* Since 1.2.2 */
+{
+    if (G_LIKELY(self)) {
+        NfcAdapterPriv* priv = self->priv;
+        NfcAdapterParamRequest* req = g_slice_new0(NfcAdapterParamRequest);
+
+        if (params) {
+            int i;
+
+            for (i = 0; params[i]; i++);
+            req->params = g_array_sized_new(FALSE, FALSE,
+                sizeof(NfcAdapterParam), i);
+            for (i = 0; params[i]; i++) {
+                g_array_append_vals(req->params, params[i], 1);
+            }
+        }
+        req->reset = reset;
+        req->adapter = nfc_adapter_ref(self);
+        g_queue_push_tail(&priv->param_requests, req);
+        nfc_adapter_update_params(self);
+        return req;
+    }
+    return NULL;
+}
+
+void
+nfc_adapter_param_request_free(
+    NfcAdapterParamRequest* req) /* Since 1.2.2 */
+{
+    if (G_LIKELY(req)) {
+        NfcAdapter* self = req->adapter;
+        NfcAdapterPriv* priv = self->priv;
+
+        if (req->params) {
+            g_array_free(req->params, TRUE);
+        }
+        g_queue_remove(&priv->param_requests, req);
+        nfc_adapter_update_params(self);
+        nfc_adapter_unref(self);
+        gutil_slice_free(req);
     }
 }
 
@@ -1154,6 +1456,60 @@ nfc_adapter_default_set_allowed_techs(
 }
 
 static
+const NFC_ADAPTER_PARAM*
+nfc_adapter_default_list_params(
+    NfcAdapter* self)
+{
+    return nfc_adapter_builtin_params;
+}
+
+static
+NfcAdapterParamValue*
+nfc_adapter_default_get_param(
+    NfcAdapter* self,
+    NFC_ADAPTER_PARAM id)
+{
+    NfcAdapterPriv* priv = self->priv;
+    NfcAdapterParamValue* value = NULL;
+
+    if (id == NFC_ADAPTER_PARAM_T4_NDEF) {
+        (value = g_new0(NfcAdapterParamValue, 1))->b = priv->t4_ndef;
+    }
+    return value;
+}
+
+static
+void
+nfc_adapter_default_set_params(
+    NfcAdapter* self,
+    const NfcAdapterParam* const* params,
+    gboolean reset)
+{
+    NfcAdapterPriv* priv = self->priv;
+    const gboolean prev_t4_ndef = priv->t4_ndef;
+
+    if (reset) {
+        priv->t4_ndef = NFC_ADAPTER_PARAM_DEFAULT_T4_NDEF;
+    }
+
+    if (params) {
+        const NfcAdapterParam* const* ptr = params;
+
+        while (*ptr) {
+            const NfcAdapterParam* p = *ptr++;
+
+            if (p->id == NFC_ADAPTER_PARAM_T4_NDEF) {
+                priv->t4_ndef = p->value.b != FALSE;
+            }
+        }
+    }
+
+    if (priv->t4_ndef != prev_t4_ndef) {
+        nfc_adapter_param_change_notify(self, NFC_ADAPTER_PARAM_T4_NDEF);
+    }
+}
+
+static
 void
 nfc_adapter_init(
     NfcAdapter* self)
@@ -1171,6 +1527,8 @@ nfc_adapter_init(
         g_free, nfc_adapter_object_entry_free);
     priv->host_table = g_hash_table_new_full(g_str_hash, g_str_equal,
         g_free, nfc_adapter_object_entry_free);
+    priv->t4_ndef = NFC_ADAPTER_PARAM_DEFAULT_T4_NDEF;
+    g_queue_init(&priv->param_requests);
 }
 
 static
@@ -1210,6 +1568,7 @@ nfc_adapter_finalize(
     g_free(priv->peers);
     g_free(self->tags);
     g_free(priv->name);
+    g_free(priv->supported_params);
     G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }
 
@@ -1230,6 +1589,9 @@ nfc_adapter_class_init(
     klass->cancel_mode_request = nfc_adapter_default_cancel_request;
     klass->get_supported_techs = nfc_adapter_default_get_supported_techs;
     klass->set_allowed_techs = nfc_adapter_default_set_allowed_techs;
+    klass->list_params = nfc_adapter_default_list_params;
+    klass->get_param = nfc_adapter_default_get_param;
+    klass->set_params = nfc_adapter_default_set_params;
 
     NEW_SIGNAL(ENABLED_CHANGED, type);
     NEW_SIGNAL(POWERED, type);
@@ -1243,6 +1605,10 @@ nfc_adapter_class_init(
     NEW_OBJECT_SIGNAL(PEER_REMOVED, type);
     NEW_OBJECT_SIGNAL(HOST_ADDED, type);
     NEW_OBJECT_SIGNAL(HOST_REMOVED, type);
+    nfc_adapter_signals[SIGNAL_PARAM_CHANGED] =
+        g_signal_new(SIGNAL_PARAM_CHANGED_NAME, type,
+            G_SIGNAL_RUN_FIRST | G_SIGNAL_DETAILED, 0, NULL, NULL, NULL,
+            G_TYPE_NONE, 1, G_TYPE_POINTER);
 }
 
 /*

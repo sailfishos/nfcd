@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2020-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2020 Jolla Ltd.
  * Copyright (C) 2020 Open Mobile Platform LLC.
  *
@@ -42,7 +42,6 @@
 
 #include <gutil_misc.h>
 
-static
 void
 dbus_service_dict_add_value(
     GVariantBuilder* builder,

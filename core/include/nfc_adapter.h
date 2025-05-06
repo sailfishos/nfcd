@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -69,6 +69,25 @@ GType nfc_adapter_get_type(void) NFCD_EXPORT;
 #define NFC_ADAPTER(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
         NFC_TYPE_ADAPTER, NfcAdapter))
 
+typedef enum nfc_adapter_param_key {
+    NFC_ADAPTER_PARAM_NONE = 0, /* Special value, meaning all or any param */
+    NFC_ADAPTER_PARAM_T4_NDEF, /* (b) Request NDEF from Type4 tags */
+    NFC_ADAPTER_PARAM_LA_NFCID1, /* (nfcid1) NFCID1 in NFC-A Listen mode */
+    NFC_ADAPTER_PARAM_COUNT /* Number of known params, version dependent */
+} NFC_ADAPTER_PARAM; /* Since 1.2.2 */
+
+#define NFC_ADAPTER_PARAM_ALL NFC_ADAPTER_PARAM_NONE
+
+typedef union nfc_adapter_param_value {
+    gboolean b;
+    NfcId1 nfcid1;
+} NfcAdapterParamValue; /* Since 1.2.2 */
+
+typedef struct nfc_adapter_param {
+    NFC_ADAPTER_PARAM id;
+    NfcAdapterParamValue value;
+} NfcAdapterParam; /* Since 1.2.2 */
+
 typedef
 void
 (*NfcAdapterFunc)(
@@ -95,6 +114,13 @@ void
     NfcAdapter* adapter,
     NfcHost* host,
     void* user_data); /* Since 1.2.0 */
+
+typedef
+void
+(*NfcAdapterParamIdFunc)(
+    NfcAdapter* adapter,
+    NFC_ADAPTER_PARAM id,
+    void* user_data); /* Since 1.2.2 */
 
 NfcAdapter*
 nfc_adapter_ref(
@@ -220,6 +246,28 @@ nfc_adapter_add_host(
     NfcInitiator* initiator) /* Since 1.2.0 */
     NFCD_EXPORT;
 
+const char*
+nfc_adapter_param_name(
+    NFC_ADAPTER_PARAM id) /* Since 1.2.2 */
+    NFCD_EXPORT;
+
+NFC_ADAPTER_PARAM
+nfc_adapter_param_id(
+    const char* name) /* Since 1.2.2 */
+    NFCD_EXPORT;
+
+const NFC_ADAPTER_PARAM* /* Zero terminated */
+nfc_adapter_param_list(
+    NfcAdapter* adapter) /* Since 1.2.2 */
+    NFCD_EXPORT;
+
+NfcAdapterParamValue*
+nfc_adapter_param_get(
+    NfcAdapter* adapter,
+    NFC_ADAPTER_PARAM id) /* Since 1.2.2 */
+    G_GNUC_WARN_UNUSED_RESULT
+    NFCD_EXPORT;
+
 gulong
 nfc_adapter_add_target_presence_handler(
     NfcAdapter* adapter,
@@ -304,6 +352,14 @@ nfc_adapter_add_enabled_changed_handler(
     void* user_data)
     NFCD_EXPORT;
 
+gulong
+nfc_adapter_add_param_changed_handler(
+    NfcAdapter* adapter,
+    NFC_ADAPTER_PARAM id,
+    NfcAdapterParamIdFunc func,
+    void* user_data) /* Since 1.2.2 */
+    NFCD_EXPORT;
+
 void
 nfc_adapter_remove_handler(
     NfcAdapter* adapter,
@@ -319,6 +375,39 @@ nfc_adapter_remove_handlers(
 
 #define nfc_adapter_remove_all_handlers(adapter,ids) \
     nfc_adapter_remove_handlers(adapter, ids, G_N_ELEMENTS(ids))
+
+/*
+ * Parameter requests modify multiple NFC adapter parameters at once.
+ * Requests are applied in the order in which they are submitted.
+ * They can be freed in any order, not necessarily in the order
+ * in which they are created.
+ *
+ * This is the way to coordinate changes made by different plugins and/or
+ * different apps. For example, when the app updates some NFC adapter
+ * parameters and then exits, the changes made by this app should be undone,
+ * at the same time preserving the changes made by other apps. A stack of
+ * NfcAdapterParamRequests makes it easier.
+ *
+ * Note that each NfcAdapterParamRequest carries an implicit reference to
+ * NfcAdapter. The adapter won't be actually freed until all parameter
+ * requests are freed.
+ */
+
+typedef struct nfc_adapter_param_request
+    NfcAdapterParamRequest; /* Since 1.2.2 */
+
+NfcAdapterParamRequest*
+nfc_adapter_param_request_new(
+    NfcAdapter* adapter,
+    const NfcAdapterParam* const* params,
+    gboolean reset) /* Since 1.2.2 */
+    G_GNUC_WARN_UNUSED_RESULT
+    NFCD_EXPORT;
+
+void
+nfc_adapter_param_request_free(
+    NfcAdapterParamRequest* req) /* Since 1.2.2 */
+    NFCD_EXPORT;
 
 G_END_DECLS
 
