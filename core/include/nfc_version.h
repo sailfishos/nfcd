@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2022 Jolla Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -42,7 +42,7 @@
 
 #define NFC_VERSION_MAJOR 1
 #define NFC_VERSION_MINOR 2
-#define NFC_VERSION_RELEASE 0
+#define NFC_VERSION_RELEASE 2
 
 #define NFC_VERSION_WORD(v1,v2,v3) \
     ((((v1) & 0x7f) << 24) | \
@@ -63,6 +63,7 @@
 
 /* Specific versions */
 #define NCI_CORE_VERSION_1_2_0  NFC_VERSION_WORD(1,2,0)
+#define NCI_CORE_VERSION_1_2_2  NFC_VERSION_WORD(1,2,2)
 
 #endif /* NFC_VERSION_H */
 
