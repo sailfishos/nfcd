@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2023-2025 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of the BSD license as follows:
  *
@@ -1462,29 +1462,17 @@ test_broken_apdu1(
         { TEST_ARRAY_AND_SIZE(cmd_broken) },
         { TEST_ARRAY_AND_SIZE(resp_err) }
     };
-    TestHostService* service = test_host_service_new("TestService");
-    NfcHostService* services[2];
     NfcInitiator* initiator = test_initiator_new_with_tx(&tx, 1);
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
-    gulong id[2];
-    NfcHost* host;
-
-    services[0] = NFC_HOST_SERVICE(service);
-    services[1] = NULL;
-    host = nfc_host_new("TestHost", initiator, services, NULL);
-    id[0] = nfc_host_add_app_changed_handler(host, test_host_not_reached, NULL);
-    id[1] = nfc_host_add_gone_handler(host, test_host_done_quit, loop);
+    NfcHost* host = nfc_host_new("TestHost", initiator, NULL, NULL);
+    gulong id = nfc_host_add_gone_handler(host, test_host_done_quit, loop);
 
     nfc_host_start(host);
     test_run(&test_opt, loop);
 
-    /* We fail to parse APDU even before the service gets started */
-    g_assert_cmpint(service->start, == ,0);
-
     g_main_loop_unref(loop);
     nfc_initiator_unref(initiator);
-    nfc_host_service_unref(services[0]);
-    nfc_host_remove_all_handlers(host, id);
+    nfc_host_remove_handler(host, id);
     nfc_host_unref(host);
 }
 
@@ -1517,7 +1505,7 @@ test_broken_apdu2(
     TestHostService* service = test_host_service_new("TestService");
     NfcHostService* services[2];
     NfcInitiator* init = test_initiator_new_with_tx2
-        (TEST_ARRAY_AND_COUNT(tx), TRUE);
+        (TEST_ARRAY_AND_COUNT(tx), FALSE);
     GMainLoop* loop = g_main_loop_new(NULL, TRUE);
     gulong id[2];
     NfcHost* host;

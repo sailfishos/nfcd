@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2019 Jolla Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -462,7 +462,7 @@ static const guint8 test_apdu_encoded_case4e_lc_256_le_65536[] = {
     0x00 /* Le */
 };
 
-static const TestApduEncodeData tests_apdu_encode[] = {
+static const TestApduEncodeData tests_apdu_encode_decode[] = {
     /* Case 1:  |CLA|INS|P1|P2|
      * Lc = 0, Le = 0, n = 4 */
     {
@@ -476,13 +476,11 @@ static const TestApduEncodeData tests_apdu_encode[] = {
         "case2s/le_1",
         { 0x01, 0x02, 0x03, 0x04, { NULL, 0 }, 1 },
         { TEST_ARRAY_AND_SIZE(test_apdu_encoded_case2s_le_1) }
-    },
-    {
+    },{
         "case2s/le_255",
         { 0x01, 0x02, 0x03, 0x04, { NULL, 0 }, 255 },
         { TEST_ARRAY_AND_SIZE(test_apdu_encoded_case2s_le_255) }
-    },
-    {
+    },{
         "case2s/le_256",
         { 0x01, 0x02, 0x03, 0x04, { NULL, 0 }, 256 },
         { TEST_ARRAY_AND_SIZE(test_apdu_encoded_case2s_le_256) }
@@ -493,18 +491,15 @@ static const TestApduEncodeData tests_apdu_encode[] = {
         "case2e/le_257",
         { 0x01, 0x02, 0x03, 0x04, { NULL, 0 }, 257 },
         { TEST_ARRAY_AND_SIZE(test_apdu_encoded_case2e_le_257) }
-    },
-    {
+    },{
         "case2e/le_512",
         { 0x01, 0x02, 0x03, 0x04, { NULL, 0 }, 512 },
         { TEST_ARRAY_AND_SIZE(test_apdu_encoded_case2e_le_512) }
-    },
-    {
+    },{
         "case2e/le_65535",
         { 0x01, 0x02, 0x03, 0x04, { NULL, 0 }, 65535 },
         { TEST_ARRAY_AND_SIZE(test_apdu_encoded_case2e_le_65535) }
-    },
-    {
+    },{
         "case2e/le_65536",
         { 0x01, 0x02, 0x03, 0x04, { NULL, 0 }, 65536 },
         { TEST_ARRAY_AND_SIZE(test_apdu_encoded_case2e_le_65536) }
@@ -516,8 +511,7 @@ static const TestApduEncodeData tests_apdu_encode[] = {
         { 0x01, 0x02, 0x03, 0x04,
         { test_apdu_encoded_case3s_lc_2 + 5, 2 }, 0 },
         { TEST_ARRAY_AND_SIZE(test_apdu_encoded_case3s_lc_2) }
-    },
-    {
+    },{
         "case3s/lc_255",
         { 0x01, 0x02, 0x03, 0x04,
         { test_apdu_encoded_case3s_lc_255 + 5, 255 }, 0 },
@@ -538,14 +532,12 @@ static const TestApduEncodeData tests_apdu_encode[] = {
         { 0x01, 0x02, 0x03, 0x04,
         { test_apdu_encoded_case4s_lc_1_le_1 + 5, 1 }, 1 },
         { TEST_ARRAY_AND_SIZE(test_apdu_encoded_case4s_lc_1_le_1) }
-    },
-    {
+    },{
         "case4s/lc_2_le_256",
         { 0x01, 0x02, 0x03, 0x04,
         { test_apdu_encoded_case4s_lc_2_le_256 + 5, 2 }, 256 },
         { TEST_ARRAY_AND_SIZE(test_apdu_encoded_case4s_lc_2_le_256) }
-    },
-    {
+    },{
         "case4s/lc_255_le_2",
         { 0x01, 0x02, 0x03, 0x04,
         { test_apdu_encoded_case4s_lc_255_le_2 + 5, 255 }, 2 },
@@ -558,14 +550,12 @@ static const TestApduEncodeData tests_apdu_encode[] = {
         { 0x01, 0x02, 0x03, 0x04,
         { test_apdu_encoded_case4e_lc_256_le_1 + 7, 256 }, 1 },
         { TEST_ARRAY_AND_SIZE(test_apdu_encoded_case4e_lc_256_le_1) }
-    },
-    {
+    },{
         "case4e/lc_256_le_256",
         { 0x01, 0x02, 0x03, 0x04,
         { test_apdu_encoded_case4e_lc_256_le_256 + 7, 256 }, 256 },
         { TEST_ARRAY_AND_SIZE(test_apdu_encoded_case4e_lc_256_le_256) }
-    },
-    {
+    },{
         "case4e/lc_256_le_65356",
         { 0x01, 0x02, 0x03, 0x04,
         { test_apdu_encoded_case4e_lc_256_le_65536 + 7, 256 }, 65536 },
@@ -612,6 +602,61 @@ test_apdu_decode(
 }
 
 /*==========================================================================*
+ * apdu/response
+ *==========================================================================*/
+
+typedef struct test_apdu_response_data {
+    const char* name;
+    guint sw;
+    const GUtilData* data;
+    GUtilData out;
+} TestApduResponseData;
+
+static const guint8 test_apdu_response_data_in_bytes[] = {
+    0x01
+};
+static const guint8 test_apdu_response_data_out_nodata[] = {
+    0x90, 0x00
+};
+static const guint8 test_apdu_response_data_out_data[] = {
+    0x01, 0x90, 0x00
+};
+static const GUtilData test_apdu_response_data_in = {
+    TEST_ARRAY_AND_SIZE(test_apdu_response_data_in_bytes)
+};
+static const GUtilData test_apdu_response_data_empty = { NULL, 0 };
+
+static const TestApduResponseData tests_apdu_response[] = {
+    {
+        "null",
+        0x9000, NULL,
+        { TEST_ARRAY_AND_SIZE(test_apdu_response_data_out_nodata) }
+    },{
+        "empty",
+        0x9000, &test_apdu_response_data_empty,
+        { TEST_ARRAY_AND_SIZE(test_apdu_response_data_out_nodata) }
+    },{
+        "data",
+        0x9000, &test_apdu_response_data_in,
+        { TEST_ARRAY_AND_SIZE(test_apdu_response_data_out_data) }
+    }
+};
+
+static
+void
+test_apdu_response(
+    gconstpointer data)
+{
+    const TestApduResponseData* test = data;
+    GBytes* bytes = nfc_apdu_response_new(test->sw, test->data);
+    gsize size = 0;
+    gconstpointer out = g_bytes_get_data(bytes, &size);
+
+    g_assert_cmpmem(test->out.bytes, test->out.size, out, size);
+    g_bytes_unref(bytes);
+}
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -625,8 +670,8 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("hexdump"), test_hexdump);
     g_test_add_func(TEST_("apdu/encode/fail"), test_apdu_encode_fail);
     g_test_add_func(TEST_("apdu/decode/fail"), test_apdu_decode_fail);
-    for (i = 0; i < G_N_ELEMENTS(tests_apdu_encode); i++) {
-        const TestApduEncodeData* test = tests_apdu_encode + i;
+    for (i = 0; i < G_N_ELEMENTS(tests_apdu_encode_decode); i++) {
+        const TestApduEncodeData* test = tests_apdu_encode_decode + i;
         char* path1 = g_strconcat(TEST_("apdu/encode/"), test->name, NULL);
         char* path2 = g_strconcat(TEST_("apdu/decode/"), test->name, NULL);
 
@@ -634,6 +679,13 @@ int main(int argc, char* argv[])
         g_test_add_data_func(path2, test, test_apdu_decode);
         g_free(path1);
         g_free(path2);
+    }
+    for (i = 0; i < G_N_ELEMENTS(tests_apdu_response); i++) {
+        const TestApduResponseData* test = tests_apdu_response + i;
+        char* path = g_strconcat(TEST_("apdu/response/"), test->name, NULL);
+
+        g_test_add_data_func(path, test, test_apdu_response);
+        g_free(path);
     }
     test_init(&test_opt, argc, argv);
     return g_test_run();

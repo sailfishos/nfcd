@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2020 Jolla Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -257,6 +257,27 @@ nfc_apdu_decode(
         /* Broken APDU */
         return FALSE;
     }
+}
+
+GBytes*
+nfc_apdu_response_new(
+    guint sw, /* 16 bits (SW1 << 8)|SW2 */
+    const GUtilData* data)
+{
+    guchar* buf;
+    guchar* ptr;
+
+    if (data && data->size) {
+        buf = g_malloc(data->size + 2);
+        memcpy(buf, data->bytes, data->size);
+        ptr = buf + data->size;
+    } else {
+        ptr = buf = g_malloc(2);
+    }
+
+    *ptr++ = (guchar)(sw >> 8); /* SW1 */
+    *ptr++ = (guchar)sw;        /* SW2 */
+    return g_bytes_new_take(buf, ptr - buf);
 }
 
 /*

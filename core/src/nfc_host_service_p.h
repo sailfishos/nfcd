@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2023-2025 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of the BSD license as follows:
  *
@@ -74,6 +74,16 @@ void
 nfc_host_service_cancel(
     NfcHostService* service,
     guint id)
+    NFCD_INTERNAL;
+
+guint
+nfc_host_service_transceive(
+    NfcHostService* service,
+    NfcHost* host,
+    const GUtilData* data,
+    NfcHostServiceTransceiveResponseFunc resp,
+    void* user_data,
+    GDestroyNotify destroy)
     NFCD_INTERNAL;
 
 #endif /* NFC_HOST_SERVICE_PRIVATE_H */

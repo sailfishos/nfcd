@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2020 Jolla Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -67,6 +67,12 @@ nfc_apdu_encode(
 gboolean
 nfc_apdu_decode(
     NfcApdu* apdu,
+    const GUtilData* data)
+    NFCD_INTERNAL;
+
+GBytes*
+nfc_apdu_response_new(
+    guint sw, /* 16 bits (SW1 << 8)|SW2 */
     const GUtilData* data)
     NFCD_INTERNAL;
 
