@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2023-2025 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of the BSD license as follows:
  *
@@ -63,6 +63,8 @@
 
 #define TEST_DBUS_TIMEOUT \
     ((test_opt.flags & TEST_FLAG_DEBUG) ? -1 : TEST_TIMEOUT_MS)
+
+#define TEST_RESPONSE_ID (42)
 
 static const char test_host_service_path[] = "/test_host";
 static const char test_host_service_name[] = "TestHost";
@@ -252,8 +254,22 @@ test_call_register_local_host_service(
     GAsyncReadyCallback callback)
 {
     test_client_call(test, "RegisterLocalHostService",
-         g_variant_new ("(os)", path, name),
-         callback);
+        g_variant_new("(os)", path, name),
+        callback);
+}
+
+static
+void
+test_call_register_local_host_service2(
+    TestData* test,
+    const char* path,
+    const char* name,
+    int version,
+    GAsyncReadyCallback callback)
+{
+    test_client_call(test, "RegisterLocalHostService2",
+        g_variant_new("(osi)", path, name, version),
+        callback);
 }
 
 static
@@ -264,8 +280,57 @@ test_call_unregister_local_host_service(
     GAsyncReadyCallback callback)
 {
     test_client_call(test, "UnregisterLocalHostService",
-        g_variant_new ("(o)", path),
+        g_variant_new("(o)", path),
         callback);
+}
+
+static
+gboolean
+test_handle_response_status(
+    OrgSailfishosNfcLocalHostService* service,
+    GDBusMethodInvocation* call,
+    guint response_id,
+    gboolean ok,
+    TestData* test)
+{
+    GDEBUG("Response delivered");
+    g_assert_cmpuint(response_id, == ,TEST_RESPONSE_ID);
+    g_assert(ok);
+    org_sailfishos_nfc_local_host_service_complete_response_status
+        (service, call);
+    test_quit_later_n(test->loop, 1);
+    return TRUE;
+}
+
+static
+gboolean
+test_process_unreachable(
+    OrgSailfishosNfcLocalHostService* service,
+    GDBusMethodInvocation* call,
+    const char* host,
+    guchar cla,
+    guchar ins,
+    guchar p1,
+    guchar p2,
+    GVariant* data,
+    guint le,
+    TestData* test)
+{
+    g_assert_not_reached();
+    return FALSE;
+}
+
+static
+gboolean
+test_transceive_unreachable(
+    OrgSailfishosNfcLocalHostService* service,
+    GDBusMethodInvocation* call,
+    const char* host,
+    GVariant* data,
+    TestData* test)
+{
+    g_assert_not_reached();
+    return FALSE;
 }
 
 /*==========================================================================*
@@ -285,6 +350,28 @@ g_dbus_method_invocation_get_sender(
 
 static
 void
+test_basic_unregisteration_failure(
+    GObject* object,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    GError* error = NULL;
+
+    /* Failure is expected */
+    g_assert(!g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
+        result, &error));
+    g_assert(g_error_matches(error, DBUS_SERVICE_ERROR,
+        DBUS_SERVICE_ERROR_NOT_FOUND));
+    GDEBUG("%s (expected)", error->message);
+    g_error_free(error);
+
+    /* Done */
+    test_initiator_deactivate_later(test->initiator);
+}
+
+static
+void
 test_basic_unregistered(
     GObject* object,
     GAsyncResult* result,
@@ -299,7 +386,10 @@ test_basic_unregistered(
     g_variant_unref(ret);
 
     GDEBUG("%s has been unregistered", test_host_service_name);
-    test_initiator_deactivate_later(test->initiator);
+
+    /* Try to unregister the same thing again (and fail) */
+    test_call_unregister_local_host_service(test, test_host_service_path,
+        test_basic_unregisteration_failure);
 }
 
 static
@@ -456,31 +546,12 @@ test_no_process(
  * process
  *==========================================================================*/
 
-#define TEST_RESPONSE_ID (42)
 static const guchar test_process_cmd[] = {
     0x90, 0x5a, 0x00, 0x00, 0x03, 0x14, 0x20, 0xef, 0x00
 };
 static const guchar test_process_resp[] = {
     0x90, 0x00
 };
-
-static
-gboolean
-test_process_handle_response_status(
-    OrgSailfishosNfcLocalHostService* service,
-    GDBusMethodInvocation* call,
-    guint response_id,
-    gboolean ok,
-    TestData* test)
-{
-    GDEBUG("Response delivered");
-    g_assert_cmpuint(response_id, == ,TEST_RESPONSE_ID);
-    g_assert(ok);
-    org_sailfishos_nfc_local_host_service_complete_response_status
-        (service, call);
-    test_quit_later_n(test->loop, 1);
-    return TRUE;
-}
 
 static
 gboolean
@@ -512,8 +583,8 @@ test_process_handle_apdu(
     apdu.data.size = g_variant_get_size(data);
     apdu.le = le;
     g_assert(nfc_apdu_encode(buf, &apdu));
-    g_assert_cmpuint(buf->len, == ,sizeof(test_process_cmd));
-    g_assert(!memcmp(buf->data, test_process_cmd, buf->len));
+    g_assert_cmpmem(buf->data, buf->len, test_process_cmd,
+        sizeof(test_process_cmd));
     g_byte_array_free(buf, TRUE);
 
     org_sailfishos_nfc_local_host_service_complete_process(service, call,
@@ -549,14 +620,16 @@ test_process_registered(
     g_signal_connect(test->service, "handle-process",
         G_CALLBACK(test_process_handle_apdu), test);
     g_signal_connect(test->service, "handle-response-status",
-        G_CALLBACK(test_process_handle_response_status), test);
+        G_CALLBACK(test_handle_response_status), test);
+    g_signal_connect(test->service, "handle-transceive", /* Not expected */
+        G_CALLBACK(test_transceive_unreachable), test);
 
     test_activate(test, TEST_ARRAY_AND_COUNT(tx), TRUE);
 }
 
 static
 void
-test_process_start(
+test_process_start1(
     GDBusConnection* client,
     GDBusConnection* server,
     void* user_data)
@@ -570,14 +643,141 @@ test_process_start(
 
 static
 void
+test_process_start2(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+
+    /*
+     * even though the handler is registered with RegisterLocalHostService2,
+     * nfcd still calls Process (rather than Transceive) if the protocol
+     * version is 1.
+     */
+    test_started(test, client, server);
+    test_call_register_local_host_service2(test, test_host_service_path,
+        test_host_service_name, 1, test_process_registered);
+}
+
+static
+void
 test_process(
+    TestDBusStartFunc fn)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_data_init(&test);
+    dbus = test_dbus_new2(test_start, fn, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+static
+void
+test_process_1(
+    void)
+{
+    test_process(test_process_start1);
+}
+
+static
+void
+test_process_2(
+    void)
+{
+    test_process(test_process_start2);
+}
+
+/*==========================================================================*
+ * transceive
+ *==========================================================================*/
+
+static const guchar test_transceive_in[] = {
+    0x01, 0x02
+};
+static const guchar test_transceive_out[] = {
+    0x03
+};
+
+static
+gboolean
+test_transceive_handler(
+    OrgSailfishosNfcLocalHostService* service,
+    GDBusMethodInvocation* call,
+    const char* host,
+    GVariant* data,
+    TestData* test)
+{
+    GDEBUG("Host %s handled the data", host);
+    g_assert_cmpmem(g_variant_get_data(data), g_variant_get_size(data),
+        test_transceive_in, sizeof(test_transceive_in));
+    org_sailfishos_nfc_local_host_service_complete_transceive(service, call,
+        dbus_service_dup_byte_array_as_variant(test_transceive_out,
+        sizeof(test_transceive_out)), TEST_RESPONSE_ID);
+    return TRUE;
+}
+
+static
+void
+test_transceive_registered(
+    GObject* object,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    static const TestTx tx[] = {
+        {
+            { TEST_ARRAY_AND_SIZE(test_transceive_in) },
+            { TEST_ARRAY_AND_SIZE(test_transceive_out) }
+        }
+    };
+
+    TestData* test = user_data;
+    GError* error = NULL;
+    GVariant* ret = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
+       result, &error);
+
+    g_assert(ret);
+    g_variant_unref(ret);
+
+    g_signal_connect(test->service, "handle-start",
+        G_CALLBACK(test_handle_start), test);
+    g_signal_connect(test->service, "handle-process", /* Not expected */
+        G_CALLBACK(test_process_unreachable), test);
+    g_signal_connect(test->service, "handle-response-status",
+        G_CALLBACK(test_handle_response_status), test);
+    g_signal_connect(test->service, "handle-transceive",
+        G_CALLBACK(test_transceive_handler), test);
+
+    test_activate(test, TEST_ARRAY_AND_COUNT(tx), TRUE);
+}
+
+static
+void
+test_transceive_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+
+    test_started(test, client, server);
+    test_call_register_local_host_service2(test, test_host_service_path,
+        test_host_service_name, 2, test_transceive_registered);
+}
+
+static
+void
+test_transceive(
     void)
 {
     TestData test;
     TestDBus* dbus;
 
     test_data_init(&test);
-    dbus = test_dbus_new2(test_start, test_process_start, &test);
+    dbus = test_dbus_new2(test_start, test_transceive_start, &test);
     test_run(&test_opt, test.loop);
     test_data_cleanup(&test);
     test_dbus_free(dbus);
@@ -597,7 +797,9 @@ int main(int argc, char* argv[])
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("basic"), test_basic);
     g_test_add_func(TEST_("no_process"), test_no_process);
-    g_test_add_func(TEST_("process"), test_process);
+    g_test_add_func(TEST_("process/1"), test_process_1);
+    g_test_add_func(TEST_("process/2"), test_process_2);
+    g_test_add_func(TEST_("transceive"), test_transceive);
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

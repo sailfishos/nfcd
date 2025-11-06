@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2023-2025 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of the BSD license as follows:
  *
@@ -47,6 +47,7 @@
 #include <gutil_misc.h>
 
 typedef NfcHostServiceClass DBusServiceLocalHostObjectClass;
+typedef DBusServiceLocalHostObjectClass DBusServiceLocalHostObject2Class;
 typedef struct dbus_service_local_host_object {
     DBusServiceLocalHost pub;
     OrgSailfishosNfcLocalHostService* proxy;
@@ -57,17 +58,24 @@ typedef struct dbus_service_local_host_object {
     char* host_path;
     char* dbus_name;
     char* obj_path;
-} DBusServiceLocalHostObject;
+} DBusServiceLocalHostObject,
+  DBusServiceLocalHostObject2;
 
 #define PARENT_TYPE NFC_TYPE_HOST_SERVICE
 #define PARENT_CLASS dbus_service_local_host_object_parent_class
 #define THIS_TYPE dbus_service_local_host_object_get_type()
-#define THIS_CLASS(klass) NFC_HOST_SERVICE_CLASS(klass)
+#define THIS_TYPE2 dbus_service_local_host_object2_get_type()
 #define THIS(obj) G_TYPE_CHECK_INSTANCE_CAST(obj, THIS_TYPE, \
         DBusServiceLocalHostObject)
 
+/*
+ * DBusServiceLocalHostObject2 implements transceive() but otherwise it's
+ * the same thing as DBusServiceLocalHostObject.
+ */
 G_DEFINE_TYPE(DBusServiceLocalHostObject, dbus_service_local_host_object, \
         PARENT_TYPE)
+G_DEFINE_TYPE(DBusServiceLocalHostObject2, dbus_service_local_host_object2, \
+        THIS_TYPE)
 
 #define LOCAL_HOST_INTERFACE "org.sailfishos.nfc.LocalHostService"
 #define STOP_CALL            "Stop"
@@ -419,24 +427,12 @@ dbus_service_local_host_object_process_done(
 
     if (org_sailfishos_nfc_local_host_service_call_process_finish(self->proxy,
         &resp_var, &sw1, &sw2, &response_id, result, &error)) {
-        const gsize len = g_variant_get_size(resp_var);
-
-#if GUTIL_LOG_DEBUG
-        if (GLOG_ENABLED(GLOG_LEVEL_DEBUG)) {
-            char* tmp = NULL;
-
-            GDEBUG("R-APDU %s%s%02X%02X",
-                len ? (tmp = gutil_bin2hex(g_variant_get_data(resp_var),
-                len, TRUE)) : "", len ? " " : "", sw1, sw2);
-            g_free(tmp);
-        }
-#endif
         if (completed && cb) {
             NfcHostServiceResponse resp;
 
             memset(&resp, 0, sizeof(resp));
             resp.sw = (((guint)sw1) << 8) | sw2;
-            resp.data.size = len;
+            resp.data.size = g_variant_get_size(resp_var);
             resp.data.bytes = g_variant_get_data(resp_var);
 
             if (response_id) {
@@ -509,6 +505,77 @@ dbus_service_local_host_object_cancel(
 
 static
 void
+dbus_service_local_host_object_transceive_done(
+    GObject* proxy,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    DBusServiceLocalHostObjectCall* call = user_data;
+    DBusServiceLocalHostObject* self = call->obj;
+    NfcHostServiceTransceiveResponseFunc cb =
+        (NfcHostServiceTransceiveResponseFunc)call->complete;
+    GError* error = NULL;
+    gboolean completed = dbus_service_local_host_object_call_done(call);
+    guint response_id = 0;
+    GVariant* resp_var = NULL;
+
+    if (org_sailfishos_nfc_local_host_service_call_transceive_finish(self->
+        proxy, &resp_var, &response_id, result, &error)) {
+
+        if (completed && cb) {
+            NfcHostServiceTransceiveResponse resp;
+
+            memset(&resp, 0, sizeof(resp));
+            resp.data = g_variant_get_data_as_bytes(resp_var);
+
+            if (response_id) {
+                GDEBUG("Response id %u", response_id);
+                resp.sent = dbus_service_local_host_object_response_complete;
+                resp.user_data = dbus_service_local_host_object_response_new
+                    (self, response_id);
+            }
+
+            cb(NFC_HOST_SERVICE(self), &resp, call->user_data);
+            g_bytes_unref(resp.data);
+        }
+        g_variant_unref(resp_var);
+    } else {
+        GDEBUG("%s%s transceive %s", self->dbus_name, self->obj_path,
+            GERRMSG(error));
+        g_error_free(error);
+        if (completed && cb) {
+            cb(NFC_HOST_SERVICE(self), NULL, call->user_data);
+        }
+    }
+
+    dbus_service_local_host_object_call_unref(call);
+}
+
+static
+guint
+dbus_service_local_host_object_transceive(
+    NfcHostService* service,
+    NfcHost* host,
+    const GUtilData* data,
+    NfcHostServiceTransceiveResponseFunc resp,
+    void* user_data,
+    GDestroyNotify destroy)
+{
+    DBusServiceLocalHostObject* self = THIS(service);
+    DBusServiceLocalHostObjectCall* call =
+        dbus_service_local_host_object_call_new(self,
+            G_CALLBACK(resp), user_data, destroy);
+    const uint id = call->id;
+
+    org_sailfishos_nfc_local_host_service_call_transceive(self->proxy,
+        self->host_path, gutil_data_copy_as_variant(data), call->cancel,
+        dbus_service_local_host_object_transceive_done,
+        dbus_service_local_host_object_call_ref(call));
+    return id;
+}
+
+static
+void
 dbus_service_local_host_object_finalize(
     GObject* object)
 {
@@ -537,13 +604,29 @@ void
 dbus_service_local_host_object_class_init(
     DBusServiceLocalHostObjectClass* klass)
 {
-    NfcHostServiceClass* service_class = THIS_CLASS(klass);
+    NfcHostServiceClass* service_class = NFC_HOST_SERVICE_CLASS(klass);
 
     service_class->start = dbus_service_local_host_object_start;
     service_class->restart = dbus_service_local_host_object_restart;
     service_class->process = dbus_service_local_host_object_process;
     service_class->cancel = dbus_service_local_host_object_cancel;
     G_OBJECT_CLASS(klass)->finalize = dbus_service_local_host_object_finalize;
+}
+
+static
+void
+dbus_service_local_host_object2_init(
+    DBusServiceLocalHostObject2* self)
+{
+}
+
+static
+void
+dbus_service_local_host_object2_class_init(
+    DBusServiceLocalHostObject2Class* klass)
+{
+    NFC_HOST_SERVICE_CLASS(klass)->transceive =
+        dbus_service_local_host_object_transceive;
 }
 
 /*==========================================================================*
@@ -555,7 +638,8 @@ dbus_service_local_host_new(
     GDBusConnection* connection,
     const char* obj_path,
     const char* name,
-    const char* dbus_name)
+    const char* dbus_name,
+    int version)
 {
     GError* error = NULL;
     OrgSailfishosNfcLocalHostService* proxy = /* This won't actually block */
@@ -566,7 +650,15 @@ dbus_service_local_host_new(
             dbus_name, obj_path, NULL, &error);
 
     if (proxy) {
-        DBusServiceLocalHostObject* self = g_object_new(THIS_TYPE, NULL);
+        /*
+         * DBusServiceLocalHostObject2 (aka THIS_TYPE2) implements
+         * transceive() but otherwise it's the same thing as
+         * DBusServiceLocalHostObject (aka THIS_TYPE).
+         *
+         * THIS_TYPE2 requires protocol version 2 (i.e. the Transceive method)
+         */
+        DBusServiceLocalHostObject* self = g_object_new((version > 1) ?
+            THIS_TYPE2 : THIS_TYPE, NULL);
         DBusServiceLocalHost* pub = &self->pub;
         NfcHostService* service = &pub->service;
 

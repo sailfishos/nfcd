@@ -42,5 +42,22 @@
       <arg name="ok" type="b" direction="in"/>
       <!-- No reply expected -->
     </method>
+    <!-- Interface version 2 (since 1.2.3) -->
+    <!--
+      Transceive is the generic variant of Process which allows to pass
+      arbitrary data back and forth, not necessarily encoded according to
+      the ISO/IEC 7816-4 spec.
+    -->
+    <method name="Transceive">
+      <arg name="host" type="o" direction="in"/>
+      <arg name="data" type="ay" direction="in">
+        <annotation name="org.gtk.GDBus.C.ForceGVariant" value="true"/>
+      </arg>
+      <arg name="response" type="ay" direction="out">
+        <annotation name="org.gtk.GDBus.C.ForceGVariant" value="true"/>
+      </arg>
+      <!-- Non-zero response_id will result in ResponseStatus call later -->
+      <arg name="response_id" type="u" direction="out"/>
+    </method>
   </interface>
 </node>

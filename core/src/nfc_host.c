@@ -745,7 +745,7 @@ nfc_host_op_app_complete_resp(
         /* Is transmission still around? */
         if (tx) {
             if (resp) {
-                GDEBUG("APDU rocessed by %s app", app->name);
+                GDEBUG("APDU processed by %s app", app->name);
                 nfc_host_app_respond(app, tx->tx, resp);
                 nfc_host_drop_tx(priv);
             } else {
