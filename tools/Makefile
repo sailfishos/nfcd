@@ -6,3 +6,4 @@ all:
 	@$(MAKE) -C ndef-read $*
 	@$(MAKE) -C ndef-share $*
 	@$(MAKE) -C ndef-write $*
+	@$(MAKE) -C nfc-io $*
