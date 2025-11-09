@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2019-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2019 Jolla Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -207,10 +207,10 @@ isodep_adapter(
     if (org_sailfishos_nfc_adapter_call_get_tags_sync(adapter, &app->tags,
         NULL, &error)) {
         if (!app->tags || !app->tags[0]) {
-            g_strfreev(app->tags);
             guint sigterm = g_unix_signal_add(SIGTERM, isodep_signal, app);
             guint sigint = g_unix_signal_add(SIGINT, isodep_signal, app);
 
+            g_strfreev(app->tags);
             app->tags = NULL;
             GINFO("Waiting for ISO-DEP tag...");
             app->loop = g_main_loop_new(NULL, FALSE);

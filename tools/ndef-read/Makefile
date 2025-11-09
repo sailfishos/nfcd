@@ -19,7 +19,8 @@ all: debug release
 # Sources
 #
 
-SRC = ndef-read.c
+NAME = ndef-read
+SRC = $(NAME).c
 
 GEN_SRC = \
   org.sailfishos.nfc.Adapter.c \
@@ -100,7 +101,7 @@ $(RELEASE_OBJS): | $(RELEASE_BUILD_DIR)
 # Rules
 #
 
-EXE = ndef-read
+EXE = $(NAME)
 DEBUG_EXE = $(DEBUG_BUILD_DIR)/$(EXE)
 RELEASE_EXE = $(RELEASE_BUILD_DIR)/$(EXE)
 

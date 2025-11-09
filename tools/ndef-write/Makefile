@@ -19,7 +19,8 @@ all: debug release
 # Sources
 #
 
-SRC = ndef-write.c
+NAME = ndef-write
+SRC = $(NAME).c
 
 GEN_SRC = \
   org.sailfishos.nfc.Adapter.c \
@@ -102,7 +103,7 @@ $(RELEASE_OBJS): | $(RELEASE_BUILD_DIR)
 # Rules
 #
 
-EXE = ndef-write
+EXE = $(NAME)
 DEBUG_EXE = $(DEBUG_BUILD_DIR)/$(EXE)
 RELEASE_EXE = $(RELEASE_BUILD_DIR)/$(EXE)
 
