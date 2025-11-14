@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -123,7 +123,8 @@ dbus_service_local_host_new(
     GDBusConnection* connection,
     const char* obj_path,
     const char* name,
-    const char* dbus_name);
+    const char* dbus_name,
+    int version);
 
 /* org.sailfishos.nfc.LocalHostApp */
 

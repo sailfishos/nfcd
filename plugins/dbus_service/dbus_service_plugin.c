@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -81,7 +81,9 @@ GLOG_MODULE_DEFINE("dbus-service");
     x(REGISTER_LOCAL_HOST_APP, register_local_host_app, \
       register-local-host-app) \
     x(UNREGISTER_LOCAL_HOST_APP, unregister_local_host_app, \
-      unregister-local-host-app)
+      unregister-local-host-app) \
+    x(REGISTER_LOCAL_HOST_SERVICE2, register_local_host_service2, \
+      register-local-host-service2)
 
 enum {
     EVENT_ADAPTER_ADDED,
@@ -135,7 +137,7 @@ G_DEFINE_TYPE(DBusServicePlugin, dbus_service_plugin, PARENT_TYPE)
 #define NFC_SERVICE     "org.sailfishos.nfc.daemon"
 #define NFC_DAEMON_PATH "/"
 
-#define NFC_DBUS_PLUGIN_INTERFACE_VERSION  (4)
+#define NFC_DBUS_PLUGIN_INTERFACE_VERSION  (5)
 
 static
 gboolean
@@ -360,10 +362,11 @@ dbus_service_plugin_register_local_host_service(
     DBusServicePlugin* self,
     const char* name,
     const char* obj_path,
-    const char* dbus_name)
+    const char* dbus_name,
+    int version)
 {
     DBusServiceLocalHost* obj = dbus_service_local_host_new(self->connection,
-        obj_path, name, dbus_name);
+        obj_path, name, dbus_name, version);
 
     if (obj) {
         NfcHostService* service = &obj->service;
@@ -819,12 +822,14 @@ dbus_service_plugin_handle_release_techs(
 
 static
 gboolean
-dbus_service_plugin_handle_register_local_host_service(
+dbus_service_plugin_handle_register_local_host_service_impl(
     OrgSailfishosNfcDaemon* iface,
     GDBusMethodInvocation* call,
     const char* obj_path,
     const char* name,
-    DBusServicePlugin* self)
+    gint version,
+    DBusServicePlugin* self,
+    void (*complete)(OrgSailfishosNfcDaemon* iface, GDBusMethodInvocation* call))
 {
     DBusServiceLocalHost* obj = NULL;
     const char* sender = g_dbus_method_invocation_get_sender(call);
@@ -843,11 +848,10 @@ dbus_service_plugin_handle_register_local_host_service(
             "Host service '%s' is already registered", obj_path);
     } else {
         obj = dbus_service_plugin_register_local_host_service(self, name,
-            obj_path, sender);
+            obj_path, sender, version);
         if (obj) {
             GDEBUG("Host service '%s' %s%s", name, sender, obj_path);
-            org_sailfishos_nfc_daemon_complete_register_local_host_service
-                (iface, call);
+            complete(iface, call);
         } else {
             g_dbus_method_invocation_return_error(call,
                 DBUS_SERVICE_ERROR, DBUS_SERVICE_ERROR_FAILED,
@@ -855,6 +859,35 @@ dbus_service_plugin_handle_register_local_host_service(
         }
     }
     return TRUE;
+}
+
+static
+gboolean
+dbus_service_plugin_handle_register_local_host_service(
+    OrgSailfishosNfcDaemon* iface,
+    GDBusMethodInvocation* call,
+    const char* obj_path,
+    const char* name,
+    DBusServicePlugin* self)
+{
+    return dbus_service_plugin_handle_register_local_host_service_impl(iface,
+        call, obj_path, name, 1, self,
+        org_sailfishos_nfc_daemon_complete_register_local_host_service);
+}
+
+static
+gboolean
+dbus_service_plugin_handle_register_local_host_service2(
+    OrgSailfishosNfcDaemon* iface,
+    GDBusMethodInvocation* call,
+    const char* obj_path,
+    const char* name,
+    gint version,
+    DBusServicePlugin* self)
+{
+    return dbus_service_plugin_handle_register_local_host_service_impl(iface,
+        call, obj_path, name, version, self,
+        org_sailfishos_nfc_daemon_complete_register_local_host_service2);
 }
 
 static

@@ -119,5 +119,12 @@
     <method name="UnregisterLocalHostApp">
       <arg name="path" type="o" direction="in"/>
     </method>
+    <!-- Interface version 5 (since 1.2.3) -->
+    <method name="RegisterLocalHostService2">
+      <!-- Registers instance of org.sailfishos.nfc.LocalHostService -->
+      <arg name="path" type="o" direction="in"/>
+      <arg name="name" type="s" direction="in"/>
+      <arg name="version" type="i" direction="in"/>
+    </method>
   </interface>
 </node>

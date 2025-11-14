@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2023-2025 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of the BSD license as follows:
  *
@@ -59,16 +59,16 @@ enum {
     INITIATOR_EVENT_COUNT
 };
 
-typedef struct nfc_host_apdu NfcHostApdu;
-typedef struct nfc_host_apdu_processor NfcHostApduProcessor;
+typedef struct nfc_host_tx NfcHostTx;
+typedef struct nfc_host_tx_processor NfcHostTxProcessor;
 
 struct nfc_host_priv {
     char* name;
     gulong event_id[INITIATOR_EVENT_COUNT];
     NfcHostApp** apps;
     NfcHostService** services;
-    NfcHostApduProcessor* processors;
-    NfcHostApdu* apdu;
+    NfcHostTxProcessor* processors;
+    NfcHostTx* tx;
     GSList* pending_ops;
     GUtilWeakRef* ref;
 };
@@ -169,26 +169,27 @@ typedef struct nfc_host_op {
 
 /* Processors are freed with a plain g_free() */
 
-struct nfc_host_apdu_processor {
-    gboolean (*process)(NfcHostApduProcessor*);
-    NfcHostApduProcessor* next;
+struct nfc_host_tx_processor {
+    gboolean (*process)(NfcHostTxProcessor*);
+    NfcHostTxProcessor* next;
     NfcHost* host;  /* Not a reference */
 };
 
-typedef struct nfc_host_service_apdu_processor {
-    NfcHostApduProcessor processor;
+typedef struct nfc_host_service_tx_processor {
+    NfcHostTxProcessor processor;
     NfcHostService* service; /* Not a reference */
-} NfcHostServiceApduProcessor;
+} NfcHostServiceTxProcessor;
 
-struct nfc_host_apdu {
-    NfcHostApduProcessor* processor;
+struct nfc_host_tx {
+    NfcHostTxProcessor* processor;
     NfcTransmission* tx;
-    NfcApdu apdu;
+    GUtilData data;
+    NfcApdu* apdu;
 };
 
 static
 void
-nfc_host_process_apdu(
+nfc_host_process_tx(
     NfcHost* self);
 
 /*==========================================================================*
@@ -440,70 +441,70 @@ nfc_host_is_select_app_apdu(
 }
 
 static
-NfcHostApdu*
-nfc_host_apdu_new(
-    const NfcApdu* apdu,
+NfcHostTx*
+nfc_host_tx_new(
+    const GUtilData* data,
     NfcTransmission* tx,
-    NfcHostApduProcessor* processor)
+    NfcHostTxProcessor* processor)
 {
-    gsize total = sizeof(NfcHostApdu) + apdu->data.size;
-    NfcHostApdu* out = g_malloc(total);
-    void* data = out + 1;
+    gsize total = sizeof(NfcHostTx) + data->size;
+    NfcHostTx* out = g_malloc(total);
+    NfcApdu apdu;
 
-#if GUTIL_LOG_DEBUG
-    if (GLOG_ENABLED(GLOG_LEVEL_DEBUG)) {
-        char* tmp = NULL;
-
-        GDEBUG("C-APDU %02X %02X %02X %02X %s%s%04X",
-            apdu->cla, apdu->ins, apdu->p1, apdu->p2,
-            apdu->data.size ? (tmp = gutil_data2hex(&apdu->data, TRUE)) : "",
-            apdu->data.size ? " " : "", apdu->le);
-        g_free(tmp);
-    }
-#endif
-
-    memcpy(data, apdu->data.bytes, apdu->data.size);
+    out->data.size = data->size;
+    out->data.bytes = (gpointer)(out + 1);
+    memcpy(out + 1, data->bytes, data->size);
     out->tx = nfc_transmission_ref(tx);
-    out->apdu = *apdu;
-    out->apdu.data.bytes = data;
     out->processor = processor;
+
+    if (nfc_apdu_decode(&apdu, &out->data)) {
+        out->apdu = gutil_memdup(&apdu, sizeof(apdu));
+#if GUTIL_LOG_DEBUG
+        if (GLOG_ENABLED(GLOG_LEVEL_DEBUG)) {
+            char* tmp = NULL;
+
+            GDEBUG("C-APDU %02X %02X %02X %02X %s%s%04X",
+                apdu.cla, apdu.ins, apdu.p1, apdu.p2,
+                apdu.data.size ? (tmp = gutil_data2hex(&apdu.data, TRUE)) : "",
+                apdu.data.size ? " " : "", apdu.le);
+            g_free(tmp);
+        }
+#endif
+    } else {
+        out->apdu = NULL;
+#if GUTIL_LOG_DEBUG
+        if (GLOG_ENABLED(GLOG_LEVEL_DEBUG)) {
+            char* tmp = NULL;
+
+            GDEBUG("C-TX %s", data->size ?
+                (tmp = gutil_data2hex(data, TRUE)) : "");
+            g_free(tmp);
+        }
+#endif
+    }
+
     return out;
 }
 
 static
 void
-nfc_host_apdu_free(
-    NfcHostApdu* apdu)
+nfc_host_tx_free(
+    NfcHostTx* tx)
 {
-    nfc_transmission_unref(apdu->tx);
-    g_free(apdu);
+    nfc_transmission_unref(tx->tx);
+    g_free(tx->apdu);
+    g_free(tx);
 }
 
 static
 void
-nfc_host_drop_apdu(
+nfc_host_drop_tx(
     NfcHostPriv* priv)
 {
-    if (priv->apdu) {
-        nfc_host_apdu_free(priv->apdu);
-        priv->apdu = NULL;
+    if (priv->tx) {
+        nfc_host_tx_free(priv->tx);
+        priv->tx = NULL;
     }
-}
-
-static
-GBytes*
-nfc_host_app_response_data(
-    guint sw, /* 16 bits (SW1 << 8)|SW2 */
-    const GUtilData* data)
-{
-    guchar* buf = g_malloc(data->size + 2);
-
-    if (data->size) {
-        memcpy(buf, data->bytes, data->size);
-    }
-    buf[data->size] = (guchar)(sw >> 8); /* SW1 */
-    buf[data->size + 1] = (guchar)sw;    /* SW2 */
-    return g_bytes_new_take(buf, data->size + 2);
 }
 
 static
@@ -546,7 +547,7 @@ nfc_host_app_respond(
     const NfcHostAppResponse* resp)
 {
     /* Caller is supposed to make sure that resp isn't NULL */
-    GBytes* bytes = nfc_host_app_response_data(resp->sw, &resp->data);
+    GBytes* bytes = nfc_apdu_response_new(resp->sw, &resp->data);
 
     if (resp->sent) {
         nfc_transmission_respond_bytes(tx, bytes, nfc_host_app_response_sent,
@@ -572,7 +573,7 @@ nfc_host_respond_sw(
 
 static
 void
-nfc_host_service_response_sent(
+nfc_host_service_response_sent_done(
     NfcTransmission* tx,
     gboolean ok,
     void* user_data)
@@ -604,139 +605,121 @@ nfc_host_service_response_new(
 
 static
 void
-nfc_host_service_respond(
-    NfcHostService* service,
-    NfcTransmission* tx,
-    const NfcHostServiceResponse* resp)
-{
-    /* Caller is supposed to make sure that resp isn't NULL */
-    GBytes* bytes = nfc_host_app_response_data(resp->sw, &resp->data);
-
-    if (resp->sent) {
-        nfc_transmission_respond_bytes(tx, bytes,
-            nfc_host_service_response_sent, nfc_host_service_response_new
-                (service, tx, resp->sent, resp->user_data));
-    } else {
-        nfc_transmission_respond_bytes(tx, bytes, NULL, NULL);
-    }
-    g_bytes_unref(bytes);
-}
-
-static
-void
 nfc_host_app_select_complete(
     NfcHost* self,
     NfcHostApp* app,
     gboolean ok)
 {
     NfcHostPriv* priv = self->priv;
-    NfcHostApdu* apdu = priv->apdu;
+    NfcHostTx* tx = priv->tx;
 
     if (ok) {
         GDEBUG("%s selected for %s", app->name, self->name);
         nfc_host_app_selected(self, app);
-        if (apdu) {
+        if (tx) {
             const guint sw = ISO_SW_OK;
 
             GDEBUG("APDU processed internally => %04X", sw);
-            nfc_host_respond_sw(apdu->tx, sw);
-            nfc_host_drop_apdu(priv);
+            nfc_host_respond_sw(tx->tx, sw);
+            nfc_host_drop_tx(priv);
         }
-        nfc_host_process_apdu(self);
+        nfc_host_process_tx(self);
     } else {
         GDEBUG("%s failed selection for %s", app->name, self->name);
-        if (apdu) {
+        if (tx) {
             const guint sw = 0x6a00;  /* Error (No information given) */
 
             GDEBUG("APDU processed internally => %04X", sw);
-            nfc_host_respond_sw(apdu->tx, sw);
-            nfc_host_drop_apdu(priv);
+            nfc_host_respond_sw(tx->tx, sw);
+            nfc_host_drop_tx(priv);
         }
     }
 }
 
 static
 void
-nfc_host_process_apdu(
+nfc_host_process_tx(
     NfcHost* self)
 {
     NfcHostPriv* priv = self->priv;
-    NfcHostApdu* apdu = priv->apdu;
+    NfcHostTx* tx = priv->tx;
 
-    if (apdu && !priv->pending_ops) {
-        while (apdu->processor &&
-            !apdu->processor->process(apdu->processor)) {
-            apdu->processor = apdu->processor->next;
+    if (tx && !priv->pending_ops) {
+        while (tx->processor &&
+            !tx->processor->process(tx->processor)) {
+            tx->processor = tx->processor->next;
         }
 
-        /* The processor may have dropped the apdu */
-        apdu = priv->apdu;
-        if (apdu && !priv->pending_ops) {
+        /* The processor may have dropped the transmission */
+        tx = priv->tx;
+        if (tx && !priv->pending_ops) {
+            const NfcApdu* apdu = tx->apdu;
             guint sw = 0x6a00; /* Error (No precise diagnosis) */
 
-            /* Internal processing of SELECT */
-            if (nfc_host_is_select_app_apdu(&apdu->apdu)) {
-                const GUtilData* aid = &apdu->apdu.data;
-                NfcHostApp* app = nfc_host_app_by_aid(priv, aid);
+            if (apdu) {
+                /* Internal processing of SELECT */
+                if (nfc_host_is_select_app_apdu(apdu)) {
+                    const GUtilData* aid = &apdu->data;
+                    NfcHostApp* app = nfc_host_app_by_aid(priv, aid);
 
-                if (app) {
+                    if (app) {
 #if GUTIL_LOG_DEBUG
-                    if (GLOG_ENABLED(GLOG_LEVEL_DEBUG)) {
-                        char* hex = gutil_data2hex(&app->aid, TRUE);
+                        if (GLOG_ENABLED(GLOG_LEVEL_DEBUG)) {
+                            char* hex = gutil_data2hex(&app->aid, TRUE);
 
-                        GDEBUG((app == self->app) ?
-                           "App %s is already selected" :
-                           "Selecting app %s", hex);
-                        g_free(hex);
-                    }
+                            GDEBUG((app == self->app) ?
+                               "App %s is already selected" :
+                               "Selecting app %s", hex);
+                            g_free(hex);
+                        }
 #endif
-                    if (app == self->app) {
-                        sw = ISO_SW_OK; /* Success */
-                        GDEBUG("APDU processed internally => %04X", sw);
+                        if (app == self->app) {
+                            sw = ISO_SW_OK; /* Success */
+                            GDEBUG("APDU processed internally => %04X", sw);
+                        } else {
+                            NfcHostOp* op;
+
+                            if (self->app) {
+                                NfcHostApp* prev_app = self->app;
+
+                                /* Notify the app that it's deselected */
+                                nfc_host_app_selected(self, NULL);
+                                nfc_host_app_deselect(prev_app, self);
+                            }
+
+                            op = nfc_host_app_op_new_bool(self, app,
+                                nfc_host_app_select_complete);
+
+                            if (!nfc_host_op_start(priv, op,
+                                nfc_host_app_select(app, self,
+                                nfc_host_op_app_complete_bool, op,
+                                nfc_host_op_destroy))) {
+                                nfc_host_op_fail_bool_async(op);
+                                nfc_host_op_unref(op);
+                            }
+                            return;
+                        }
                     } else {
-                        NfcHostOp* op;
+ #if GUTIL_LOG_DEBUG
+                        if (GLOG_ENABLED(GLOG_LEVEL_DEBUG)) {
+                            char* hex = gutil_data2hex(aid, TRUE);
 
-                        if (self->app) {
-                            NfcHostApp* prev_app = self->app;
-
-                            /* Notify the current app that it's deselected */
-                            nfc_host_app_selected(self, NULL);
-                            nfc_host_app_deselect(prev_app, self);
+                            GDEBUG("App %s not found", hex);
+                            g_free(hex);
                         }
-
-                        op = nfc_host_app_op_new_bool(self, app,
-                            nfc_host_app_select_complete);
-
-                        if (!nfc_host_op_start(priv, op,
-                            nfc_host_app_select(app, self,
-                            nfc_host_op_app_complete_bool, op,
-                            nfc_host_op_destroy))) {
-                            nfc_host_op_fail_bool_async(op);
-                            nfc_host_op_unref(op);
-                        }
-                        return;
+#endif
+                        sw = 0x6A82; /* Error (File/application not found) */
                     }
                 } else {
- #if GUTIL_LOG_DEBUG
-                    if (GLOG_ENABLED(GLOG_LEVEL_DEBUG)) {
-                        char* hex = gutil_data2hex(aid, TRUE);
-
-                        GDEBUG("App %s not found", hex);
-                        g_free(hex);
-                    }
-#endif
-                    sw = 0x6A82; /* Error (File or application not found) */
-               }
-            } else {
-                GDEBUG("APDU not handled");
-                sw = (apdu->apdu.cla == ISO_CLA) ?
-                    0x6a00 : /* Error (No precise diagnosis) */
-                    0x6e00;  /* Error (Class not supported) */
-
+                    GDEBUG("APDU not handled");
+                    sw = (apdu->cla == ISO_CLA) ?
+                        0x6a00 : /* Error (No precise diagnosis) */
+                        0x6e00;  /* Error (Class not supported) */
+                }
             }
 
-            nfc_host_respond_sw(apdu->tx, sw);
-            nfc_host_drop_apdu(priv);
+            nfc_host_respond_sw(tx->tx, sw);
+            nfc_host_drop_tx(priv);
         }
     }
 }
@@ -755,20 +738,20 @@ nfc_host_op_app_complete_resp(
     op->id = 0;
     if (self) {
         NfcHostPriv* priv = self->priv;
-        NfcHostApdu* apdu = priv->apdu;
+        NfcHostTx* tx = priv->tx;
 
         priv->pending_ops = g_slist_remove(priv->pending_ops, op);
 
-        /* Is APDU still around? */
-        if (apdu) {
+        /* Is transmission still around? */
+        if (tx) {
             if (resp) {
                 GDEBUG("APDU processed by %s app", app->name);
-                nfc_host_app_respond(app, apdu->tx, resp);
-                nfc_host_drop_apdu(priv);
+                nfc_host_app_respond(app, tx->tx, resp);
+                nfc_host_drop_tx(priv);
             } else {
                 GDEBUG("%s app refused to process APDU", app->name);
-                apdu->processor = apdu->processor->next;
-                nfc_host_process_apdu(self);
+                tx->processor = tx->processor->next;
+                nfc_host_process_tx(self);
             }
         }
         nfc_host_unref(self);
@@ -777,18 +760,19 @@ nfc_host_op_app_complete_resp(
 
 static
 gboolean
-nfc_host_apdu_process_app(
-    NfcHostApduProcessor* processor)
+nfc_host_tx_app_process_apdu(
+    NfcHostTxProcessor* processor)
 {
     NfcHost* self = processor->host;
     NfcHostPriv* priv = self->priv;
-    NfcHostApdu* apdu = priv->apdu;
+    NfcHostTx* tx = priv->tx;
+    NfcApdu* apdu = tx->apdu;
 
-    if (self->app && !nfc_host_is_select_app_apdu(&apdu->apdu)) {
+    if (self->app && apdu && !nfc_host_is_select_app_apdu(apdu)) {
         NfcHostOp* op = nfc_host_app_op_new(self, self->app, NULL);
 
         if (nfc_host_op_start(priv, op,
-            nfc_host_app_process(self->app, self, &apdu->apdu,
+            nfc_host_app_process(self->app, self, apdu,
             nfc_host_op_app_complete_resp, op,
             nfc_host_op_destroy))) {
             return TRUE;
@@ -799,22 +783,22 @@ nfc_host_apdu_process_app(
 }
 
 static
-NfcHostApduProcessor*
-nfc_host_app_apdu_processor_new(
+NfcHostTxProcessor*
+nfc_host_app_tx_processor_new(
     NfcHost* host)
 {
-    NfcHostApduProcessor* ap = g_new0(NfcHostApduProcessor, 1);
+    NfcHostTxProcessor* ap = g_new0(NfcHostTxProcessor, 1);
 
-    ap->process = nfc_host_apdu_process_app;
+    ap->process = nfc_host_tx_app_process_apdu;
     ap->host = host;
     return ap;
 }
 
 static
 void
-nfc_host_op_service_complete_resp(
+nfc_host_op_service_transceive_resp(
     NfcHostService* service,
-    const NfcHostServiceResponse* resp,
+    const NfcHostServiceTransceiveResponse* resp,
     void* user_data)
 {
     NfcHostOp* op = user_data;
@@ -824,20 +808,59 @@ nfc_host_op_service_complete_resp(
     op->id = 0;
     if (self) {
         NfcHostPriv* priv = self->priv;
-        NfcHostApdu* apdu = priv->apdu;
+        NfcHostTx* tx = priv->tx;
 
         priv->pending_ops = g_slist_remove(priv->pending_ops, op);
 
-        /* Is APDU still around? */
-        if (apdu) {
+        /* Is transmission still around? */
+        if (tx) {
             if (resp) {
-                GDEBUG("APDU processed by %s service", service->name);
-                nfc_host_service_respond(service, apdu->tx, resp);
-                nfc_host_drop_apdu(priv);
+#if GUTIL_LOG_DEBUG
+                if (GLOG_ENABLED(GLOG_LEVEL_DEBUG)) {
+                    GUtilData data;
+                    char* hex;
+
+                    if (resp->data) {
+                        data.bytes = g_bytes_get_data(resp->data, &data.size);
+                    } else {
+                        memset(&data, 0, sizeof(0));
+                    }
+
+                    if (tx->apdu && data.size >= 2) {
+                        const gsize l = data.size - 2;
+
+                        hex = gutil_bin2hex(data.bytes + l, 2, TRUE);
+                        if (l > 0) {
+                            char* hex1 = gutil_bin2hex(data.bytes, l, TRUE);
+
+                            GDEBUG("R-APDU %s %s", hex1, hex);
+                            g_free(hex1);
+                        } else {
+                            GDEBUG("R-APDU %s", hex);
+                        }
+                    } else {
+                        hex = gutil_data2hex(&data, TRUE);
+                        GDEBUG("R-TX %s", hex);
+                    }
+                    g_free(hex);
+                    GDEBUG("Processed by %s service", service->name);
+                }
+#endif
+                if (resp->sent) {
+                    nfc_transmission_respond_bytes(tx->tx, resp->data,
+                        nfc_host_service_response_sent_done,
+                        nfc_host_service_response_new(service,
+                            tx->tx, resp->sent, resp->user_data));
+                } else {
+                    nfc_transmission_respond_bytes(tx->tx, resp->data,
+                        NULL, NULL);
+                }
+                nfc_host_drop_tx(priv);
             } else {
-                GDEBUG("%s service refused to process APDU", service->name);
-                apdu->processor = apdu->processor->next;
-                nfc_host_process_apdu(self);
+                GDEBUG("%s service refused to process %s", service->name,
+                    tx->apdu ? "APDU" : "TX");
+                tx->processor = tx->processor->next;
+                nfc_host_process_tx(self);
             }
         }
         nfc_host_unref(self);
@@ -846,19 +869,19 @@ nfc_host_op_service_complete_resp(
 
 static
 gboolean
-nfc_host_apdu_process_service(
-    NfcHostApduProcessor* processor)
+nfc_host_tx_process_service(
+    NfcHostTxProcessor* processor)
 {
-    NfcHostServiceApduProcessor* sap = G_CAST(processor,
-        NfcHostServiceApduProcessor, processor);
+    NfcHostServiceTxProcessor* sp = G_CAST(processor,
+        NfcHostServiceTxProcessor, processor);
     NfcHost* self = processor->host;
     NfcHostPriv* priv = self->priv;
-    NfcHostApdu* apdu = priv->apdu;
-    NfcHostOp* op = nfc_host_service_op_new(self, sap->service, NULL);
+    NfcHostTx* tx = priv->tx;
+    NfcHostOp* op = nfc_host_service_op_new(self, sp->service, NULL);
 
     if (nfc_host_op_start(priv, op,
-        nfc_host_service_process(sap->service, self, &apdu->apdu,
-        nfc_host_op_service_complete_resp, op,
+        nfc_host_service_transceive(sp->service, self, &tx->data,
+        nfc_host_op_service_transceive_resp, op,
         nfc_host_op_destroy))) {
         return TRUE;
     } else {
@@ -868,18 +891,18 @@ nfc_host_apdu_process_service(
 }
 
 static
-NfcHostApduProcessor*
-nfc_host_service_apdu_processor_new(
+NfcHostTxProcessor*
+nfc_host_service_tx_processor_new(
     NfcHost* host,
     NfcHostService* service)
 {
-    NfcHostServiceApduProcessor* sap = g_new0(NfcHostServiceApduProcessor, 1);
-    NfcHostApduProcessor* ap = &sap->processor;
+    NfcHostServiceTxProcessor* sp = g_new0(NfcHostServiceTxProcessor, 1);
+    NfcHostTxProcessor* p = &sp->processor;
 
-    sap->service = service;
-    ap->process = nfc_host_apdu_process_service;
-    ap->host = host;
-    return ap;
+    sp->service = service;
+    p->process = nfc_host_tx_process_service;
+    p->host = host;
+    return p;
 }
 
 static
@@ -924,7 +947,7 @@ nfc_host_app_implicit_select_complete(
         }
     }
 
-    nfc_host_process_apdu(self);
+    nfc_host_process_tx(self);
 }
 
 static
@@ -973,7 +996,7 @@ nfc_host_app_start_complete(
             }
         }
 
-        nfc_host_process_apdu(self);
+        nfc_host_process_tx(self);
     }
 }
 
@@ -1018,7 +1041,7 @@ nfc_host_init_apps(
         }
     }
 
-    nfc_host_process_apdu(self);
+    nfc_host_process_tx(self);
 }
 
 static
@@ -1089,18 +1112,13 @@ nfc_host_transmission_handler(
     NfcHost* self = THIS(user_data);
     NfcHostPriv* priv = self->priv;
 
-    GASSERT(!priv->apdu);
-    if (!priv->apdu) {
-        NfcApdu apdu;
-
-        /* Refuse to handle unparceable APDUs */
-        if (nfc_apdu_decode(&apdu, data)) {
-            priv->apdu = nfc_host_apdu_new(&apdu, tx, priv->processors);
-            nfc_host_ref(self);
-            nfc_host_process_apdu(self);
-            nfc_host_unref(self);
-            return TRUE;
-        }
+    GASSERT(!priv->tx);
+    if (!priv->tx) {
+        priv->tx = nfc_host_tx_new(data, tx, priv->processors);
+        nfc_host_ref(self);
+        nfc_host_process_tx(self);
+        nfc_host_unref(self);
+        return TRUE;
     }
     return FALSE;
 }
@@ -1296,15 +1314,15 @@ nfc_host_new(
     priv->apps = (NfcHostApp**) gutil_objv_copy((GObject**) apps);
 
     /*
-     * Service APDU processors in reversed order (the last registered services
+     * Service APDU processors in reversed order (the last registered service
      * gets its chance first).
      */
     if (priv->services) {
         NfcHostService* const* ptr = priv->services;
 
         while (*ptr) {
-            NfcHostApduProcessor* sp =
-                nfc_host_service_apdu_processor_new(self, *ptr++);
+            NfcHostTxProcessor* sp =
+                nfc_host_service_tx_processor_new(self, *ptr++);
 
             sp->next = priv->processors;
             priv->processors = sp;
@@ -1313,7 +1331,7 @@ nfc_host_new(
 
     /* Selected app is first to process incoming APDUs */
     if (priv->apps && priv->apps[0]) {
-        NfcHostApduProcessor* ap = nfc_host_app_apdu_processor_new(self);
+        NfcHostTxProcessor* ap = nfc_host_app_tx_processor_new(self);
 
         ap->next = priv->processors;
         priv->processors = ap;
@@ -1366,17 +1384,17 @@ nfc_host_finalize(
     NfcHostPriv* priv = self->priv;
 
     while (priv->processors) {
-        NfcHostApduProcessor* ap = priv->processors;
+        NfcHostTxProcessor* p = priv->processors;
 
-        priv->processors = ap->next;
-        g_free(ap);
+        priv->processors = p->next;
+        g_free(p);
     }
 
     nfc_host_cancel_all(priv);
     gutil_objv_free((GObject**) priv->apps);
     gutil_objv_free((GObject**) priv->services);
     gutil_weakref_unref(priv->ref);
-    nfc_host_drop_apdu(priv);
+    nfc_host_drop_tx(priv);
     nfc_initiator_remove_all_handlers(self->initiator, priv->event_id);
     nfc_initiator_unref(self->initiator);
     g_free(priv->name);

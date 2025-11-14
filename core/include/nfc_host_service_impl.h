@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2023-2025 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of the BSD license as follows:
  *
@@ -45,7 +45,7 @@ G_BEGIN_DECLS
 
 /* Since 1.2.0 */
 
-/* Internal API for use by NfcHostService implemenations */
+/* Internal API for use by NfcHostService implementations */
 
 typedef
 void
@@ -61,6 +61,12 @@ typedef struct nfc_host_service_response {
     void* user_data;             /* Passed to NfcHostServiceBoolFunc */
 } NfcHostServiceResponse;
 
+typedef struct nfc_host_service_transceive_response {
+    GBytes* data;                /* Response data */
+    NfcHostServiceBoolFunc sent; /* Optional */
+    void* user_data;             /* Passed to NfcHostServiceBoolFunc */
+} NfcHostServiceTransceiveResponse; /* Since 1.2.3 */
+
 /*
  * The response argument may be NULL if APDU wasn't handled. If no
  * service or app handles the APDU, then 6F00 (No precise diagnosis)
@@ -73,6 +79,13 @@ void
     NfcHostService* service,
     const NfcHostServiceResponse* resp,
     void* user_data);
+
+typedef
+void
+(*NfcHostServiceTransceiveResponseFunc)(
+    NfcHostService* service,
+    const NfcHostServiceTransceiveResponse* resp,
+    void* user_data); /* Since 1.2.3 */
 
 /*
  * Internal API for use by NfcHostService implemenations.
@@ -138,6 +151,24 @@ typedef struct nfc_host_service_class {
      */
     void (*cancel)(NfcHostService* service, guint id);
 
+    /* Since 1.2.3 */
+
+    /*
+     * transceive() is similar to process() except that it allows
+     * sending and receiving arbitrary data back and forth, not
+     * necessarily ISO/IEC 7816-4 compliant (such as a single-byte
+     * response for example).
+     *
+     * The return value is interpreted the same way as the value
+     * returned by process(), including the cancellation rules.
+     *
+     * The default implementation attempts to parse the data as an
+     * APDU and pass it to the process() method.
+     */
+    guint (*transceive)(NfcHostService* service, NfcHost* host,
+        const GUtilData* data, NfcHostServiceTransceiveResponseFunc resp,
+        void* user_data, GDestroyNotify destroy);
+
      /* Padding for future expansion */
     void (*_reserved1)(void);
     void (*_reserved2)(void);
@@ -148,7 +179,6 @@ typedef struct nfc_host_service_class {
     void (*_reserved7)(void);
     void (*_reserved8)(void);
     void (*_reserved9)(void);
-    void (*_reserved10)(void);
 } NfcHostServiceClass;
 
 #define NFC_HOST_SERVICE_CLASS(klass) G_TYPE_CHECK_CLASS_CAST((klass), \
