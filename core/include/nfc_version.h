@@ -42,7 +42,7 @@
 
 #define NFC_VERSION_MAJOR 1
 #define NFC_VERSION_MINOR 2
-#define NFC_VERSION_RELEASE 2
+#define NFC_VERSION_RELEASE 3
 
 #define NFC_VERSION_WORD(v1,v2,v3) \
     ((((v1) & 0x7f) << 24) | \
@@ -64,6 +64,7 @@
 /* Specific versions */
 #define NCI_CORE_VERSION_1_2_0  NFC_VERSION_WORD(1,2,0)
 #define NCI_CORE_VERSION_1_2_2  NFC_VERSION_WORD(1,2,2)
+#define NCI_CORE_VERSION_1_2_3  NFC_VERSION_WORD(1,2,3)
 
 #endif /* NFC_VERSION_H */
 
