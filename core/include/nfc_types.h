@@ -198,6 +198,19 @@ typedef struct nfc_id1 {
 } NfcId1; /* Since 1.2.2 */
 
 /*
+ * NFCForum-TS-DigitalProtocol-1.0
+ * Requirements 142: Historical Bytes of the ATS
+ * Poll Mode:   The NFC Forum Device MUST be ready to receive an ATS
+ *              with up to 15 historical bytes.
+ * Listen Mode: The NFC Forum Device MUST send no more than 15 historical
+ *              bytes.
+ */
+typedef struct nfc_ats_hb {
+    guint len;
+    guint8 bytes[15];
+} NfcAtsHb; /* Since 1.2.4 */
+
+/*
  * Some APIs that support both synchronous and synchronous completion
  * use NFCD_ID_SYNC return value to indicate synchronous successful
  * completion.  When this value is returned, the completion and destroy
