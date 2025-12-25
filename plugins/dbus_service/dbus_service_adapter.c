@@ -375,6 +375,11 @@ dbus_service_adapter_get_param_value(
                     break;
                 }
                 break;
+            case NFC_ADAPTER_PARAM_LI_A_HB:
+                /* hb */
+                var = dbus_service_dup_byte_array_as_variant(v->hb.bytes,
+                    v->hb.len);
+                break;
             }
         }
         g_free(v);
@@ -456,6 +461,19 @@ dbus_service_adapter_param_request_new(
                             nfcid1->len);
                         g_array_append_vals(params, &p, 1);
                         break;
+                    }
+                }
+                break;
+            case NFC_ADAPTER_PARAM_LI_A_HB:
+                /* hb */
+                if (g_variant_is_of_type(v, G_VARIANT_TYPE_BYTESTRING)) {
+                    const gsize len = g_variant_get_size(v);
+                    NfcAtsHb* hb = &p.value.hb;
+
+                    if (len <= sizeof(hb->bytes)) {
+                        hb->len = len;
+                        memcpy(hb->bytes, g_variant_get_data(v), len);
+                        g_array_append_vals(params, &p, 1);
                     }
                 }
                 break;

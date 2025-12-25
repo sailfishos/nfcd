@@ -1783,8 +1783,14 @@ test_request_params_start(
     g_assert(test->service);
 
     g_variant_builder_init(&builder, G_VARIANT_TYPE_VARDICT);
+    g_variant_builder_add(&builder, "{sv}", "whatever", /* Invalid */
+        g_variant_new_boolean(FALSE));
     g_variant_builder_add(&builder, "{sv}", "T4_NDEF",
         g_variant_new_boolean(FALSE));
+    g_variant_builder_add(&builder, "{sv}", "LA_NFCID1",
+        g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE, "test", 4, 1));
+    g_variant_builder_add(&builder, "{sv}", "LI_A_HB",
+        g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE, "data", 4, 1));
     g_dbus_connection_call(test->client, NULL,
         dbus_service_adapter_path(test->service),
         NFC_ADAPTER_INTERFACE, "RequestParams",
