@@ -73,6 +73,8 @@ typedef enum nfc_adapter_param_key {
     NFC_ADAPTER_PARAM_NONE = 0, /* Special value, meaning all or any param */
     NFC_ADAPTER_PARAM_T4_NDEF, /* (b) Request NDEF from Type4 tags */
     NFC_ADAPTER_PARAM_LA_NFCID1, /* (nfcid1) NFCID1 in NFC-A Listen mode */
+    /* Since 1.2.4 */
+    NFC_ADAPTER_PARAM_LI_A_HB, /* (hb) ATS Historical Bytes in Listen A mode */
     NFC_ADAPTER_PARAM_COUNT /* Number of known params, version dependent */
 } NFC_ADAPTER_PARAM; /* Since 1.2.2 */
 
@@ -81,6 +83,7 @@ typedef enum nfc_adapter_param_key {
 typedef union nfc_adapter_param_value {
     gboolean b;
     NfcId1 nfcid1;
+    NfcAtsHb hb;        /* Since 1.2.4 */
 } NfcAdapterParamValue; /* Since 1.2.2 */
 
 typedef struct nfc_adapter_param {

@@ -139,7 +139,8 @@ static guint nfc_adapter_signals[SIGNAL_COUNT] = { 0 };
 /* This must match the NFC_ADAPTER_PARAM enum */
 #define NFC_ADAPTER_PARAMS(p) \
     p(T4_NDEF) \
-    p(LA_NFCID1)
+    p(LA_NFCID1) \
+    p(LI_A_HB)
 
 static const char* nfc_adapter_param_names[] = {
     NULL, /* NFC_ADAPTER_PARAM_NONE */
