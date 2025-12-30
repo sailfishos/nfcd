@@ -122,7 +122,8 @@
 
         "T4_NDEF"   - "b", Request NDEF from Type4 tags
         "LA_NFCID1" - "ay", NFCID1 in NFC-A Listen mode
-        "LI_A_HB"   - "ay", ATS Historical Bytes in NFC-A Listen mode
+        "LI_A_HB"   - "ay", ATS Historical Bytes in Listen A mode (nfcd >= 1.2.4)
+
       -->
       <arg name="params" type="a{sv}" direction="out"/>
     </method>
