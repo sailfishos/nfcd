@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2025 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2026 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -1141,16 +1141,23 @@ dbus_service_plugin_find_host(
     DBusServicePlugin* self,
     NfcHost* host)
 {
-    GHashTableIter it;
-    gpointer value;
+    /*
+     * The plugin pointer may become NULL if our D-Bus client disappears
+     * while NfcHost is still alive. In that case we gracefully fail all
+     * the remaining API requests.
+     */
+    if (self) {
+        GHashTableIter it;
+        gpointer value;
 
-    g_hash_table_iter_init(&it, self->adapters);
-    while (g_hash_table_iter_next(&it, NULL, &value)) {
-        DBusServiceHost* dbus_host = dbus_service_adapter_find_host
-            ((DBusServiceAdapter*)value, host);
+        g_hash_table_iter_init(&it, self->adapters);
+        while (g_hash_table_iter_next(&it, NULL, &value)) {
+            DBusServiceHost* dbus_host = dbus_service_adapter_find_host
+                ((DBusServiceAdapter*)value, host);
 
-        if (dbus_host) {
-            return dbus_host;
+            if (dbus_host) {
+                return dbus_host;
+            }
         }
     }
     return NULL;
