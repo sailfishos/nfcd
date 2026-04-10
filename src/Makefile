@@ -172,6 +172,9 @@ nfc_plugins_debug_lib:
 nfc_plugins_release_lib:
 	$(MAKE) -C $(NFC_PLUGINS_DIR) release
 
+# Serialize plugin builds to avoid gdbus-codegen race on shared build/gen/ dir
+nfc_plugins_release_lib: | nfc_plugins_debug_lib
+
 $(DEBUG_BUILD_DIR):
 	mkdir -p $@
 
