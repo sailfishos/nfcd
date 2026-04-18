@@ -2,7 +2,7 @@
 
 .PHONY: all debug release clean
 .PHONY: nfc_core_debug_lib nfc_core_release_lib
-.PHONY: nfc_plugins_debug_lib nfc_plugins_release_lib
+.PHONY: nfc_plugins_gen nfc_plugins_debug_lib nfc_plugins_release_lib
 
 #
 # Required packages
@@ -136,6 +136,8 @@ RELEASE_EXE_DEPS = \
   $(NFC_CORE_RELEASE_LIB) \
   $(NFC_PLUGINS_RELEASE_LIB)
 
+nfc_plugins_debug_lib: | nfc_plugins_gen
+nfc_plugins_release_lib: | nfc_plugins_gen
 $(NFC_CORE_DEBUG_LIB): | nfc_core_debug_lib
 $(NFC_CORE_RELEASE_LIB): | nfc_core_release_lib
 $(NFC_PLUGINS_DEBUG_LIB): | nfc_plugins_debug_lib
@@ -165,6 +167,9 @@ nfc_core_debug_lib:
 
 nfc_core_release_lib:
 	$(MAKE) -C $(NFC_CORE_DIR) release
+
+nfc_plugins_gen:
+	$(MAKE) -C $(NFC_PLUGINS_DIR) gen
 
 nfc_plugins_debug_lib:
 	$(MAKE) -C $(NFC_PLUGINS_DIR) debug
