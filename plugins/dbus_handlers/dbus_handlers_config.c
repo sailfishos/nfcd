@@ -1,34 +1,41 @@
 /*
+ * Copyright (C) 2018-2026 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2019 Jolla Ltd.
- * Copyright (C) 2018-2019 Slava Monich <slava.monich@jolla.com>
  * Copyright (C) 2019 Open Mobile Platform LLC.
  *
- * You may use this file under the terms of BSD license as follows:
+ * You may use this file under the terms of the BSD license as follows:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  *
- *   1. Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *   2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in the
- *      documentation and/or other materials provided with the distribution.
- *   3. Neither the names of the copyright holders nor the names of its
- *      contributors may be used to endorse or promote products derived
- *      from this software without specific prior written permission.
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer
+ *     in the documentation and/or other materials provided with the
+ *     distribution.
+ *
+ *  3. Neither the names of the copyright holders nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation
+ * are those of the authors and should not be interpreted as representing
+ * any official policies, either expressed or implied.
  */
 
 #include "dbus_handlers.h"
@@ -47,44 +54,6 @@ typedef struct dbus_handler_config_list {
     DBusHandlerConfig* first;
     DBusHandlerConfig* last;
 } DBusHandlerConfigList;
-
-typedef struct dbus_listener_config_list {
-    DBusListenerConfig* first;
-    DBusListenerConfig* last;
-} DBusListenerConfigList;
-
-typedef struct dbus_any_config DBusAnyConfig;
-
-struct dbus_any_config {
-    const DBusHandlerType* type;
-    DBusAnyConfig* next;
-    DBusConfig dbus;
-};
-
-typedef struct dbus_any_config_list {
-    DBusAnyConfig* first;
-    DBusAnyConfig* last;
-} DBusAnyConfigList;
-
-/* Make sure that structure layouts match */
-#define ASSERT_CONFIG_OFFSET_MATCH(x,field) G_STATIC_ASSERT( \
-    G_STRUCT_OFFSET(x,field) == G_STRUCT_OFFSET(DBusAnyConfig,field))
-#define ASSERT_CONFIG_MATCH(x) \
-    G_STATIC_ASSERT(sizeof(DBusAnyConfig) == sizeof(x)); \
-    ASSERT_CONFIG_OFFSET_MATCH(x,type); \
-    ASSERT_CONFIG_OFFSET_MATCH(x,next); \
-    ASSERT_CONFIG_OFFSET_MATCH(x,dbus)
-#define ASSERT_LIST_OFFSET_MATCH(x,field) G_STATIC_ASSERT( \
-    G_STRUCT_OFFSET(x,field) == G_STRUCT_OFFSET(DBusAnyConfigList,field))
-#define ASSERT_LIST_MATCH(x) \
-    G_STATIC_ASSERT(sizeof(DBusAnyConfigList) == sizeof(x)); \
-    ASSERT_LIST_OFFSET_MATCH(x,first); \
-    ASSERT_LIST_OFFSET_MATCH(x,last)
-
-ASSERT_CONFIG_MATCH(DBusHandlerConfig);
-ASSERT_CONFIG_MATCH(DBusListenerConfig);
-ASSERT_LIST_MATCH(DBusHandlerConfigList);
-ASSERT_LIST_MATCH(DBusListenerConfigList);
 
 static
 int
@@ -123,9 +92,9 @@ dbus_handlers_config_files(
 
 static
 void
-dbus_handlers_config_add_any(
-    DBusAnyConfigList* list,
-    DBusAnyConfig* entry)
+dbus_handlers_config_add2(
+    DBusHandlerConfigList* list,
+    DBusHandlerConfig* entry)
 {
     const DBusHandlerType* type = entry->type;
 
@@ -145,7 +114,7 @@ dbus_handlers_config_add_any(
         list->first = entry;
     } else {
         /* Gets inserted somewhere in the middle */
-        DBusAnyConfig* ptr = list->first;
+        DBusHandlerConfig* ptr = list->first;
 
         /*
          * Priority of the last entry is smaller than ours (checked
@@ -164,25 +133,24 @@ static
 void
 dbus_handlers_config_add(
     DBusHandlerConfigList* handlers,
-    DBusListenerConfigList* listeners,
+    DBusHandlerConfigList* listeners,
     const DBusHandlerType* type,
     GKeyFile* file,
     NfcNdefRec* ndef)
 {
     NfcNdefRec* rec = dbus_handlers_config_find_supported_record(ndef, type);
+
     if (rec) {
         DBusHandlerConfig* handler = type->new_handler_config(file, rec);
-        DBusListenerConfig* listener = type->new_listener_config(file, rec);
+        DBusHandlerConfig* listener = type->new_listener_config(file, rec);
 
         if (handler) {
             handler->type = type;
-            dbus_handlers_config_add_any((DBusAnyConfigList*)handlers,
-                (DBusAnyConfig*)handler);
+            dbus_handlers_config_add2(handlers, handler);
         }
         if (listener) {
             listener->type = type;
-            dbus_handlers_config_add_any((DBusAnyConfigList*)listeners,
-                (DBusAnyConfig*)listener);
+            dbus_handlers_config_add2(listeners, listener);
         }
     }
 }
@@ -200,7 +168,7 @@ dbus_handlers_config_load_types(
     if (files) {
         char** ptr = files;
         DBusHandlerConfigList handlers;
-        DBusListenerConfigList listeners;
+        DBusHandlerConfigList listeners;
         GString* path = g_string_new(dir);
         const guint baselen = path->len + 1;
         GSList* keyfiles = NULL;
@@ -247,18 +215,17 @@ dbus_handlers_config_load_types(
     return config;
 }
 
-char*
-dbus_handlers_config_get_string(
-    GKeyFile* file,
-    const char* group,
-    const char* key)
+static
+void
+dbus_handlers_free_config_list(
+    DBusHandlerConfig* config)
 {
-    char* value = g_key_file_get_string(file, group, key, NULL);
+    while (config) {
+        DBusHandlerConfig* next = config->next;
 
-    if (value) {
-        return value;
-    } else {
-        return g_key_file_get_string(file, config_section_common, key, NULL);
+        config->next = NULL;
+        config->type->free_config(config);
+        config = next;
     }
 }
 
@@ -267,7 +234,7 @@ dbus_handlers_config_get_string(
  *==========================================================================*/
 
 DBusHandlerConfig*
-dbus_handlers_new_handler_config(
+dbus_handlers_config_new(
     GKeyFile* file,
     const char* group)
 {
@@ -275,55 +242,24 @@ dbus_handlers_new_handler_config(
 
     memset(&dbus, 0, sizeof(dbus));
     if (dbus_handlers_config_parse_dbus(&dbus, file, group)) {
-        DBusHandlerConfig* handler = g_slice_new0(DBusHandlerConfig);
+        DBusHandlerConfig* config = g_slice_new0(DBusHandlerConfig);
 
-        handler->dbus = dbus;
-        return handler;
+        config->dbus = dbus;
+        return config;
     }
     return NULL;
 }
 
-DBusListenerConfig*
-dbus_handlers_new_listener_config(
-    GKeyFile* file,
-    const char* group)
-{
-    DBusConfig dbus;
-
-    memset(&dbus, 0, sizeof(dbus));
-    if (dbus_handlers_config_parse_dbus(&dbus, file, group)) {
-        DBusListenerConfig* listener = g_slice_new0(DBusListenerConfig);
-
-        listener->dbus = dbus;
-        return listener;
-    }
-    return NULL;
-}
-
-static
 void
-dbus_handlers_free_dbus_config(
-    const DBusConfig* config)
-{
-    g_free(config->service);
-    g_free(config->path);
-    g_free(config->iface);
-}
-
-void
-dbus_handlers_free_handler_config(
+dbus_handlers_config_free1(
     DBusHandlerConfig* handler)
 {
-    dbus_handlers_free_dbus_config(&handler->dbus);
-    g_slice_free(DBusHandlerConfig, handler);
-}
+    DBusConfig* dbus = &handler->dbus;
 
-void
-dbus_handlers_free_listener_config(
-    DBusListenerConfig* listener)
-{
-    dbus_handlers_free_dbus_config(&listener->dbus);
-    g_slice_free(DBusListenerConfig, listener);
+    g_free(dbus->service);
+    g_free(dbus->path);
+    g_free(dbus->iface);
+    g_slice_free(DBusHandlerConfig, handler);
 }
 
 NfcNdefRec*
@@ -338,6 +274,21 @@ dbus_handlers_config_find_record(
         ndef = ndef->next;
     }
     return NULL;
+}
+
+char*
+dbus_handlers_config_get_string(
+    GKeyFile* file,
+    const char* group,
+    const char* key)
+{
+    char* value = g_key_file_get_string(file, group, key, NULL);
+
+    if (value) {
+        return value;
+    } else {
+        return g_key_file_get_string(file, config_section_common, key, NULL);
+    }
 }
 
 /*==========================================================================*
@@ -465,22 +416,8 @@ dbus_handlers_config_free(
     DBusHandlersConfig* self)
 {
     if (self) {
-        while (self->handlers) {
-            DBusHandlerConfig* handler = self->handlers;
-            const DBusHandlerType* type = handler->type;
-
-            self->handlers = handler->next;
-            handler->next = NULL;
-            type->free_handler_config(handler);
-        }
-        while (self->listeners) {
-            DBusListenerConfig* listener = self->listeners;
-            const DBusHandlerType* type = listener->type;
-
-            self->listeners = listener->next;
-            listener->next = NULL;
-            type->free_listener_config(listener);
-        }
+        dbus_handlers_free_config_list(self->handlers);
+        dbus_handlers_free_config_list(self->listeners);
         g_slice_free(DBusHandlersConfig, self);
     }
 }

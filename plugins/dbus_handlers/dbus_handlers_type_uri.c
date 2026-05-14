@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2026 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2019 Jolla Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -73,11 +73,11 @@ dbus_handlers_type_uri_new_handler_config(
     static const char group[] = "URI-Handler";
 
     return dbus_handlers_type_uri_match(file, group, NDEF_REC_U(ndef)) ?
-        dbus_handlers_new_handler_config(file, group) : NULL;
+        dbus_handlers_config_new(file, group) : NULL;
 }
 
 static
-DBusListenerConfig*
+DBusHandlerConfig*
 dbus_handlers_type_uri_new_listener_config(
     GKeyFile* file,
     NdefRec* ndef)
@@ -85,7 +85,7 @@ dbus_handlers_type_uri_new_listener_config(
     static const char group[] = "URI-Listener";
 
     return dbus_handlers_type_uri_match(file, group, NDEF_REC_U(ndef)) ?
-        dbus_handlers_new_listener_config(file, group) : NULL;
+        dbus_handlers_config_new(file, group) : NULL;
 }
 
 static
@@ -111,8 +111,7 @@ const DBusHandlerType dbus_handlers_type_uri = {
     .supported_record = dbus_handlers_type_uri_supported_record,
     .new_handler_config = dbus_handlers_type_uri_new_handler_config,
     .new_listener_config = dbus_handlers_type_uri_new_listener_config,
-    .free_handler_config = dbus_handlers_free_handler_config,
-    .free_listener_config = dbus_handlers_free_listener_config,
+    .free_config = dbus_handlers_config_free1,
     .handler_args = dbus_handlers_type_uri_handler_args,
     .listener_args = dbus_handlers_type_uri_listener_args
 };

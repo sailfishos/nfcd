@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2026 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2019 Jolla Ltd.
  * Copyright (C) 2019 Open Mobile Platform LLC.
  *
@@ -56,7 +56,6 @@ typedef struct dbus_handlers_tag DBusHandlersTag;
 
 typedef struct dbus_handler_type DBusHandlerType;
 typedef struct dbus_handler_config DBusHandlerConfig;
-typedef struct dbus_listener_config DBusListenerConfig;
 
 typedef struct dbus_config {
     char* service;
@@ -68,12 +67,6 @@ typedef struct dbus_config {
 struct dbus_handler_config {
     const DBusHandlerType* type;
     DBusHandlerConfig* next;
-    DBusConfig dbus;
-};
-
-struct dbus_listener_config {
-    const DBusHandlerType* type;
-    DBusListenerConfig* next;
     DBusConfig dbus;
 };
 
@@ -90,9 +83,8 @@ struct dbus_handler_type {
     gboolean (*supported_record)(NdefRec* ndef);
     /* Config parsing */
     DBusHandlerConfig* (*new_handler_config)(GKeyFile* f, NdefRec* ndef);
-    DBusListenerConfig* (*new_listener_config)(GKeyFile* f, NdefRec* ndef);
-    void (*free_handler_config)(DBusHandlerConfig* config);
-    void (*free_listener_config)(DBusListenerConfig* config);
+    DBusHandlerConfig* (*new_listener_config)(GKeyFile* f, NdefRec* ndef);
+    void (*free_config)(DBusHandlerConfig* config);
     /* DBus message sending (floating ref) */
     GVariant* (*handler_args)(NdefRec* ndef);
     GVariant* (*listener_args)(gboolean handled, NdefRec* ndef);
@@ -100,7 +92,7 @@ struct dbus_handler_type {
 
 typedef struct dbus_handlers_config {
     DBusHandlerConfig* handlers;
-    DBusListenerConfig* listeners;
+    DBusHandlerConfig* listeners;
 } DBusHandlersConfig;
 
 extern const DBusHandlerType dbus_handlers_type_sp;
@@ -142,22 +134,13 @@ dbus_handlers_config_get_string(
     const char* key);
 
 DBusHandlerConfig*
-dbus_handlers_new_handler_config(
-    GKeyFile* file,
-    const char* group);
-
-DBusListenerConfig*
-dbus_handlers_new_listener_config(
+dbus_handlers_config_new(
     GKeyFile* file,
     const char* group);
 
 void
-dbus_handlers_free_handler_config(
+dbus_handlers_config_free1(
     DBusHandlerConfig* handler);
-
-void
-dbus_handlers_free_listener_config(
-    DBusListenerConfig* listener);
 
 /* DBusHandlers */
 

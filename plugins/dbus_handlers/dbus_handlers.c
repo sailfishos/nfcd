@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2026 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2019 Jolla Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -215,7 +215,7 @@ void
 dbus_handlers_run_listeners(
     DBusHandlersRun* run)
 {
-    DBusListenerConfig* listener = run->config->listeners;
+    DBusHandlerConfig* listener = run->config->listeners;
     DBusHandlers* handlers = run->handlers;
 
     while (listener) {

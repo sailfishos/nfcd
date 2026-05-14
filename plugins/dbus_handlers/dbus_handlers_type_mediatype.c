@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2026 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2019 Jolla Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -106,21 +106,7 @@ dbus_handlers_type_mediatype_new_handler(
     const char* group)
 {
     if (match(file, ndef, group)) {
-        return dbus_handlers_new_handler_config(file, group);
-    }
-    return NULL;
-}
-
-static
-DBusListenerConfig*
-dbus_handlers_type_mediatype_new_listener(
-    GKeyFile* file,
-    NfcNdefRec* ndef,
-    gboolean (*match)(GKeyFile* file, NfcNdefRec* ndef, const char* group),
-    const char* group)
-{
-    if (match(file, ndef, group)) {
-        return dbus_handlers_new_listener_config(file, group);
+        return dbus_handlers_config_new(file, group);
     }
     return NULL;
 }
@@ -146,12 +132,12 @@ dbus_handlers_type_mediatype_wildcard_new_handler(
 }
 
 static
-DBusListenerConfig*
+DBusHandlerConfig*
 dbus_handlers_type_mediatype_wildcard_new_listener(
     GKeyFile* file,
     NfcNdefRec* ndef)
 {
-    return dbus_handlers_type_mediatype_new_listener(file, ndef,
+    return dbus_handlers_type_mediatype_new_handler(file, ndef,
         dbus_handlers_type_mediatype_match_wildcard,
         dbus_handlers_type_mediatype_listener_group);
 }
@@ -168,12 +154,12 @@ dbus_handlers_type_mediatype_exact_new_handler(
 }
 
 static
-DBusListenerConfig*
+DBusHandlerConfig*
 dbus_handlers_type_mediatype_exact_new_listener(
     GKeyFile* file,
     NfcNdefRec* ndef)
 {
-    return dbus_handlers_type_mediatype_new_listener(file, ndef,
+    return dbus_handlers_type_mediatype_new_handler(file, ndef,
         dbus_handlers_type_mediatype_match_exact,
         dbus_handlers_type_mediatype_listener_group);
 }
@@ -226,8 +212,7 @@ const DBusHandlerType dbus_handlers_type_mediatype_wildcard = {
     .supported_record = dbus_handlers_type_mediatype_supported_record,
     .new_handler_config = dbus_handlers_type_mediatype_wildcard_new_handler,
     .new_listener_config = dbus_handlers_type_mediatype_wildcard_new_listener,
-    .free_handler_config = dbus_handlers_free_handler_config,
-    .free_listener_config = dbus_handlers_free_listener_config,
+    .free_config = dbus_handlers_config_free1,
     .handler_args = dbus_handlers_type_mediatype_handler_args,
     .listener_args = dbus_handlers_type_mediatype_listener_args
 };
@@ -239,8 +224,7 @@ const DBusHandlerType dbus_handlers_type_mediatype_exact = {
     .supported_record = dbus_handlers_type_mediatype_supported_record,
     .new_handler_config = dbus_handlers_type_mediatype_exact_new_handler,
     .new_listener_config = dbus_handlers_type_mediatype_exact_new_listener,
-    .free_handler_config = dbus_handlers_free_handler_config,
-    .free_listener_config = dbus_handlers_free_listener_config,
+    .free_config = dbus_handlers_config_free1,
     .handler_args = dbus_handlers_type_mediatype_handler_args,
     .listener_args = dbus_handlers_type_mediatype_listener_args
 };

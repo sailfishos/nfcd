@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2026 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -129,12 +129,12 @@ test_null(
 }
 
 /*==========================================================================*
- * parse_handler
+ * parse_config
  *==========================================================================*/
 
 static
 void
-test_parse_handler(
+test_parse_config(
     void)
 {
     GKeyFile* k = g_key_file_new();
@@ -142,110 +142,49 @@ test_parse_handler(
     DBusHandlerConfig* config;
 
     /* No config at all */
-    g_assert(!dbus_handlers_new_handler_config(k, group));
+    g_assert(!dbus_handlers_config_new(k, group));
 
     /* Invalid D-Bus name */
     g_key_file_set_string(k, group, "Service", "foo,bar");
-    g_assert(!dbus_handlers_new_handler_config(k, group));
+    g_assert(!dbus_handlers_config_new(k, group));
 
     /* Missing interface name */
     g_key_file_set_string(k, group, "Service", "foo.service");
-    g_assert(!dbus_handlers_new_handler_config(k, group));
+    g_assert(!dbus_handlers_config_new(k, group));
 
     g_key_file_set_string(k, group, "Method", "Bar");
-    g_assert(!dbus_handlers_new_handler_config(k, group));
+    g_assert(!dbus_handlers_config_new(k, group));
 
     /* Invalid interface name */
     g_key_file_set_string(k, group, "Method", "foo.Bar");
-    g_assert(!dbus_handlers_new_handler_config(k, group));
+    g_assert(!dbus_handlers_config_new(k, group));
 
     /* Invalid method name */
     g_key_file_set_string(k, group, "Method", "foo.interface.1");
-    g_assert(!dbus_handlers_new_handler_config(k, group));
+    g_assert(!dbus_handlers_config_new(k, group));
 
     g_key_file_set_string(k, group, "Method", "foo.interface.Bar");
-    config = dbus_handlers_new_handler_config(k, group);
+    config = dbus_handlers_config_new(k, group);
     g_assert(config);
 
     g_assert_cmpstr(config->dbus.service, == ,"foo.service");
     g_assert_cmpstr(config->dbus.iface, == ,"foo.interface");
     g_assert_cmpstr(config->dbus.method, == ,"Bar");
     g_assert_cmpstr(config->dbus.path, == ,"/");
-    dbus_handlers_free_handler_config(config);
+    dbus_handlers_config_free1(config);
 
     /* Invalid path */
     g_key_file_set_string(k, group, "Path", "//");
-    g_assert(!dbus_handlers_new_handler_config(k, group));
+    g_assert(!dbus_handlers_config_new(k, group));
 
     g_key_file_set_string(k, group, "Path", "/foo");
-    config = dbus_handlers_new_handler_config(k, group);
+    config = dbus_handlers_config_new(k, group);
     g_assert(config);
     g_assert_cmpstr(config->dbus.service, == ,"foo.service");
     g_assert_cmpstr(config->dbus.iface, == ,"foo.interface");
     g_assert_cmpstr(config->dbus.method, == ,"Bar");
     g_assert_cmpstr(config->dbus.path, == ,"/foo");
-    dbus_handlers_free_handler_config(config);
-
-    g_key_file_unref(k);
-}
-
-/*==========================================================================*
- * parse_listener
- *==========================================================================*/
-
-static
-void
-test_parse_listener(
-    void)
-{
-    GKeyFile* k = g_key_file_new();
-    const char* group = "test";
-    DBusListenerConfig* config;
-
-    /* No config at all */
-    g_assert(!dbus_handlers_new_listener_config(k, group));
-
-    /* Invalid D-Bus name */
-    g_key_file_set_string(k, group, "Service", "foo,bar");
-    g_assert(!dbus_handlers_new_listener_config(k, group));
-
-    /* Missing interface name */
-    g_key_file_set_string(k, group, "Service", "foo.service");
-    g_assert(!dbus_handlers_new_listener_config(k, group));
-
-    g_key_file_set_string(k, group, "Method", "Bar");
-    g_assert(!dbus_handlers_new_listener_config(k, group));
-
-    /* Invalid interface name */
-    g_key_file_set_string(k, group, "Method", "foo.Bar");
-    g_assert(!dbus_handlers_new_listener_config(k, group));
-
-    /* Invalid method name */
-    g_key_file_set_string(k, group, "Method", "foo.interface.1");
-    g_assert(!dbus_handlers_new_listener_config(k, group));
-
-    g_key_file_set_string(k, group, "Method", "foo.interface.Bar");
-    config = dbus_handlers_new_listener_config(k, group);
-    g_assert(config);
-
-    g_assert_cmpstr(config->dbus.service, == ,"foo.service");
-    g_assert_cmpstr(config->dbus.iface, == ,"foo.interface");
-    g_assert_cmpstr(config->dbus.method, == ,"Bar");
-    g_assert_cmpstr(config->dbus.path, == ,"/");
-    dbus_handlers_free_listener_config(config);
-
-    /* Invalid path */
-    g_key_file_set_string(k, group, "Path", "//");
-    g_assert(!dbus_handlers_new_listener_config(k, group));
-
-    g_key_file_set_string(k, group, "Path", "/foo");
-    config = dbus_handlers_new_listener_config(k, group);
-    g_assert(config);
-    g_assert_cmpstr(config->dbus.service, == ,"foo.service");
-    g_assert_cmpstr(config->dbus.iface, == ,"foo.interface");
-    g_assert_cmpstr(config->dbus.method, == ,"Bar");
-    g_assert_cmpstr(config->dbus.path, == ,"/foo");
-    dbus_handlers_free_listener_config(config);
+    dbus_handlers_config_free1(config);
 
     g_key_file_unref(k);
 }
@@ -495,8 +434,7 @@ int main(int argc, char* argv[])
     G_GNUC_END_IGNORE_DEPRECATIONS;
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("null"), test_null);
-    g_test_add_func(TEST_("parse_handler"), test_parse_handler);
-    g_test_add_func(TEST_("parse_listener"), test_parse_listener);
+    g_test_add_func(TEST_("parse_config"), test_parse_config);
     g_test_add_func(TEST_("load_empty"), test_load_empty);
     g_test_add_func(TEST_("load_handlers"), test_load_handlers);
     g_test_add_func(TEST_("load_listeners"), test_load_listeners);
