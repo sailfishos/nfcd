@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2019-2026 Slava Monich <slava@monich.com>
  * Copyright (C) 2019 Jolla Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -89,16 +89,16 @@ dbus_handlers_type_text_new_handler_config(
     GKeyFile* file,
     NdefRec* ndef)
 {
-    return dbus_handlers_new_handler_config(file, "Text-Handler");
+    return dbus_handlers_config_new(file, "Text-Handler");
 }
 
 static
-DBusListenerConfig*
+DBusHandlerConfig*
 dbus_handlers_type_text_new_listener_config(
     GKeyFile* file,
     NdefRec* ndef)
 {
-    return dbus_handlers_new_listener_config(file, "Text-Listener");
+    return dbus_handlers_config_new(file, "Text-Listener");
 }
 
 static
@@ -128,8 +128,7 @@ const DBusHandlerType dbus_handlers_type_text = {
     .supported_record = dbus_handlers_type_text_supported_record,
     .new_handler_config = dbus_handlers_type_text_new_handler_config,
     .new_listener_config = dbus_handlers_type_text_new_listener_config,
-    .free_handler_config = dbus_handlers_free_handler_config,
-    .free_listener_config = dbus_handlers_free_listener_config,
+    .free_config = dbus_handlers_config_free1,
     .handler_args = dbus_handlers_type_text_handler_args,
     .listener_args = dbus_handlers_type_text_listener_args
 };

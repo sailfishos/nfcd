@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019-2023 Slava Monich <slava@monich.com>
+ * Copyright (C) 2019-2026 Slava Monich <slava@monich.com>
  * Copyright (C) 2019 Jolla Ltd.
  * Copyright (C) 2019 Open Mobile Platform LLC.
  *
@@ -71,11 +71,11 @@ dbus_handlers_type_sp_new_handler_config(
     static const char group[] = "SmartPoster-Handler";
 
     return dbus_handlers_type_sp_match(file, group, NDEF_REC_SP(ndef)) ?
-        dbus_handlers_new_handler_config(file, group) : NULL;
+        dbus_handlers_config_new(file, group) : NULL;
 }
 
 static
-DBusListenerConfig*
+DBusHandlerConfig*
 dbus_handlers_type_sp_new_listener_config(
     GKeyFile* file,
     NdefRec* ndef)
@@ -83,7 +83,7 @@ dbus_handlers_type_sp_new_listener_config(
     static const char group[] = "SmartPoster-Listener";
 
     return dbus_handlers_type_sp_match(file, group, NDEF_REC_SP(ndef)) ?
-        dbus_handlers_new_listener_config(file, group) : NULL;
+        dbus_handlers_config_new(file, group) : NULL;
 }
 
 static
@@ -144,8 +144,7 @@ const DBusHandlerType dbus_handlers_type_sp = {
     .supported_record = dbus_handlers_type_sp_supported_record,
     .new_handler_config = dbus_handlers_type_sp_new_handler_config,
     .new_listener_config = dbus_handlers_type_sp_new_listener_config,
-    .free_handler_config = dbus_handlers_free_handler_config,
-    .free_listener_config = dbus_handlers_free_listener_config,
+    .free_config = dbus_handlers_config_free1,
     .handler_args = dbus_handlers_type_sp_handler_args,
     .listener_args = dbus_handlers_type_sp_listener_args
 };
