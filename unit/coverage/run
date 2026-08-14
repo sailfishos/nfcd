@@ -68,7 +68,7 @@ fi
 if [ $# -gt 0 ] ; then
     TESTS="$@"
     # Since we are not compiling all tests, some directories may remain empty.
-    # Options have to be repeated to suppress multiple errors/warnings
+    # Options have to be repeated to suppress multiple errors
     LCOV_OPT+=" --rc ignore_errors=unused,unused,empty,empty"
 fi
 
@@ -100,16 +100,15 @@ ALL_COV="$COV_DIR/all.gcov"
 FILTERED_COV="$COV_DIR/filtered.gcov"
 rm -f "$CORE_COV" "$PLUGINS_COV" "$ALL_COV" "$FILTERED_COV"
 
-# At least some core coverage is expected to always be there
-lcov $LCOV_OPT -c -d "$CORE_DIR/build/coverage" -b "$CORE_DIR" -o "$CORE_COV" || exit 1
-lcov $LCOV_OPT -a "$CORE_COV" -o "$ALL_COV"
+CORE_COVERAGE_DIR="$CORE_DIR/build/coverage"
+mkdir -p "$CORE_COVERAGE_DIR"
+lcov $LCOV_OPT -c -d "$CORE_COVERAGE_DIR" -b "$CORE_DIR" -o "$CORE_COV" || exit 1
 
-# Plugin coverage data may be missing if we are not running all tests
 PLUGINS_COVERAGE_DIR="$PLUGINS_DIR/build/coverage"
-if [ -d "$PLUGINS_COVERAGE_DIR" ] ; then
-    lcov $LCOV_OPT -c -d "$PLUGINS_COVERAGE_DIR" -b "$PLUGINS_DIR" -o "$PLUGINS_COV" || exit 1
-    lcov $LCOV_OPT -a "$PLUGINS_COV" -o "$ALL_COV"
-fi
+mkdir -p "$PLUGINS_COVERAGE_DIR"
+lcov $LCOV_OPT -c -d "$PLUGINS_COVERAGE_DIR" -b "$PLUGINS_DIR" -o "$PLUGINS_COV" || exit 1
 
+lcov $LCOV_OPT -a "$CORE_COV" -a "$PLUGINS_COV" -o "$ALL_COV" || exit 1
 lcov $LCOV_OPT -e "$ALL_COV" "$CORE_DIR/src/*" "$PLUGINS_DIR/dbus_handlers/*" "$PLUGINS_DIR/dbus_service/*" "$PLUGINS_DIR/settings/*" -o "$FILTERED_COV" || exit 1
-genhtml $GENHTML_OPT "$FILTERED_COV" -t "nfcd" --output-directory "$COV_DIR/report" || exit 1
+
+genhtml $GENHTML_OPT "$FILTERED_COV" --prefix "$TOP_DIR" -t "nfcd" --output-directory "$COV_DIR/report" || exit 1
