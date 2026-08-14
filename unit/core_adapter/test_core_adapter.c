@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2018-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
  *
@@ -362,6 +363,11 @@ test_basic(
     G_GNUC_END_IGNORE_DEPRECATIONS
     nfc_adapter_remove_handler(adapter, 0);
 
+    /* set_allowed_techs is a noop by default */
+    nfc_adapter_set_allowed_techs(adapter, NFC_TECHNOLOGY_UNKNOWN);
+    g_assert_cmpint(nfc_adapter_get_supported_techs(adapter), == ,
+        NFC_TECHNOLOGY_A | NFC_TECHNOLOGY_B);
+
     nfc_adapter_set_name(adapter, name);
     g_assert(!g_strcmp0(adapter->name, name));
 
@@ -585,22 +591,22 @@ test_power(
         test_adapter_inc, &powered_changed_count)));
 
     test->fail_power_request = TRUE;
-    g_assert(!adapter->power_requested);
+    g_assert_false(adapter->power_requested);
     nfc_adapter_request_power(adapter, TRUE);
-    g_assert(adapter->power_requested);
-    g_assert(power_requested_count == 1);
+    g_assert_true(adapter->power_requested);
+    g_assert_cmpint(power_requested_count, == ,1);
     power_requested_count = 0;
 
     /* Second time it has no effect */
     nfc_adapter_request_power(adapter, TRUE);
-    g_assert(!power_requested_count);
+    g_assert_false(power_requested_count);
 
     /* No request is actually submitted because it's not enabled */
-    g_assert(!test->power_request_pending);
+    g_assert_false(test->power_request_pending);
 
     /* This tries to submit power request to the implementation but fails */
     nfc_adapter_set_enabled(adapter, TRUE);
-    g_assert(!test->power_request_pending);
+    g_assert_false(test->power_request_pending);
 
     /* Disable/enable the adapter to give it another try */
     test->fail_power_request = FALSE;
@@ -612,77 +618,79 @@ test_power(
     test->fail_power_request = TRUE;
     nfc_adapter_request_power(adapter, FALSE);
     test->fail_power_request = FALSE;
-    g_assert(!test->power_request_pending);
-    g_assert(!powered_changed_count);
-    g_assert(power_requested_count == 1);
+    g_assert_false(test->power_request_pending);
+    g_assert_cmpint(powered_changed_count, == ,0);
+    g_assert_cmpint(power_requested_count, == ,1);
     power_requested_count = 0;
 
     /* Fail power-on */
     nfc_adapter_request_power(adapter, TRUE);
-    g_assert(power_requested_count == 1);
+    g_assert_cmpint(power_requested_count, == ,1);
     nfc_adapter_power_notify(adapter, FALSE, FALSE); /* Ignored */
     test_adapter_fail_power_request(test);
-    g_assert(power_requested_count == 2);
-    g_assert(!test->power_request_pending);
-    g_assert(!adapter->power_requested);
-    g_assert(!powered_changed_count);
+    g_assert_cmpint(power_requested_count, == ,1);
+    g_assert_false(test->power_request_pending);
+    g_assert_false(adapter->powered);        /* Not powered */
+    g_assert_true(adapter->power_requested); /* but still requested */
+    g_assert_cmpint(powered_changed_count, == ,0);
     power_requested_count = 0;
 
     /* Simulate successful power-on */
     nfc_adapter_request_power(adapter, TRUE);
-    g_assert(adapter->power_requested);
-    g_assert(!adapter->powered);
-    g_assert(test->power_request_pending);
-    g_assert(power_requested_count == 1);
-    power_requested_count = 0;
+    g_assert_true(adapter->power_requested);
+    g_assert_false(adapter->powered);
+    g_assert_true(test->power_request_pending);
+    /* It was already requested and still requested, no changes here */
+    g_assert_cmpint(power_requested_count, == ,0);
 
+    /* But the power state does chage this time */
     test_adapter_complete_power_request(test);
-    g_assert(adapter->powered);
-    g_assert(powered_changed_count == 1);
+    g_assert_true(adapter->powered);
+    g_assert_cmpint(powered_changed_count, == ,1);
     powered_changed_count = 0;
 
     /* Unsolicited power changes */
     nfc_adapter_power_notify(adapter, TRUE, FALSE);
-    g_assert(!powered_changed_count);
+    g_assert_cmpint(powered_changed_count, == ,0);
     nfc_adapter_power_notify(adapter, FALSE, FALSE);
-    g_assert(powered_changed_count == 1);
+    g_assert_cmpint(powered_changed_count, == ,1);
     nfc_adapter_power_notify(adapter, TRUE, FALSE);
-    g_assert(!power_requested_count);
-    g_assert(powered_changed_count == 2);
+    g_assert_cmpint(power_requested_count, == ,0);
+    g_assert_cmpint(powered_changed_count, == ,2);
     powered_changed_count = 0;
 
     /* Power-off with active mode change request pending */
     adapter->supported_modes = NFC_MODE_READER_WRITER;
     g_assert(nfc_adapter_request_mode(adapter, NFC_MODE_READER_WRITER));
-    g_assert(test->mode_request_pending);
+    g_assert_true(test->mode_request_pending);
 
     nfc_adapter_request_power(adapter, FALSE);
-    g_assert(!test->mode_request_pending); /* Canceled */
-    g_assert(adapter->powered);
-    g_assert(!powered_changed_count);
-    g_assert(power_requested_count == 1);
+    g_assert_false(test->mode_request_pending); /* Canceled */
+    g_assert_true(adapter->powered);
+    g_assert_cmpint(powered_changed_count, == ,0);
+    g_assert_cmpint(power_requested_count, == ,1);
     power_requested_count = 0;
 
     test_adapter_complete_power_request(test);
-    g_assert(!adapter->powered);
-    g_assert(!power_requested_count);
-    g_assert(powered_changed_count == 1);
+    g_assert_false(adapter->powered);
+    g_assert_cmpint(power_requested_count, == ,0);
+    g_assert_cmpint(powered_changed_count, == ,1);
     powered_changed_count = 0;
 
     /* Cancel power-on in progress */
     nfc_adapter_request_power(adapter, TRUE);
-    g_assert(!powered_changed_count);
-    g_assert(power_requested_count == 1);
+    g_assert_cmpint(powered_changed_count, == ,0);
+    g_assert_cmpint(power_requested_count, == ,1);
     power_requested_count = 0;
 
     nfc_adapter_request_power(adapter, FALSE);
-    g_assert(!powered_changed_count);
-    g_assert(power_requested_count == 1);
+    g_assert_cmpint(powered_changed_count, == ,0);
+    g_assert_cmpint(power_requested_count, == ,1);
     power_requested_count = 0;
 
     /* Disable won't do anything (power-off is already pending */
     nfc_adapter_set_enabled(adapter, FALSE);
-    g_assert(test->power_request_pending);
+    g_assert_true(test->power_request_pending);
 
     /* nfc_adapter_dispose will cancel the last power request */
     nfc_adapter_remove_all_handlers(adapter, id);
@@ -713,102 +721,104 @@ test_mode(
     /* Unsupported mode */
     g_assert(!nfc_adapter_request_mode(adapter, NFC_MODE_READER_WRITER));
     g_assert(nfc_adapter_request_mode(adapter, NFC_MODE_NONE));
-    g_assert(!mode_requested_count);
-    g_assert(!mode_changed_count);
+    g_assert_cmpint(mode_requested_count, == ,0);
+    g_assert_cmpint(mode_changed_count, == ,0);
 
     /* Successful switch to NFC_MODE_READER_WRITER */
     adapter->supported_modes = NFC_MODE_READER_WRITER | NFC_MODE_P2P_INITIATOR;
     g_assert(!nfc_adapter_request_mode(adapter, NFC_MODE_CARD_EMULATION));
     g_assert(nfc_adapter_request_mode(adapter, NFC_MODE_READER_WRITER |
         NFC_MODE_CARD_EMULATION));
-    g_assert(!mode_changed_count);
-    g_assert(mode_requested_count == 1);
+    g_assert_cmpint(mode_changed_count, == ,0);
+    g_assert_cmpint(mode_requested_count, == ,1);
     mode_requested_count = 0;
 
-    g_assert(!test->mode_request_pending); /* No power yet */
+    g_assert_false(test->mode_request_pending); /* No power yet */
     nfc_adapter_power_notify(adapter, TRUE, FALSE);
-    g_assert(test->mode_request_pending);
+    g_assert_true(test->mode_request_pending);
 
     test->fail_mode_request = TRUE; /* This one will fail: */
     g_assert(nfc_adapter_request_mode(adapter, NFC_MODE_P2P_INITIATOR));
-    g_assert(mode_requested_count == 1);
+    g_assert_cmpint(mode_requested_count, == ,1);
     test->fail_mode_request = FALSE; /* And this one succeed: */
     g_assert(nfc_adapter_request_mode(adapter, NFC_MODE_READER_WRITER));
-    g_assert(mode_requested_count == 2);
+    g_assert_cmpint(mode_requested_count, == ,2);
     mode_requested_count = 0;
 
     test_adapter_complete_mode_request(test);
-    g_assert(adapter->mode == NFC_MODE_READER_WRITER);
-    g_assert(!mode_requested_count);
-    g_assert(mode_changed_count == 1);
+    g_assert_cmpint(adapter->mode, == ,NFC_MODE_READER_WRITER);
+    g_assert_cmpint(mode_requested_count, == ,0);
+    g_assert_cmpint(mode_changed_count, == ,1);
     mode_changed_count = 0;
 
     /* Spontaneous mode changes */
     nfc_adapter_mode_notify(adapter, NFC_MODE_READER_WRITER, FALSE);
-    g_assert(!mode_changed_count);
+    g_assert_cmpint(mode_changed_count, == ,0);
     nfc_adapter_mode_notify(adapter, NFC_MODE_NONE, FALSE);
-    g_assert(mode_changed_count == 1);
+    g_assert_cmpint(mode_changed_count, == ,1);
     nfc_adapter_mode_notify(adapter, NFC_MODE_READER_WRITER, FALSE);
-    g_assert(mode_changed_count == 2);
-    g_assert(!mode_requested_count);
+    g_assert_cmpint(mode_changed_count, == ,2);
+    g_assert_cmpint(mode_requested_count, == ,0);
     mode_changed_count = 0;
 
     /* Fail to switch polling off */
     g_assert(nfc_adapter_request_mode(adapter, NFC_MODE_NONE));
-    g_assert(mode_requested_count == 1);
+    g_assert_cmpint(mode_requested_count, == ,1);
     test_adapter_fail_mode_request(test, NFC_MODE_READER_WRITER);
-    g_assert(!mode_changed_count);
-    g_assert(mode_requested_count == 2);
+    g_assert_cmpint(mode_changed_count, == ,0);
+    /* Requested mode didn't change */
+    g_assert_cmpint(mode_requested_count, == ,1);
     mode_requested_count = 0;
 
     /* Switching power off will switch polling off too */
     nfc_adapter_power_notify(adapter, FALSE, FALSE);
-    g_assert(adapter->mode == NFC_MODE_NONE);
-    g_assert(!mode_requested_count);
-    g_assert(mode_changed_count == 1);
+    g_assert_cmpint(adapter->mode, == ,NFC_MODE_NONE);
+    g_assert_cmpint(mode_requested_count, == ,0);
+    g_assert_cmpint(mode_changed_count, == ,1);
     mode_changed_count = 0;
 
     /* Switching power back on will (try to) switch polling on */
     test->fail_mode_request = TRUE;
     nfc_adapter_power_notify(adapter, TRUE, FALSE);
     test->fail_mode_request = FALSE;
-    g_assert(!mode_requested_count);
-    g_assert(!mode_changed_count);
-    g_assert(!test->mode_request_pending);
+    g_assert_cmpint(mode_requested_count, == ,0);
+    g_assert_cmpint(mode_changed_count, == ,0);
+    g_assert_false(test->mode_request_pending);
 
-    /* Toggle power again to give it another try */
-    nfc_adapter_power_notify(adapter, FALSE, FALSE);
-    nfc_adapter_power_notify(adapter, TRUE, FALSE);
-    g_assert(test->mode_request_pending);
+    /* Give it another try */
+    nfc_adapter_request_mode(adapter, NFC_MODE_READER_WRITER);
+    g_assert_true(test->mode_request_pending);
+    g_assert_cmpint(mode_requested_count, == ,1);
+    mode_requested_count = 0;
 
     /* But switch power off before mode change is completed */
     nfc_adapter_power_notify(adapter, FALSE, FALSE);
-    g_assert(!mode_requested_count);
-    g_assert(!mode_changed_count);
-    g_assert(!test->mode_request_pending);
+    g_assert_cmpint(mode_requested_count, == ,0);
+    g_assert_cmpint(mode_changed_count, == ,0);
+    g_assert_false(test->mode_request_pending);
 
     /* This time it's going to work */
     nfc_adapter_power_notify(adapter, TRUE, FALSE);
-    g_assert(test->mode_request_pending);
+    g_assert_true(test->mode_request_pending);
     test_adapter_complete_mode_request(test);
-    g_assert(adapter->mode == NFC_MODE_READER_WRITER);
-    g_assert(!mode_requested_count);
-    g_assert(mode_changed_count == 1);
+    g_assert_cmpint(adapter->mode, == ,NFC_MODE_READER_WRITER);
+    g_assert_cmpint(mode_requested_count, == ,0);
+    g_assert_cmpint(mode_changed_count, == ,1);
     mode_changed_count = 0;
 
     /* Switch it off and back on */
     g_assert(nfc_adapter_request_mode(adapter, NFC_MODE_NONE));
-    g_assert(mode_requested_count == 1);
+    g_assert_cmpint(mode_requested_count, == ,1);
     g_assert(nfc_adapter_request_mode(adapter, NFC_MODE_READER_WRITER));
-    g_assert(test->mode_request_pending);
-    g_assert(mode_requested_count == 2);
-    g_assert(!mode_changed_count);
+    g_assert_true(test->mode_request_pending);
+    g_assert_cmpint(mode_requested_count, == ,2);
+    g_assert_cmpint(mode_changed_count, == ,0);
     mode_requested_count = 0;
 
     test_adapter_complete_mode_request(test);
-    g_assert(adapter->mode == NFC_MODE_READER_WRITER);
-    g_assert(!mode_requested_count);
-    g_assert(!mode_changed_count);
+    g_assert_cmpint(adapter->mode, == ,NFC_MODE_READER_WRITER);
+    g_assert_cmpint(mode_requested_count, == ,0);
+    g_assert_cmpint(mode_changed_count, == ,0);
 
     /* nfc_adapter_dispose will cancel the last mode request */
     g_assert(nfc_adapter_request_mode(adapter, NFC_MODE_NONE));
