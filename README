@@ -8,4 +8,6 @@ and Card Emulation modes are supported.
 
 In order to actually do anything useful, nfcd requires an adapter
 plugin which handles communication with NFCC. There's a number of
-such plugins in various public repositories.
+such plugins in various public repositories, e.g. nfcd-binder-plugin
+(uses Android binder interfaces) or nfcd-pn54x-plugin (straight
+/dev/pn54x I/O)
