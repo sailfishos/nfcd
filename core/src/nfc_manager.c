@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
  *
@@ -70,6 +71,10 @@ struct nfc_tech_request {
     NFC_TECHNOLOGY disable;
 };
 
+struct nfc_block_request {
+    NfcManager* manager;
+};
+
 struct nfc_manager_priv {
     GUtilWeakRef* ref;
     NfcPlugins* plugins;
@@ -84,6 +89,7 @@ struct nfc_manager_priv {
     NFC_MODE default_mode;
     GQueue mode_requests;
     GQueue tech_requests;
+    GQueue block_requests;
 };
 
 #define THIS(obj) NFC_MANAGER(obj)
@@ -102,6 +108,7 @@ enum nfc_manager_signal {
     SIGNAL_ENABLED_CHANGED,
     SIGNAL_MODE_CHANGED,
     SIGNAL_TECHS_CHANGED,
+    SIGNAL_BLOCKED_CHANGED,
     SIGNAL_STOPPED,
     SIGNAL_COUNT
 };
@@ -113,6 +120,7 @@ enum nfc_manager_signal {
 #define SIGNAL_ENABLED_CHANGED_NAME       "nfc-manager-enabled-changed"
 #define SIGNAL_MODE_CHANGED_NAME          "nfc-manager-mode-changed"
 #define SIGNAL_TECHS_CHANGED_NAME         "nfc-manager-techs-changed"
+#define SIGNAL_BLOCKED_CHANGED_NAME       "nfc-manager-blocked-changed"
 #define SIGNAL_STOPPED_NAME               "nfc-manager-stopped"
 
 static guint nfc_manager_signals[SIGNAL_COUNT] = { 0 };
@@ -215,11 +223,29 @@ nfc_manager_foreach_adapter(
 
 static
 void
+nfc_manager_update_adapter_enabled(
+    NfcManager* manager,
+    NfcAdapter* adapter)
+{
+    nfc_adapter_set_enabled(adapter, manager->enabled && !manager->blocked);
+}
+
+static
+void
 nfc_manager_update_adapter_mode(
     NfcManager* manager,
     NfcAdapter* adapter)
 {
     nfc_adapter_request_mode(adapter, manager->mode);
+}
+
+static
+void
+nfc_manager_update_adapter_power(
+    NfcManager* manager,
+    NfcAdapter* adapter)
+{
+    nfc_adapter_request_power(adapter, manager->priv->requested_power);
 }
 
 static
@@ -235,7 +261,7 @@ nfc_manager_update_mode_cb(
 }
 
 static
-gboolean
+void
 nfc_manager_update_mode(
     NfcManager* self)
 {
@@ -247,9 +273,7 @@ nfc_manager_update_mode(
     if (self->mode != prev_mode) {
         GDEBUG("NFC mode 0x%02x", self->mode);
         g_signal_emit(self, nfc_manager_signals[SIGNAL_MODE_CHANGED], 0);
-        return TRUE;
-    } else {
-        return FALSE;
+        nfc_manager_foreach_adapter(self, nfc_manager_update_adapter_mode);
     }
 }
 
@@ -326,9 +350,7 @@ nfc_manager_mode_request_new_internal(
     req->enable = enable;
     req->disable = disable;
     g_queue_push_tail(&priv->mode_requests, req);
-    if (nfc_manager_update_mode(self)) {
-        nfc_manager_foreach_adapter(self, nfc_manager_update_adapter_mode);
-    }
+    nfc_manager_update_mode(self);
     return req;
 }
 
@@ -341,12 +363,7 @@ nfc_manager_mode_request_free_internal(
     NfcManagerPriv* priv = self->priv;
 
     g_queue_remove(&priv->mode_requests, req);
-
-    /* Update the effective mode */
-    if (nfc_manager_update_mode(self)) {
-        nfc_manager_foreach_adapter(self, nfc_manager_update_adapter_mode);
-    }
-
+    nfc_manager_update_mode(self);
     nfc_manager_unref(req->manager); /* Can be NULL */
     gutil_slice_free(req);
 }
@@ -384,6 +401,22 @@ nfc_manager_release_internal_host_mode_request(
          */
         priv->host_request = NULL;
         nfc_manager_mode_request_free_internal(self, req);
+    }
+}
+
+static
+void
+nfc_manager_update_block(
+    NfcManager* self)
+{
+    NfcManagerPriv* priv = self->priv;
+    const gboolean was_blocked = self->blocked;
+
+    self->blocked = !g_queue_is_empty(&priv->block_requests);
+    if (was_blocked != self->blocked) {
+        GDEBUG("NFC %sblocked", self->blocked ? "" : "un");
+        g_signal_emit(self, nfc_manager_signals[SIGNAL_BLOCKED_CHANGED], 0);
+        nfc_manager_foreach_adapter(self, nfc_manager_update_adapter_enabled);
     }
 }
 
@@ -459,7 +492,7 @@ nfc_manager_add_adapter(
 
             nfc_adapter_set_manager_ref(adapter, priv->ref);
             nfc_adapter_set_name(adapter, name);
-            nfc_adapter_set_enabled(adapter, self->enabled);
+            nfc_manager_update_adapter_enabled(self, adapter);
             nfc_adapter_request_mode(adapter, self->mode);
             nfc_adapter_request_power(adapter, priv->requested_power);
             g_hash_table_insert(priv->adapters, name, nfc_adapter_ref(adapter));
@@ -513,19 +546,9 @@ nfc_manager_set_enabled(
     gboolean enabled)
 {
     if (G_LIKELY(self) && self->enabled != enabled) {
-        NfcAdapter** adapters;
-
         self->enabled = enabled;
         g_signal_emit(self, nfc_manager_signals[SIGNAL_ENABLED_CHANGED], 0);
-        adapters = nfc_manager_ref_adapters(self->priv);
-        if (adapters) {
-            NfcAdapter** ptr = adapters;
-
-            while (*ptr) {
-                nfc_adapter_set_enabled(*ptr++, self->enabled);
-            }
-            nfc_manager_unref_adapters(adapters);
-        }
+        nfc_manager_foreach_adapter(self, nfc_manager_update_adapter_enabled);
     }
 }
 
@@ -535,18 +558,8 @@ nfc_manager_request_power(
     gboolean on)
 {
     if (G_LIKELY(self)) {
-        NfcManagerPriv* priv = self->priv;
-        NfcAdapter** adapters = nfc_manager_ref_adapters(self->priv);
-
-        priv->requested_power = on;
-        if (adapters) {
-            NfcAdapter** ptr = adapters;
-
-            while (*ptr) {
-                nfc_adapter_request_power(*ptr++, on);
-            }
-            nfc_manager_unref_adapters(adapters);
-        }
+        self->priv->requested_power = on;
+        nfc_manager_foreach_adapter(self, nfc_manager_update_adapter_power);
     }
 }
 
@@ -561,10 +574,7 @@ nfc_manager_request_mode(
         if (priv->default_mode != mode) {
             GDEBUG("Default mode 0x%02x", mode);
             priv->default_mode = mode;
-            if (nfc_manager_update_mode(self)) {
-                nfc_manager_foreach_adapter(self,
-                    nfc_manager_update_adapter_mode);
-            }
+            nfc_manager_update_mode(self);
         }
     }
 }
@@ -806,6 +816,16 @@ nfc_manager_add_techs_changed_handler(
 }
 
 gulong
+nfc_manager_add_blocked_changed_handler(
+    NfcManager* self,
+    NfcManagerFunc func,
+    void* user_data) /* Since 1.2.7 */
+{
+    return (G_LIKELY(self) && G_LIKELY(func)) ? g_signal_connect(self,
+        SIGNAL_BLOCKED_CHANGED_NAME, G_CALLBACK(func), user_data) : 0;
+}
+
+gulong
 nfc_manager_add_stopped_handler(
     NfcManager* self,
     NfcManagerFunc func,
@@ -894,6 +914,37 @@ nfc_manager_tech_request_free(
             nfc_manager_foreach_adapter(self,
                 nfc_manager_update_adapter_techs);
         }
+        nfc_manager_unref(req->manager);
+        gutil_slice_free(req);
+    }
+}
+
+NfcBlockRequest*
+nfc_manager_block_request_new(
+    NfcManager* self) /* Since 1.2.7 */
+{
+    if (G_LIKELY(self)) {
+        NfcManagerPriv* priv = self->priv;
+        NfcBlockRequest* req = g_slice_new0(NfcBlockRequest);
+
+        req->manager = nfc_manager_ref(self);
+        g_queue_push_tail(&priv->block_requests, req);
+        nfc_manager_update_block(self);
+        return req;
+    }
+    return NULL;
+}
+
+void
+nfc_manager_block_request_free(
+    NfcBlockRequest* req) /* Since 1.2.7 */
+{
+    if (G_LIKELY(req)) {
+        NfcManager* self = req->manager;
+        NfcManagerPriv* priv = self->priv;
+
+        g_queue_remove(&priv->block_requests, req);
+        nfc_manager_update_block(self);
         nfc_manager_unref(req->manager);
         gutil_slice_free(req);
     }
@@ -990,7 +1041,7 @@ nfc_manager_finalize(
     nfc_peer_services_unref(priv->peer_services);
     g_hash_table_destroy(priv->adapters);
     g_free(self->adapters);
-    G_OBJECT_CLASS(nfc_manager_parent_class)->finalize(object);
+    G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }
 
 static
@@ -1007,6 +1058,7 @@ nfc_manager_class_init(
     NEW_SIGNAL(ENABLED_CHANGED, type);
     NEW_SIGNAL(MODE_CHANGED, type);
     NEW_SIGNAL(TECHS_CHANGED, type);
+    NEW_SIGNAL(BLOCKED_CHANGED, type);
     NEW_SIGNAL(STOPPED, type);
     NEW_OBJECT_SIGNAL(ADAPTER_ADDED, type);
     NEW_OBJECT_SIGNAL(ADAPTER_REMOVED, type);

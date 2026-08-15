@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
  *
@@ -54,6 +55,15 @@ static
 void
 test_manager_inc(
     NfcManager* manager,
+    void* user_data)
+{
+    (*(int*)user_data)++;
+}
+
+static
+void
+test_adapter_inc(
+    NfcAdapter* adapter,
     void* user_data)
 {
     (*(int*)user_data)++;
@@ -220,11 +230,14 @@ test_null(
     g_assert(!nfc_manager_add_mode_changed_handler(NULL, NULL, NULL));
     g_assert(!nfc_manager_add_techs_changed_handler(NULL, NULL, NULL));
     g_assert(!nfc_manager_add_stopped_handler(NULL, NULL, NULL));
+    g_assert(!nfc_manager_add_blocked_changed_handler(NULL, NULL, NULL));
     g_assert(!nfc_manager_mode_request_new(NULL, 0, 0));
     g_assert(!nfc_manager_tech_request_new(NULL, 0, 0));
+    g_assert(!nfc_manager_block_request_new(NULL));
 
     nfc_manager_mode_request_free(NULL);
     nfc_manager_tech_request_free(NULL);
+    nfc_manager_block_request_free(NULL);
     nfc_manager_stop(NULL, 0);
     nfc_manager_set_enabled(NULL, FALSE);
     nfc_manager_request_power(NULL, FALSE);
@@ -493,6 +506,72 @@ test_mode(
 
     nfc_manager_remove_handler(manager, id);
     nfc_manager_unref(manager);
+}
+
+/*==========================================================================*
+ * block
+ *==========================================================================*/
+
+static
+void
+test_block(
+    void)
+{
+    NfcPluginsInfo pi;
+    NfcManager* manager;
+    TestAdapter* test_adapter = test_adapter_new();
+    NfcAdapter* adapter = NFC_ADAPTER(test_adapter);
+    const char* adapter_name;
+    NfcBlockRequest* block1;
+    NfcBlockRequest* block2;
+    int blocked_count = 0, powered_count = 0;
+
+    memset(&pi, 0, sizeof(pi));
+    manager = nfc_manager_new(&pi);
+    adapter_name = nfc_manager_add_adapter(manager, adapter);
+
+    /* Add the listeners */
+    g_assert(!nfc_manager_add_blocked_changed_handler(manager, NULL, NULL));
+    g_assert(nfc_manager_add_blocked_changed_handler(manager,
+        test_manager_inc, &blocked_count));
+    g_assert(nfc_adapter_add_powered_changed_handler(adapter,
+        test_adapter_inc, &powered_count));
+
+    g_assert_false(manager->blocked);
+    g_assert_false(adapter->powered);
+    nfc_manager_request_power(manager, TRUE);
+    test_adapter_complete_power_request(test_adapter);
+    g_assert_true(adapter->powered);
+    g_assert_cmpint(powered_count, == ,1);
+    powered_count = 0;
+
+    /* Block NFC. That powers off the adapter */
+    block1 = nfc_manager_block_request_new(manager);
+    test_adapter_complete_power_request(test_adapter);
+    g_assert_true(manager->blocked);
+    g_assert_false(adapter->powered);
+    g_assert_cmpint(blocked_count, == ,1);
+    g_assert_cmpint(powered_count, == ,1);
+    blocked_count = 0;
+    powered_count = 0;
+
+    /* Second block doesn't make any different */
+    block2 = nfc_manager_block_request_new(manager);
+    g_assert_false(test_adapter->power_request_pending);
+    g_assert_cmpint(blocked_count, == ,0);
+
+    /* Unblock NFC */
+    nfc_manager_block_request_free(block1);
+    nfc_manager_block_request_free(block2);
+    test_adapter_complete_power_request(test_adapter);
+    g_assert_false(manager->blocked);
+    g_assert_true(adapter->powered);
+    g_assert_cmpint(blocked_count, == ,1);
+    g_assert_cmpint(powered_count, == ,1);
+
+    nfc_manager_remove_adapter(manager, adapter_name);
+    nfc_manager_unref(manager);
+    nfc_adapter_unref(adapter);
 }
 
 /*==========================================================================*
@@ -790,6 +869,7 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("adapter"), test_adapter);
     g_test_add_func(TEST_("mode"), test_mode);
     g_test_add_func(TEST_("tech"), test_tech);
+    g_test_add_func(TEST_("block"), test_block);
     g_test_add_func(TEST_("service"), test_service);
     g_test_add_func(TEST_("host_service"), test_host_service);
     g_test_add_func(TEST_("host_app"), test_host_app);
