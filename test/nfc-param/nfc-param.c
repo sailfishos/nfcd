@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2025 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -325,7 +326,6 @@ int main(int argc, char* argv[])
     g_option_context_set_main_group(opts, group);
     g_option_context_set_summary(opts, "Tests NFC adapter parameter API.");
     if (g_option_context_parse(opts, &argc, &argv, &error) && argc == 1) {
-
         gutil_log_timestamp = FALSE;
         gutil_log_default.level = verbose ?
             GLOG_LEVEL_VERBOSE :
