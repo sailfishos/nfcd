@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2019-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2019 Jolla Ltd.
  *
@@ -42,6 +43,17 @@
 
 #include <nfc_types.h>
 
+typedef enum test_adapter_flags {
+    TEST_ADAPTER_FLAGS_NONE = 0,
+    TEST_ADAPTER_FLAG_OVERRIDE_TECHS = 0x01,
+    TEST_ADAPTER_FLAG_ASYNC_POWER_ON = 0x02,
+    TEST_ADAPTER_FLAG_ASYNC_POWER_OFF = 0x04,
+    TEST_ADAPTER_FLAG_ASYNC_POWER_STUCK = 0x08,
+    TEST_ADAPTER_FLAG_ASYNC_POWER =
+        TEST_ADAPTER_FLAG_ASYNC_POWER_ON |
+        TEST_ADAPTER_FLAG_ASYNC_POWER_OFF
+} TEST_ADAPTER_FLAGS;
+
 NfcAdapter*
 test_adapter_new(
     void);
@@ -49,6 +61,10 @@ test_adapter_new(
 NfcAdapter*
 test_adapter_new_with_techs(
     NFC_TECHNOLOGY techs);
+
+NfcAdapter*
+test_adapter_new_with_flags(
+    TEST_ADAPTER_FLAGS flags);
 
 #endif /* TEST_ADAPTER_H */
 

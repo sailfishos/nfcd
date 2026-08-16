@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2022-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2022 Jolla Ltd.
  *
@@ -150,8 +151,7 @@ test_tag_path(
 
     g_assert(test->service);
     g_assert(tag);
-    path = g_strconcat(dbus_service_adapter_path(test->service), "/",
-        tag->name, NULL);
+    path = g_strconcat(test->service->path, "/", tag->name, NULL);
     gutil_idle_pool_add(test->pool, path, g_free);
     return path;
 }

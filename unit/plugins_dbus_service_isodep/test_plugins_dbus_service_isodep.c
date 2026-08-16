@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2022-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2022 Jolla Ltd.
  *
@@ -48,6 +49,7 @@
 #include "test_dbus_name.h"
 
 #include <gutil_idlepool.h>
+#include <gutil_misc.h>
 
 #define NFC_ISODEP_INTERFACE "org.sailfishos.nfc.IsoDep"
 #define MIN_INTERFACE_VERSION (3)
@@ -211,8 +213,7 @@ test_tag_path(
 
     g_assert(test->service);
     g_assert(tag);
-    path = g_strconcat(dbus_service_adapter_path(test->service), "/",
-        tag->name, NULL);
+    path = g_strconcat(test->service->path, "/", tag->name, NULL);
     gutil_idle_pool_add(test->pool, path, g_free);
     return path;
 }
@@ -368,9 +369,7 @@ test_target2_finalize(
 {
     TestTarget2* test = TEST_TARGET2(object);
 
-    if (test->reactivate_id) {
-        g_source_remove(test->reactivate_id);
-    }
+    gutil_source_remove(test->reactivate_id);
     G_OBJECT_CLASS(test_target2_parent_class)->finalize(object);
 }
 

@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2019-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2019-2022 Jolla Ltd.
  * Copyright (C) 2020 Open Mobile Platform LLC.
@@ -182,7 +183,7 @@ test_name_own_bus_acquired(
 {
     TestBusNameOwn* own = data;
 
-    GDEBUG("But for '%s' is acquired", own->name);
+    GDEBUG("Bus for '%s' is acquired", own->name);
     own->bus_acquired_id = 0;
     if (own->name_acquired) {
         own->name_acquired_id = g_idle_add(test_name_own_name_acquired, own);

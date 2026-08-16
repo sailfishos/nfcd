@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2022 Jolla Ltd.
  * Copyright (C) 2022 Slava Monich <slava.monich@jolla.com>
  *
@@ -37,20 +38,9 @@
 #include <nfc_plugin_impl.h>
 #include <nfc_config.h>
 
+#include <gutil_misc.h>
+
 #include <glib/gstdio.h>
-
-#ifdef HAVE_DBUSACCESS
-#include <dbusaccess_policy.h>
-#include <dbusaccess_peer.h>
-static DA_ACCESS test_access = DA_ACCESS_ALLOW;
-#define test_allow_calls() (test_access = DA_ACCESS_ALLOW)
-#define test_deny_calls() (test_access = DA_ACCESS_DENY)
-#else
-#define test_allow_calls()
-#define test_deny_calls()
-#endif
-
-#include <gutil_idlepool.h>
 
 #include "test_common.h"
 #include "test_dbus.h"
@@ -113,7 +103,6 @@ static TestOpt test_opt;
 static TestBusName* test_bus_name;
 static GDBusConnection* test_server;
 static SettingsPlugin* test_plugin;
-static GUtilIdlePool* test_pool;
 static const char* dbus_sender = ":1.0";
 
 static NfcPlugin* test_plugin_create(void);
@@ -164,7 +153,6 @@ test_data_init_with_plugins(
     pi.builtins = plugins;
     g_assert((test->manager = nfc_manager_new(&pi)) != NULL);
     test->loop = g_main_loop_new(NULL, TRUE);
-    test_pool = gutil_idle_pool_new();
 }
 
 static
@@ -236,8 +224,6 @@ test_data_cleanup(
     g_type_class_unref(klass);
 
     test_server = NULL;
-    gutil_idle_pool_destroy(test_pool);
-    test_pool = NULL;
     nfc_manager_stop(test->manager, 0);
     nfc_manager_unref(test->manager);
     g_main_loop_unref(test->loop);
@@ -527,7 +513,7 @@ test_access_denied(
     TestData test;
     TestDBus* dbus;
 
-    test_deny_calls();
+    test_dbus_deny_calls();
     test_data_init(&test, NULL);
     dbus = test_dbus_new2(test_start, start, &test);
     test_run(&test_opt, test.loop);
@@ -609,7 +595,7 @@ test_normal_run(
     TestData test;
     TestDBus* dbus;
 
-    test_allow_calls();
+    test_dbus_allow_calls();
     init(&test, config);
     dbus = test_dbus_new2(test_start, start, &test);
     test_run(&test_opt, test.loop);
@@ -644,7 +630,7 @@ test_normal3(
     TestData test;
     TestDBus* dbus;
 
-    test_allow_calls();
+    test_dbus_allow_calls();
     test_data_init3(&test, config, prestart);
     dbus = test_dbus_new2(test_start, start, &test);
     test_run(&test_opt, test.loop);
@@ -662,7 +648,7 @@ test_normal4(
     TestData test;
     TestDBus* dbus;
 
-    test_allow_calls();
+    test_dbus_allow_calls();
     test_data_init4(&test, config, prestart);
     dbus = test_dbus_new2(test_start, start, &test);
     test_run(&test_opt, test.loop);
@@ -1050,9 +1036,8 @@ settings_plugin_name_unown(
 
     g_assert(data->plugin == test_plugin);
     g_assert_cmpint(data->id, == ,id);
-    if (data->acquire_id) {
-        g_source_remove(data->acquire_id);
-    }
+
+    gutil_source_remove(data->acquire_id);
     g_free(data->name);
     g_free(data);
 
@@ -1086,62 +1071,6 @@ g_bus_unwatch_name(
 {
     g_assert_cmpuint(watcher_id, == ,TEST_NAME_WATCH_ID);
 }
-
-#ifdef HAVE_DBUSACCESS
-
-struct da_policy {
-    gint refcount;
-};
-
-DAPeer*
-da_peer_get(
-    DA_BUS bus,
-    const char* name)
-{
-    gsize name_len = strlen(name);
-    DAPeer* peer = g_malloc0(sizeof(DAPeer) + name_len + 1);
-    char* name_copy = (char*)(peer + 1);
-
-    memcpy(name_copy, name, name_len);
-    peer->name = name_copy;
-    gutil_idle_pool_add(test_pool, peer, g_free);
-    return peer;
-}
-
-DAPolicy*
-da_policy_new_full(
-    const char* spec,
-    const DA_ACTION* actions)
-{
-    DAPolicy* policy = g_new0(DAPolicy, 1);
-
-    g_atomic_int_set(&policy->refcount, 1);
-    return policy;
-}
-
-void
-da_policy_unref(
-    DAPolicy* policy)
-{
-    if (policy && g_atomic_int_dec_and_test(&policy->refcount)) {
-        g_free(policy);
-    }
-}
-
-DA_ACCESS
-da_policy_check(
-    const DAPolicy* policy,
-    const DACred* cred,
-    guint action,
-    const char* arg,
-    DA_ACCESS def)
-{
-    GDEBUG("%s action %u", (test_access == DA_ACCESS_ALLOW) ?
-        "Allowing" : "Not allowing", action);
-    return test_access;
-}
-
-#endif /* HAVE_DBUSACCESS */
 
 /*==========================================================================*
  * name_lost
