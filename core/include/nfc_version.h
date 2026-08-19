@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2018-2026 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2022 Jolla Ltd.
  *
@@ -42,7 +43,7 @@
 
 #define NFC_VERSION_MAJOR 1
 #define NFC_VERSION_MINOR 2
-#define NFC_VERSION_RELEASE 6
+#define NFC_VERSION_RELEASE 7
 
 #define NFC_VERSION_WORD(v1,v2,v3) \
     ((((v1) & 0x7f) << 24) | \
@@ -68,6 +69,7 @@
 #define NCI_CORE_VERSION_1_2_4  NFC_VERSION_WORD(1,2,4)
 #define NCI_CORE_VERSION_1_2_5  NFC_VERSION_WORD(1,2,5)
 #define NCI_CORE_VERSION_1_2_6  NFC_VERSION_WORD(1,2,6)
+#define NCI_CORE_VERSION_1_2_7  NFC_VERSION_WORD(1,2,7)
 
 #endif /* NFC_VERSION_H */
 
