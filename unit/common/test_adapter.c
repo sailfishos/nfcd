@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2019-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2019 Jolla Ltd.
  *
@@ -40,20 +41,19 @@
 #include "nfc_adapter_impl.h"
 #include "test_adapter.h"
 
+#include <gutil_log.h>
+#include <gutil_misc.h>
+
 /*==========================================================================*
  * Test adapter
  *==========================================================================*/
-
-typedef enum test_adapter_flags {
-    TEST_ADAPTER_FLAGS_NONE = 0,
-    TEST_ADAPTER_FLAG_OVERRIDE_TECHS = 0x01
-} TEST_ADAPTER_FLAGS;
 
 typedef NfcAdapterClass TestAdapterClass;
 typedef struct test_adapter {
     NfcAdapter adapter;
     TEST_ADAPTER_FLAGS flags;
     NFC_TECHNOLOGY supported_techs;
+    guint power_request_id;
 } TestAdapter;
 
 #define THIS_TYPE test_adapter_get_type()
@@ -80,14 +80,84 @@ test_adapter_new_with_techs(
     return NFC_ADAPTER(self);
 }
 
+NfcAdapter*
+test_adapter_new_with_flags(
+    TEST_ADAPTER_FLAGS flags)
+{
+    TestAdapter* self = g_object_new(THIS_TYPE, NULL);
+
+    self->flags = flags;
+    return NFC_ADAPTER(self);
+}
+
+static
+gboolean
+test_adapter_complete_power_request(
+    TestAdapter* self,
+    gboolean on)
+{
+    GDEBUG("Adapter powered %s", on ? "on" : "off");
+    self->power_request_id = 0;
+    nfc_adapter_power_notify(NFC_ADAPTER(self), on, TRUE);
+    return G_SOURCE_REMOVE;
+}
+
+static
+gboolean
+test_adapter_complete_power_on(
+    gpointer user_data)
+{
+    return test_adapter_complete_power_request(THIS(user_data), TRUE);
+}
+
+static
+gboolean
+test_adapter_complete_power_off(
+    gpointer user_data)
+{
+    return test_adapter_complete_power_request(THIS(user_data), FALSE);
+}
+
 static
 gboolean
 test_adapter_submit_power_request(
     NfcAdapter* adapter,
     gboolean on)
 {
-    nfc_adapter_power_notify(adapter, on, TRUE);
+    TestAdapter* self = THIS(adapter);
+
+    g_assert_cmpuint(self->power_request_id, == ,0);
+    if (on && (self->flags & TEST_ADAPTER_FLAG_ASYNC_POWER_ON)) {
+        if (self->flags & TEST_ADAPTER_FLAG_ASYNC_POWER_STUCK) {
+            GDEBUG("Adapter power-on request pending forever");
+        } else {
+            GDEBUG("Adapter power-on request pending");
+            self->power_request_id = g_idle_add
+                (test_adapter_complete_power_on, self);
+        }
+    } else if (!on && (self->flags & TEST_ADAPTER_FLAG_ASYNC_POWER_OFF)) {
+        if (self->flags & TEST_ADAPTER_FLAG_ASYNC_POWER_STUCK) {
+            GDEBUG("Adapter power-off request pending forever");
+        } else {
+            GDEBUG("Adapter power-off request pending");
+            self->power_request_id = g_idle_add
+                (test_adapter_complete_power_off, self);
+        }
+    } else {
+        GDEBUG("Adapter powered %s", on ? "on" : "off");
+        nfc_adapter_power_notify(adapter, on, TRUE);
+    }
     return TRUE;
+}
+
+static
+void
+test_adapter_cancel_power_request(
+    NfcAdapter* adapter)
+{
+    TestAdapter* self = THIS(adapter);
+
+    gutil_source_clear(&self->power_request_id);
 }
 
 static
@@ -121,12 +191,25 @@ test_adapter_init(
 
 static
 void
+test_adapter_finalize(
+    GObject* object)
+{
+    TestAdapter* self = THIS(object);
+
+    gutil_source_remove(self->power_request_id);
+    G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
+}
+
+static
+void
 test_adapter_class_init(
     NfcAdapterClass* klass)
 {
     klass->submit_power_request = test_adapter_submit_power_request;
+    klass->cancel_power_request = test_adapter_cancel_power_request;
     klass->submit_mode_request = test_adapter_submit_mode_request;
     klass->get_supported_techs = test_adapter_get_supported_techs;
+    G_OBJECT_CLASS(klass)->finalize = test_adapter_finalize;
 }
 
 /*

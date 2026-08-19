@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2019-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2019-2021 Jolla Ltd.
  *
@@ -119,10 +120,9 @@ test_call(
 {
     g_assert(test->client);
     g_assert(test->service);
-    g_dbus_connection_call(test->client, NULL,
-        dbus_service_adapter_path(test->service),
-        NFC_ADAPTER_INTERFACE, method, NULL, NULL,
-        G_DBUS_CALL_FLAGS_NONE, -1, NULL, callback, test);
+    g_dbus_connection_call(test->client, NULL, test->service->path,
+        NFC_ADAPTER_INTERFACE, method, NULL,
+        NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL, callback, test);
 }
 
 static
@@ -148,8 +148,8 @@ test_signal_subscribe(
     g_assert(test->client);
     g_assert(test->service);
     g_assert(g_dbus_connection_signal_subscribe(test->client, NULL,
-        NFC_ADAPTER_INTERFACE, name, dbus_service_adapter_path(test->service),
-        NULL, G_DBUS_SIGNAL_FLAGS_NO_MATCH_RULE, handler, test, NULL));
+        NFC_ADAPTER_INTERFACE, name, test->service->path, NULL,
+        G_DBUS_SIGNAL_FLAGS_NO_MATCH_RULE, handler, test, NULL));
 }
 
 /*==========================================================================*
@@ -191,7 +191,7 @@ test_basic_start(
     const char* path;
 
     test_started(test, client, server);
-    path = dbus_service_adapter_path(test->service);
+    path = test->service->path;
     g_assert(path);
     g_assert(path[0] == '/');
     g_assert_cmpstr(path + 1, ==, test->adapter->name);
@@ -1761,7 +1761,7 @@ test_request_params_ok(
 
     /* And release this request */
     g_dbus_connection_call(test->client, NULL,
-        dbus_service_adapter_path(test->service), NFC_ADAPTER_INTERFACE,
+        test->service->path, NFC_ADAPTER_INTERFACE,
         "ReleaseParams", g_variant_new("(u)", id),
         NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,
         test_request_params_done, test);
@@ -1791,9 +1791,8 @@ test_request_params_start(
         g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE, "test", 4, 1));
     g_variant_builder_add(&builder, "{sv}", "LI_A_HB",
         g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE, "data", 4, 1));
-    g_dbus_connection_call(test->client, NULL,
-        dbus_service_adapter_path(test->service),
-        NFC_ADAPTER_INTERFACE, "RequestParams",
+    g_dbus_connection_call(test->client, NULL, test->service->path,
+        NFC_ADAPTER_INTERFACE,  "RequestParams",
         g_variant_new("(@a{sv}b)", g_variant_builder_end(&builder), FALSE),
         NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,
         test_request_params_ok, test);
@@ -1853,7 +1852,7 @@ test_release_params_fail_start(
     g_assert(test->client);
     g_assert(test->service);
     g_dbus_connection_call(test->client, NULL,
-        dbus_service_adapter_path(test->service), NFC_ADAPTER_INTERFACE,
+        test->service->path, NFC_ADAPTER_INTERFACE,
         "ReleaseParams", g_variant_new("(u)", 0),
         NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,
         test_release_params_fail_done, test);

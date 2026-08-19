@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2019-2020 Jolla Ltd.
  * Copyright (C) 2019-2020 Slava Monich <slava.monich@jolla.com>
  *
@@ -36,6 +37,16 @@
 #include <gio/gio.h>
 
 typedef struct test_dbus TestDBus;
+
+#ifdef HAVE_DBUSACCESS
+#  include <dbusaccess_types.h>
+extern DA_ACCESS test_dbus_access;
+#  define test_dbus_allow_calls() (test_dbus_access = DA_ACCESS_ALLOW)
+#  define test_dbus_deny_calls() (test_dbus_access = DA_ACCESS_DENY)
+#else /* !HAVE_DBUSACCESS */
+#  define test_dbus_allow_calls()
+#  define test_dbus_deny_calls()
+#endif /* !HAVE_DBUSACCESS */
 
 typedef
 void

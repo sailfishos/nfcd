@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2018-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
  *
@@ -53,7 +54,6 @@
 
 #include <gio/gio.h>
 
-typedef struct dbus_service_adapter DBusServiceAdapter;
 typedef struct dbus_service_ndef DBusServiceNdef;
 typedef struct dbus_service_plugin DBusServicePlugin;
 typedef struct dbus_service_tag DBusServiceTag;
@@ -146,14 +146,15 @@ dbus_service_local_app_new(
 
 /* org.sailfishos.nfc.Adapter */
 
+typedef struct dbus_service_adapter {
+    const char* path;
+    NfcAdapter* adapter;
+} DBusServiceAdapter;
+
 DBusServiceAdapter*
 dbus_service_adapter_new(
     NfcAdapter* adapter,
     GDBusConnection* connection);
-
-const char*
-dbus_service_adapter_path(
-    DBusServiceAdapter* adapter);
 
 DBusServicePeer*
 dbus_service_adapter_find_peer(

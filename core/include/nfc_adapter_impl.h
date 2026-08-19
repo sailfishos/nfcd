@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2018-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
  *
@@ -90,14 +91,14 @@ void
 nfc_adapter_mode_notify(
     NfcAdapter* adapter,
     NFC_MODE mode,
-    gboolean requested)
+    gboolean was_requested)
     NFCD_EXPORT;
 
 void
 nfc_adapter_power_notify(
     NfcAdapter* adapter,
     gboolean on,
-    gboolean requested)
+    gboolean was_requested)
     NFCD_EXPORT;
 
 void

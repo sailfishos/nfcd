@@ -126,5 +126,26 @@
       <arg name="name" type="s" direction="in"/>
       <arg name="version" type="i" direction="in"/>
     </method>
+    <!-- Interface version 6 (since 1.2.7) -->
+    <method name="GetAll6">
+      <arg name="version" type="i" direction="out"/>
+      <arg name="adapters" type="ao" direction="out"/>
+      <arg name="daemon_version" type="i" direction="out"/>
+      <arg name="mode" type="u" direction="out"/>
+      <arg name="techs" type="u" direction="out"/>
+      <arg name="blocked" type="b" direction="out"/>
+    </method>
+    <method name="GetBlocked">
+      <arg name="blocked" type="b" direction="out"/>
+    </method>
+    <signal name="BlockedChanged">
+      <arg name="blocked" type="b"/>
+    </signal>
+    <method name="RequestBlock">
+      <arg name="id" type="u" direction="out"/>
+    </method>
+    <method name="ReleaseBlock">
+      <arg name="id" type="u" direction="in"/>
+    </method>
   </interface>
 </node>

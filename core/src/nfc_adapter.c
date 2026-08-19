@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2018-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
  *
@@ -761,9 +762,17 @@ nfc_adapter_request_power(
     NfcAdapter* self,
     gboolean on)
 {
-    if (G_LIKELY(self) && self->power_requested != on) {
-        self->power_requested = on;
-        nfc_adapter_queue_signal(self, SIGNAL_POWER_REQUESTED);
+    if (G_LIKELY(self)) {
+        if (self->power_requested != on) {
+            self->power_requested = on;
+            nfc_adapter_queue_signal(self, SIGNAL_POWER_REQUESTED);
+        }
+
+        /*
+         * Even if the "power requested" state didn't change, still
+         * consider submitting power request in case if the previous
+         * one has failed.
+         */
         nfc_adapter_update_power(self);
         nfc_adapter_emit_pending_signals(self);
     }
@@ -783,9 +792,15 @@ nfc_adapter_request_mode(
             if (self->mode_requested != mode) {
                 self->mode_requested = mode;
                 nfc_adapter_queue_signal(self, SIGNAL_MODE_REQUESTED);
-                nfc_adapter_update_mode(self);
-                nfc_adapter_emit_pending_signals(self);
             }
+
+            /*
+             * Even if the requested mode didn't change, still
+             * consider submitting mode request in case if the
+             * previous one has failed.
+             */
+            nfc_adapter_update_mode(self);
+            nfc_adapter_emit_pending_signals(self);
             ok = TRUE;
         } else {
             GDEBUG("Mode 0x%02x is not supported by %s %s", mode,
@@ -1217,25 +1232,18 @@ void
 nfc_adapter_mode_notify(
     NfcAdapter* self,
     NFC_MODE mode,
-    gboolean requested)
+    gboolean was_requested)
 {
     if (G_LIKELY(self)) {
         NfcAdapterPriv* priv = self->priv;
-        const gboolean request_was_pending = priv->mode_pending;
 
-        if (requested) {
+        if (was_requested) {
             /* Request has completed */
             priv->mode_pending = FALSE;
         }
         if (self->mode != mode) {
             self->mode = mode;
             nfc_adapter_queue_signal(self, SIGNAL_MODE);
-        }
-        if (request_was_pending && requested) {
-            if (self->mode_requested != mode) {
-                self->mode_requested = mode;
-                nfc_adapter_queue_signal(self, SIGNAL_MODE_REQUESTED);
-            }
         }
         nfc_adapter_emit_pending_signals(self);
     }
@@ -1245,13 +1253,12 @@ void
 nfc_adapter_power_notify(
     NfcAdapter* self,
     gboolean on,
-    gboolean requested)
+    gboolean was_requested)
 {
     if (G_LIKELY(self)) {
         NfcAdapterPriv* priv = self->priv;
-        const gboolean request_was_pending = priv->power_pending;
 
-        if (requested) {
+        if (was_requested) {
             /* Request has completed */
             priv->power_pending = FALSE;
         }
@@ -1260,12 +1267,6 @@ nfc_adapter_power_notify(
             nfc_adapter_queue_signal(self, SIGNAL_POWERED);
         }
         nfc_adapter_update_mode(self);
-        if (request_was_pending && requested) {
-            if (self->power_requested != on) {
-                self->power_requested = on;
-                nfc_adapter_queue_signal(self, SIGNAL_POWER_REQUESTED);
-            }
-        }
         nfc_adapter_emit_pending_signals(self);
     }
 }

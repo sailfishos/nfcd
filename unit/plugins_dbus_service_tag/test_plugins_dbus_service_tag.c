@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2019-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2019-2022 Jolla Ltd.
  * Copyright (C) 2020 Open Mobile Platform LLC.
@@ -128,8 +129,7 @@ test_tag_path(
 
     g_assert(test->service);
     g_assert(tag);
-    path = g_strconcat(dbus_service_adapter_path(test->service), "/",
-        tag->name, NULL);
+    path = g_strconcat(test->service->path, "/", tag->name, NULL);
     gutil_idle_pool_add(test->pool, path, g_free);
     return path;
 }
@@ -330,9 +330,7 @@ test_basic_start(
     g_assert(test->service);
 
     /* Can't register two D-Bus objects for the same path */
-    g_assert(!dbus_service_tag_new(tag,
-        dbus_service_adapter_path(test->service), server));
-
+    g_assert(!dbus_service_tag_new(tag, test->service->path, server));
     g_assert((seq = nfc_target_sequence_new(tag->target)) != NULL);
     nfc_target_sequence_unref(seq);
 

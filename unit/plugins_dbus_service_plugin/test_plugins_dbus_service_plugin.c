@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2019-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2019-2021 Jolla Ltd.
  *
@@ -54,7 +55,7 @@
 
 #define NFC_DAEMON_PATH "/"
 #define NFC_DAEMON_INTERFACE "org.sailfishos.nfc.Daemon"
-#define NFC_DAEMON_INTERFACE_VERSION  (4)
+#define NFC_DAEMON_INTERFACE_VERSION  (6)
 
 static TestOpt test_opt;
 static const char* dbus_sender = ":1.0";
@@ -123,6 +124,7 @@ test_data_cleanup(
     nfc_manager_stop(test->manager, 0);
     nfc_manager_unref(test->manager);
     g_main_loop_unref(test->loop);
+    test_dbus_allow_calls();
 }
 
 static
@@ -287,7 +289,19 @@ test_call_unregister_local_host_app(
     GAsyncReadyCallback callback)
 {
     test_call(test, "UnregisterLocalHostApp",
-        g_variant_new ("(o)", path),
+        g_variant_new("(o)", path),
+        callback);
+}
+
+static
+void
+test_call_release_block(
+    TestData* test,
+    guint id,
+    GAsyncReadyCallback callback)
+{
+    test_call(test, "ReleaseBlock",
+        g_variant_new("(u)", id),
         callback);
 }
 
@@ -302,6 +316,78 @@ test_signal_subscribe(
         NFC_DAEMON_INTERFACE, name, NFC_DAEMON_PATH, NULL,
         G_DBUS_SIGNAL_FLAGS_NO_MATCH_RULE, handler, test, NULL));
 }
+
+static
+void
+test_expect_reply_boolean(
+    GObject* object,
+    GAsyncResult* result,
+    gboolean* value)
+{
+    GError* error = NULL;
+    GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
+        result, &error);
+
+    g_assert(var);
+    g_assert(!error);
+    g_variant_get(var, "(b)", value);
+    g_variant_unref(var);
+}
+
+static
+void
+test_expect_reply_uint(
+    GObject* object,
+    GAsyncResult* result,
+    guint* out)
+{
+    GError* error = NULL;
+    GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
+        result, &error);
+
+    g_assert(var);
+    g_assert(!error);
+    g_variant_get(var, "(u)", out);
+    g_variant_unref(var);
+}
+
+#ifdef HAVE_DBUSACCESS
+
+static
+void
+test_expect_error(
+    GObject* object,
+    GAsyncResult* result,
+    TestData* test,
+    const char* expected_error)
+{
+    GError* error = NULL;
+    char* remote_error;
+
+    g_assert(!g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
+        result, &error));
+    g_assert(error);
+    g_assert(g_dbus_error_is_remote_error(error));
+    remote_error = g_dbus_error_get_remote_error(error);
+    GDEBUG("%s", remote_error);
+    g_assert_cmpstr(remote_error, == ,expected_error);
+    g_error_free(error);
+    g_free(remote_error);
+    test_quit_later(test->loop);
+}
+
+static
+void
+test_expect_access_denied(
+    GObject* object,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    test_expect_error(object, result, (TestData*) user_data,
+        "org.sailfishos.nfc.Error.AccessDenied");
+}
+
+#endif /* HAVE_DBUSACCESS */
 
 /*==========================================================================*
  * Stubs
@@ -946,16 +1032,9 @@ test_request_mode_done(
     TestDataExtRequestMode* ext = test->ext;
     NfcManager* manager = test->manager;
     guint id = 0;
-    GError* error = NULL;
-    GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
-        result, &error);
 
-    g_assert(var);
-    g_assert(!error);
-    g_variant_get(var, "(u)", &id);
-    g_variant_unref(var);
-
-    GDEBUG("request id=%u", id);
+    test_expect_reply_uint(object, result, &id);
+    GDEBUG("Request id=%u", id);
     g_assert(id);
     g_assert(manager->mode & NFC_MODES_P2P);
     g_assert(!(manager->mode & NFC_MODE_READER_WRITER));
@@ -1471,7 +1550,7 @@ test_request_techs_done(
     g_variant_get(var, "(u)", &id);
     g_variant_unref(var);
 
-    GDEBUG("request id=%u", id);
+    GDEBUG("Request id=%u", id);
     g_assert(id);
     g_assert_cmpint(manager->techs, == ,NFC_TECHNOLOGY_A);
     g_assert_cmpint(ext->techs_changed, == ,manager->techs);
@@ -1757,6 +1836,366 @@ test_register_host_app(
 }
 
 /*==========================================================================*
+ * get_all6
+ *==========================================================================*/
+
+static
+void
+test_get_all6_done(
+    GObject* object,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    gint version, core_version = 0;
+    gchar** adapters = NULL;
+    GError* error = NULL;
+    guint mode = 0, techs = 0;
+    gboolean blocked;
+    GVariant* var = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
+        result, &error);
+
+    g_assert(var);
+    g_assert(!error);
+    g_variant_get(var, "(i^aoiuub)", &version, &adapters, &core_version,
+        &mode, &techs, &blocked);
+    g_variant_unref(var);
+
+    GDEBUG("version=%d, %u adapter, core_version=%d, mode=0x%02x, mode=0x%02x,"
+        " blocked=%d", version, g_strv_length(adapters), core_version, mode,
+        techs, blocked);
+    g_assert_cmpint(version, >= ,NFC_DAEMON_INTERFACE_VERSION);
+    g_assert_cmpuint(g_strv_length(adapters), == ,1);
+    g_assert_cmpint(core_version, == ,NFC_CORE_VERSION);
+    g_assert_cmpuint(mode, == ,NFC_MODE_READER_WRITER);
+    g_assert_cmpuint(techs, == ,NFC_TECHNOLOGY_A|NFC_TECHNOLOGY_B);
+    g_assert_false(blocked);
+    g_strfreev(adapters);
+    test_quit_later(test->loop);
+}
+
+static
+void
+test_get_all6_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* test)
+{
+    test_call((TestData*)test, "GetAll6", NULL, test_get_all6_done);
+}
+
+static
+void
+test_get_all6(
+    void)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_data_init(&test);
+    dbus = test_dbus_new2(test_start, test_get_all6_start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+/*==========================================================================*
+ * request_block/1
+ * request_block/2
+ *==========================================================================*/
+
+typedef struct test_data_ext_request_block {
+    guint blocked_changed_count;
+    gboolean blocked;
+    guint req_id;
+} TestDataExtRequestBlock;
+
+static
+void
+test_blocked_changed_handler(
+    GDBusConnection* connection,
+    const char* sender,
+    const char* path,
+    const char* iface,
+    const char* name,
+    GVariant* args,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    TestDataExtRequestBlock* ext = test->ext;
+    gboolean blocked = FALSE;
+
+    g_variant_get(args, "(b)", &blocked);
+    GDEBUG("blocked => %d", blocked);
+    ext->blocked = blocked;
+    ext->blocked_changed_count++;
+}
+
+static
+void
+test_request_block_release_fail(
+    GObject* object,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    TestDataExtRequestBlock* ext = test->ext;
+    GError* error = NULL;
+
+    g_assert(!g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
+        result, &error));
+    g_assert(g_error_matches(error, DBUS_SERVICE_ERROR,
+        DBUS_SERVICE_ERROR_NOT_FOUND));
+    g_error_free(error);
+
+    g_assert_cmpuint(ext->blocked_changed_count, == ,2);
+    test_quit_later(test->loop);
+}
+
+static
+void
+test_request_block_release_ok(
+    GObject* object,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    TestDataExtRequestBlock* ext = test->ext;
+    NfcManager* manager = test->manager;
+    GError* error = NULL;
+    GVariant* ret = g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
+       result, &error);
+
+    g_assert(ret);
+    g_variant_unref(ret);
+    g_assert_false(manager->blocked);
+    g_assert_cmpint(ext->blocked, == ,manager->blocked);
+    g_assert_cmpuint(ext->blocked_changed_count, == ,2);
+
+    /* Try again with the same id (and fail) */
+    test_call_release_block(test, ext->req_id, test_request_block_release_fail);
+}
+
+static
+void
+test_request_block_query_done(
+    GObject* object,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    TestDataExtRequestBlock* ext = test->ext;
+    gboolean blocked = FALSE;
+
+    test_expect_reply_boolean(object, result, &blocked);
+    g_assert_cmpint(ext->blocked, == ,blocked);
+
+    /* Release the request */
+    test_call_release_block(test, ext->req_id, test_request_block_release_ok);
+}
+
+static
+void
+test_request_block_done(
+    GObject* object,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    TestDataExtRequestBlock* ext = test->ext;
+    NfcManager* manager = test->manager;
+
+    g_assert_true(manager->blocked);
+    g_assert_cmpint(ext->blocked, == ,manager->blocked);
+    g_assert_cmpuint(ext->blocked_changed_count, == ,1);
+    g_assert_cmpuint(ext->req_id, == ,0);
+    test_expect_reply_uint(object, result, &ext->req_id);
+    g_assert_cmpuint(ext->req_id, != ,0);
+    GDEBUG("Request id=%u", ext->req_id);
+
+    /* Query the blocked state */
+    test_call(test, "GetBlocked", NULL, test_request_block_query_done);
+}
+
+static
+void
+test_request_block_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+    NfcManager* manager = test->manager;
+
+    test->client = client;
+    g_assert_false(manager->blocked);
+    test_signal_subscribe(test, "BlockedChanged", test_blocked_changed_handler);
+    test_call(test, "RequestBlock", NULL, test_request_block_done);
+}
+
+static
+void
+test_request_block(
+    gconstpointer param)
+{
+    TEST_ADAPTER_FLAGS flags = GPOINTER_TO_UINT(param);
+    TestDataExtRequestBlock ext;
+    TestData test;
+    TestDBus* dbus;
+
+    memset(&ext, 0, sizeof(ext));
+    test_data_init3(&test, test_adapter_new_with_flags(flags), TRUE);
+    test.ext = &ext;
+    nfc_adapter_request_power(test.adapter, TRUE); /* Request power */
+    dbus = test_dbus_new2(test_start, test_request_block_start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+/*==========================================================================*
+ * request_block/3
+ *==========================================================================*/
+
+static
+void
+test_request_block3_done(
+    GObject* object,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    TestDataExtRequestBlock* ext = test->ext;
+
+    g_assert_true(test->manager->blocked);
+    g_assert_cmpuint(ext->blocked_changed_count, == ,1);
+    g_assert_cmpuint(ext->req_id, == ,0);
+    test_expect_reply_uint(object, result, &ext->req_id);
+    g_assert_cmpuint(ext->req_id, != ,0);
+    GDEBUG("Request id=%u", ext->req_id);
+
+    test_quit_later(test->loop);
+}
+
+static
+void
+test_request_block3_remove_adapter(
+    GObject* object,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    TestDataExtRequestBlock* ext = test->ext;
+
+    test_expect_reply_boolean(object, result, &ext->blocked);
+    g_assert_true(ext->blocked);
+
+    /* This should complete the block request */
+    nfc_manager_remove_adapter(test->manager, test->adapter->name);
+}
+
+static
+void
+test_request_block3_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+    NfcManager* manager = test->manager;
+
+    test->client = client;
+    g_assert_false(manager->blocked);
+    test_signal_subscribe(test, "BlockedChanged", test_blocked_changed_handler);
+    test_call(test, "RequestBlock", NULL, test_request_block3_done);
+    test_call(test, "GetBlocked", NULL, test_request_block3_remove_adapter);
+}
+
+static
+void
+test_request_block3(
+    void)
+{
+    TestDataExtRequestBlock ext;
+    TestData test;
+    TestDBus* dbus;
+
+    memset(&ext, 0, sizeof(ext));
+    test_data_init3(&test, test_adapter_new_with_flags
+        (TEST_ADAPTER_FLAG_ASYNC_POWER_OFF |
+         TEST_ADAPTER_FLAG_ASYNC_POWER_STUCK), TRUE)->ext = &ext;
+    nfc_adapter_request_power(test.adapter, TRUE); /* Request power */
+    dbus = test_dbus_new2(test_start, test_request_block3_start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+
+#ifdef HAVE_DBUSACCESS
+/*==========================================================================*
+ * request_block_denied
+ *==========================================================================*/
+
+static
+void
+test_access_denied(
+    TestDBusStartFunc start)
+{
+    TestData test;
+    TestDBus* dbus;
+
+    test_dbus_deny_calls();
+    test_data_init(&test);
+    dbus = test_dbus_new2(test_start, start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+static
+void
+test_request_block_access_denied_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* test)
+{
+    test_call(test, "RequestBlock", NULL, test_expect_access_denied);
+}
+
+static
+void
+test_request_block_denied(
+    void)
+{
+    test_access_denied(test_request_block_access_denied_start);
+}
+
+/*==========================================================================*
+ * release_block_denied
+ *==========================================================================*/
+
+static
+void
+test_release_block_access_denied_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* test)
+{
+    test_call_release_block(test, 0, test_expect_access_denied);
+}
+
+static
+void
+test_release_block_denied(
+    void)
+{
+    test_access_denied(test_release_block_access_denied_start);
+}
+
+#endif /* HAVE_DBUSACCESS */
+
+/*==========================================================================*
  * Common
  *==========================================================================*/
 
@@ -1788,6 +2227,18 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("request_techs"), test_request_techs);
     g_test_add_func(TEST_("register_host_service"), test_register_host_service);
     g_test_add_func(TEST_("register_host_app"), test_register_host_app);
+    g_test_add_func(TEST_("get_all6"), test_get_all6);
+    g_test_add_data_func(TEST_("request_block/1"), (gpointer)
+        TEST_ADAPTER_FLAGS_NONE, test_request_block);
+    g_test_add_data_func(TEST_("request_block/2"), (gpointer)
+        TEST_ADAPTER_FLAG_ASYNC_POWER_OFF, test_request_block);
+    g_test_add_func(TEST_("request_block/3"), test_request_block3);
+
+#ifdef HAVE_DBUSACCESS
+    g_test_add_func(TEST_("request_block_denied"), test_request_block_denied);
+    g_test_add_func(TEST_("release_block_denied"), test_release_block_denied);
+#endif /* HAVE_DBUSACCESS */
+
     test_init(&test_opt, argc, argv);
     return g_test_run();
 }

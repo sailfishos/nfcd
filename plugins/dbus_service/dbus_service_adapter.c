@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2018-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2020 Jolla Ltd.
  *
@@ -94,14 +95,8 @@ enum {
     CALL_COUNT
 };
 
-typedef struct dbus_service_adapter_client {
-    char* dbus_name;
-    guint watch_id;
-    DBusServiceAdapter* service;
-    GHashTable* param_requests;  /* id => NfcAdapterParamRequest */
-} DBusServiceAdapterClient;
-
-struct dbus_service_adapter {
+typedef struct dbus_service_adapter_priv {
+    DBusServiceAdapter pub;
     char* path;
     GDBusConnection* connection;
     OrgSailfishosNfcAdapter* iface;
@@ -109,14 +104,24 @@ struct dbus_service_adapter {
     GHashTable* tags;
     GHashTable* peers;
     GHashTable* hosts;
-    NfcAdapter* adapter;
     GHashTable* clients;
     guint last_request_id;
     gulong event_id[EVENT_COUNT];
     gulong call_id[CALL_COUNT];
-};
+} DBusServiceAdapterPriv;
+
+typedef struct dbus_service_adapter_client {
+    char* dbus_name;
+    guint watch_id;
+    DBusServiceAdapterPriv* service;
+    GHashTable* param_requests;  /* id => NfcAdapterParamRequest */
+} DBusServiceAdapterClient;
 
 #define NFC_DBUS_ADAPTER_INTERFACE_VERSION  (4)
+
+static inline DBusServiceAdapterPriv*
+dbus_service_tag_cast(DBusServiceAdapter* pub)
+    { return G_LIKELY(pub) ? G_CAST(pub, DBusServiceAdapterPriv, pub) : NULL; }
 
 static
 void
@@ -125,7 +130,7 @@ dbus_service_adapter_client_gone(
     const char* name,
     gpointer service)
 {
-    DBusServiceAdapter* self = service;
+    DBusServiceAdapterPriv* self = service;
 
     GDEBUG("Name '%s' has disappeared", name);
     g_hash_table_remove(self->clients, name);
@@ -134,7 +139,7 @@ dbus_service_adapter_client_gone(
 static
 DBusServiceAdapterClient*
 dbus_service_adapter_client_new(
-    DBusServiceAdapter* self,
+    DBusServiceAdapterPriv* self,
     const char* dbus_name)
 {
     DBusServiceAdapterClient* client = g_slice_new0(DBusServiceAdapterClient);
@@ -164,7 +169,7 @@ dbus_service_adapter_client_destroy(
 static
 DBusServiceAdapterClient*
 dbus_service_adapter_client_get(
-    DBusServiceAdapter* self,
+    DBusServiceAdapterPriv* self,
     const char* dbus_name)
 {
     DBusServiceAdapterClient* client = NULL;
@@ -194,7 +199,7 @@ dbus_service_adapter_compare_strings(
 static
 gboolean
 dbus_service_adapter_create_tag(
-    DBusServiceAdapter* self,
+    DBusServiceAdapterPriv* self,
     NfcTag* tag)
 {
     DBusServiceTag* dbus = dbus_service_tag_new(tag, self->path,
@@ -211,7 +216,7 @@ dbus_service_adapter_create_tag(
 static
 gboolean
 dbus_service_adapter_create_peer(
-    DBusServiceAdapter* self,
+    DBusServiceAdapterPriv* self,
     NfcPeer* peer)
 {
     DBusServicePeer* dbus = dbus_service_peer_new(peer, self->path,
@@ -228,7 +233,7 @@ dbus_service_adapter_create_peer(
 static
 gboolean
 dbus_service_adapter_create_host(
-    DBusServiceAdapter* self,
+    DBusServiceAdapterPriv* self,
     NfcHost* host)
 {
     DBusServiceHost* dbus = dbus_service_host_new(host, self->path,
@@ -293,7 +298,7 @@ dbus_service_adapter_get_paths(
 static
 const char* const*
 dbus_service_adapter_get_tag_paths(
-    DBusServiceAdapter* self)
+    DBusServiceAdapterPriv* self)
 {
     return dbus_service_adapter_get_paths(self->tags, self->pool,
         dbus_service_adapter_get_tag_name);
@@ -302,7 +307,7 @@ dbus_service_adapter_get_tag_paths(
 static
 void
 dbus_service_adapter_tags_changed(
-    DBusServiceAdapter* self)
+    DBusServiceAdapterPriv* self)
 {
     org_sailfishos_nfc_adapter_emit_tags_changed(self->iface,
         dbus_service_adapter_get_tag_paths(self));
@@ -311,7 +316,7 @@ dbus_service_adapter_tags_changed(
 static
 const char* const*
 dbus_service_adapter_get_peer_paths(
-    DBusServiceAdapter* self)
+    DBusServiceAdapterPriv* self)
 {
     return dbus_service_adapter_get_paths(self->peers, self->pool,
         dbus_service_adapter_get_peer_name);
@@ -320,7 +325,7 @@ dbus_service_adapter_get_peer_paths(
 static
 void
 dbus_service_adapter_peers_changed(
-    DBusServiceAdapter* self)
+    DBusServiceAdapterPriv* self)
 {
     org_sailfishos_nfc_adapter_emit_peers_changed(self->iface,
         dbus_service_adapter_get_peer_paths(self));
@@ -329,7 +334,7 @@ dbus_service_adapter_peers_changed(
 static
 const char* const*
 dbus_service_adapter_get_host_paths(
-    DBusServiceAdapter* self)
+    DBusServiceAdapterPriv* self)
 {
     return dbus_service_adapter_get_paths(self->hosts, self->pool,
         dbus_service_adapter_get_host_name);
@@ -338,7 +343,7 @@ dbus_service_adapter_get_host_paths(
 static
 void
 dbus_service_adapter_hosts_changed(
-    DBusServiceAdapter* self)
+    DBusServiceAdapterPriv* self)
 {
     org_sailfishos_nfc_adapter_emit_hosts_changed(self->iface,
         dbus_service_adapter_get_host_paths(self));
@@ -508,10 +513,10 @@ dbus_service_adapter_enabled_changed(
     NfcAdapter* adapter,
     void* user_data)
 {
-    DBusServiceAdapter* self = user_data;
+    DBusServiceAdapterPriv* self = user_data;
 
     org_sailfishos_nfc_adapter_emit_enabled_changed(self->iface,
-        self->adapter->enabled);
+        self->pub.adapter->enabled);
 }
 
 static
@@ -520,10 +525,10 @@ dbus_service_adapter_powered_changed(
     NfcAdapter* adapter,
     void* user_data)
 {
-    DBusServiceAdapter* self = user_data;
+    DBusServiceAdapterPriv* self = user_data;
 
     org_sailfishos_nfc_adapter_emit_powered_changed(self->iface,
-        self->adapter->powered);
+        self->pub.adapter->powered);
 }
 
 static
@@ -532,10 +537,10 @@ dbus_service_adapter_mode_changed(
     NfcAdapter* adapter,
     void* user_data)
 {
-    DBusServiceAdapter* self = user_data;
+    DBusServiceAdapterPriv* self = user_data;
 
     org_sailfishos_nfc_adapter_emit_mode_changed(self->iface,
-        self->adapter->mode);
+        self->pub.adapter->mode);
 }
 
 static
@@ -544,10 +549,10 @@ dbus_service_adapter_target_present_changed(
     NfcAdapter* adapter,
     void* user_data)
 {
-    DBusServiceAdapter* self = user_data;
+    DBusServiceAdapterPriv* self = user_data;
 
     org_sailfishos_nfc_adapter_emit_target_present_changed(self->iface,
-        self->adapter->target_present);
+        self->pub.adapter->target_present);
 }
 
 static
@@ -557,7 +562,7 @@ dbus_service_adapter_tag_added(
     NfcTag* tag,
     void* user_data)
 {
-    DBusServiceAdapter* self = user_data;
+    DBusServiceAdapterPriv* self = user_data;
 
     if (dbus_service_adapter_create_tag(self, tag)) {
         dbus_service_adapter_tags_changed(self);
@@ -571,7 +576,7 @@ dbus_service_adapter_tag_removed(
     NfcTag* tag,
     void* user_data)
 {
-    DBusServiceAdapter* self = user_data;
+    DBusServiceAdapterPriv* self = user_data;
 
     if (g_hash_table_remove(self->tags, (void*)tag->name)) {
         dbus_service_adapter_tags_changed(self);
@@ -585,7 +590,7 @@ dbus_service_adapter_peer_added(
     NfcPeer* peer,
     void* user_data)
 {
-    DBusServiceAdapter* self = user_data;
+    DBusServiceAdapterPriv* self = user_data;
 
     if (dbus_service_adapter_create_peer(self, peer)) {
         dbus_service_adapter_peers_changed(self);
@@ -599,7 +604,7 @@ dbus_service_adapter_peer_removed(
     NfcPeer* peer,
     void* user_data)
 {
-    DBusServiceAdapter* self = user_data;
+    DBusServiceAdapterPriv* self = user_data;
 
     if (g_hash_table_remove(self->peers, (void*)peer->name)) {
         dbus_service_adapter_peers_changed(self);
@@ -613,7 +618,7 @@ dbus_service_adapter_host_added(
     NfcHost* host,
     void* user_data)
 {
-    DBusServiceAdapter* self = user_data;
+    DBusServiceAdapterPriv* self = user_data;
 
     if (dbus_service_adapter_create_host(self, host)) {
         dbus_service_adapter_hosts_changed(self);
@@ -627,7 +632,7 @@ dbus_service_adapter_host_removed(
     NfcHost* host,
     void* user_data)
 {
-    DBusServiceAdapter* self = user_data;
+    DBusServiceAdapterPriv* self = user_data;
 
     if (g_hash_table_remove(self->hosts, (void*)host->name)) {
         dbus_service_adapter_hosts_changed(self);
@@ -644,8 +649,9 @@ dbus_service_adapter_param_changed(
     const char* name = nfc_adapter_param_name(id);
 
     if (name) {
-        DBusServiceAdapter* self = user_data;
-        GVariant* v = dbus_service_adapter_get_param_value(self->adapter, id);
+        DBusServiceAdapterPriv* self = user_data;
+        GVariant* v = dbus_service_adapter_get_param_value
+            (self->pub.adapter, id);
 
         if (v) {
             org_sailfishos_nfc_adapter_emit_param_changed(self->iface, name,
@@ -665,9 +671,9 @@ gboolean
 dbus_service_adapter_handle_get_all(
     OrgSailfishosNfcAdapter* iface,
     GDBusMethodInvocation* call,
-    DBusServiceAdapter* self)
+    DBusServiceAdapterPriv* self)
 {
-    NfcAdapter* adapter = self->adapter;
+    NfcAdapter* adapter = self->pub.adapter;
 
     org_sailfishos_nfc_adapter_complete_get_all(iface, call,
         NFC_DBUS_ADAPTER_INTERFACE_VERSION, adapter->enabled, adapter->powered,
@@ -683,7 +689,7 @@ gboolean
 dbus_service_adapter_handle_get_interface_version(
     OrgSailfishosNfcAdapter* iface,
     GDBusMethodInvocation* call,
-    DBusServiceAdapter* self)
+    DBusServiceAdapterPriv* self)
 {
     org_sailfishos_nfc_adapter_complete_get_interface_version(iface, call,
         NFC_DBUS_ADAPTER_INTERFACE_VERSION);
@@ -697,10 +703,10 @@ gboolean
 dbus_service_adapter_handle_get_enabled(
     OrgSailfishosNfcAdapter* iface,
     GDBusMethodInvocation* call,
-    DBusServiceAdapter* self)
+    DBusServiceAdapterPriv* self)
 {
     org_sailfishos_nfc_adapter_complete_get_enabled(iface, call,
-        self->adapter->enabled);
+        self->pub.adapter->enabled);
     return TRUE;
 }
 
@@ -711,10 +717,10 @@ gboolean
 dbus_service_adapter_handle_get_powered(
     OrgSailfishosNfcAdapter* iface,
     GDBusMethodInvocation* call,
-    DBusServiceAdapter* self)
+    DBusServiceAdapterPriv* self)
 {
     org_sailfishos_nfc_adapter_complete_get_powered(iface, call,
-        self->adapter->powered);
+        self->pub.adapter->powered);
     return TRUE;
 }
 
@@ -725,10 +731,10 @@ gboolean
 dbus_service_adapter_handle_get_supported_modes(
     OrgSailfishosNfcAdapter* iface,
     GDBusMethodInvocation* call,
-    DBusServiceAdapter* self)
+    DBusServiceAdapterPriv* self)
 {
     org_sailfishos_nfc_adapter_complete_get_supported_modes(iface, call,
-        self->adapter->supported_modes);
+        self->pub.adapter->supported_modes);
     return TRUE;
 }
 
@@ -739,10 +745,10 @@ gboolean
 dbus_service_adapter_handle_get_mode(
     OrgSailfishosNfcAdapter* iface,
     GDBusMethodInvocation* call,
-    DBusServiceAdapter* self)
+    DBusServiceAdapterPriv* self)
 {
     org_sailfishos_nfc_adapter_complete_get_mode(iface, call,
-        self->adapter->mode);
+        self->pub.adapter->mode);
     return TRUE;
 }
 
@@ -753,10 +759,10 @@ gboolean
 dbus_service_adapter_handle_get_target_present(
     OrgSailfishosNfcAdapter* iface,
     GDBusMethodInvocation* call,
-    DBusServiceAdapter* self)
+    DBusServiceAdapterPriv* self)
 {
     org_sailfishos_nfc_adapter_complete_get_target_present(iface, call,
-        self->adapter->target_present);
+        self->pub.adapter->target_present);
     return TRUE;
 }
 
@@ -767,7 +773,7 @@ gboolean
 dbus_service_adapter_handle_get_tags(
     OrgSailfishosNfcAdapter* iface,
     GDBusMethodInvocation* call,
-    DBusServiceAdapter* self)
+    DBusServiceAdapterPriv* self)
 {
     org_sailfishos_nfc_adapter_complete_get_tags(iface, call,
         dbus_service_adapter_get_tag_paths(self));
@@ -783,9 +789,9 @@ gboolean
 dbus_service_adapter_handle_get_all2(
     OrgSailfishosNfcAdapter* iface,
     GDBusMethodInvocation* call,
-    DBusServiceAdapter* self)
+    DBusServiceAdapterPriv* self)
 {
-    NfcAdapter* adapter = self->adapter;
+    NfcAdapter* adapter = self->pub.adapter;
 
     org_sailfishos_nfc_adapter_complete_get_all2(iface, call,
         NFC_DBUS_ADAPTER_INTERFACE_VERSION, adapter->enabled, adapter->powered,
@@ -802,7 +808,7 @@ gboolean
 dbus_service_adapter_handle_get_peers(
     OrgSailfishosNfcAdapter* iface,
     GDBusMethodInvocation* call,
-    DBusServiceAdapter* self)
+    DBusServiceAdapterPriv* self)
 {
     org_sailfishos_nfc_adapter_complete_get_peers(iface, call,
         dbus_service_adapter_get_peer_paths(self));
@@ -818,9 +824,9 @@ gboolean
 dbus_service_adapter_handle_get_all3(
     OrgSailfishosNfcAdapter* iface,
     GDBusMethodInvocation* call,
-    DBusServiceAdapter* self)
+    DBusServiceAdapterPriv* self)
 {
-    NfcAdapter* adapter = self->adapter;
+    NfcAdapter* adapter = self->pub.adapter;
 
     org_sailfishos_nfc_adapter_complete_get_all3(iface, call,
         NFC_DBUS_ADAPTER_INTERFACE_VERSION, adapter->enabled, adapter->powered,
@@ -839,7 +845,7 @@ gboolean
 dbus_service_adapter_handle_get_hosts(
     OrgSailfishosNfcAdapter* iface,
     GDBusMethodInvocation* call,
-    DBusServiceAdapter* self)
+    DBusServiceAdapterPriv* self)
 {
     org_sailfishos_nfc_adapter_complete_get_hosts(iface, call,
         dbus_service_adapter_get_host_paths(self));
@@ -853,10 +859,10 @@ gboolean
 dbus_service_adapter_handle_get_supported_techs(
     OrgSailfishosNfcAdapter* iface,
     GDBusMethodInvocation* call,
-    DBusServiceAdapter* self)
+    DBusServiceAdapterPriv* self)
 {
     org_sailfishos_nfc_adapter_complete_get_supported_techs(iface, call,
-        nfc_adapter_get_supported_techs(self->adapter));
+        nfc_adapter_get_supported_techs(self->pub.adapter));
     return TRUE;
 }
 
@@ -869,9 +875,9 @@ gboolean
 dbus_service_adapter_handle_get_all4(
     OrgSailfishosNfcAdapter* iface,
     GDBusMethodInvocation* call,
-    DBusServiceAdapter* self)
+    DBusServiceAdapterPriv* self)
 {
-    NfcAdapter* adapter = self->adapter;
+    NfcAdapter* adapter = self->pub.adapter;
 
     org_sailfishos_nfc_adapter_complete_get_all4(iface, call,
         NFC_DBUS_ADAPTER_INTERFACE_VERSION, adapter->enabled, adapter->powered,
@@ -891,10 +897,10 @@ gboolean
 dbus_service_adapter_handle_get_params(
     OrgSailfishosNfcAdapter* iface,
     GDBusMethodInvocation* call,
-    DBusServiceAdapter* self)
+    DBusServiceAdapterPriv* self)
 {
     org_sailfishos_nfc_adapter_complete_get_params(iface, call,
-        dbus_service_adapter_get_params(self->adapter));
+        dbus_service_adapter_get_params(self->pub.adapter));
     return TRUE;
 }
 
@@ -907,12 +913,12 @@ dbus_service_adapter_handle_request_params(
     GDBusMethodInvocation* call,
     GVariant* dict,
     gboolean reset,
-    DBusServiceAdapter* self)
+    DBusServiceAdapterPriv* self)
 {
     gpointer key;
     const char* sender = g_dbus_method_invocation_get_sender(call);
     NfcAdapterParamRequest* req = dbus_service_adapter_param_request_new
-        (self->adapter, dict, reset);
+        (self->pub.adapter, dict, reset);
     DBusServiceAdapterClient* client = dbus_service_adapter_client_get
         (self, sender);
 
@@ -948,7 +954,7 @@ dbus_service_adapter_handle_release_params(
     OrgSailfishosNfcAdapter* iface,
     GDBusMethodInvocation* call,
     guint id,
-    DBusServiceAdapter* self)
+    DBusServiceAdapterPriv* self)
 {
     const char* sender = g_dbus_method_invocation_get_sender(call);
     gboolean released = FALSE;
@@ -980,7 +986,7 @@ dbus_service_adapter_handle_release_params(
 static
 void
 dbus_service_adapter_free_unexported(
-    DBusServiceAdapter* self)
+    DBusServiceAdapterPriv* self)
 {
     if (self->clients) {
         g_hash_table_destroy(self->clients);
@@ -989,8 +995,8 @@ dbus_service_adapter_free_unexported(
     g_hash_table_destroy(self->peers);
     g_hash_table_destroy(self->hosts);
 
-    nfc_adapter_remove_all_handlers(self->adapter, self->event_id);
-    nfc_adapter_unref(self->adapter);
+    nfc_adapter_remove_all_handlers(self->pub.adapter, self->event_id);
+    nfc_adapter_unref(self->pub.adapter);
 
     gutil_disconnect_handlers(self->iface, self->call_id, CALL_COUNT);
     g_object_unref(self->iface);
@@ -1004,9 +1010,11 @@ dbus_service_adapter_free_unexported(
 
 DBusServicePeer*
 dbus_service_adapter_find_peer(
-    DBusServiceAdapter* self,
+    DBusServiceAdapter* pub,
     NfcPeer* peer)
 {
+    DBusServiceAdapterPriv* self = dbus_service_tag_cast(pub);
+
     if (G_LIKELY(self)) {
         GHashTableIter it;
         gpointer value;
@@ -1025,9 +1033,11 @@ dbus_service_adapter_find_peer(
 
 DBusServiceHost*
 dbus_service_adapter_find_host(
-    DBusServiceAdapter* self,
+    DBusServiceAdapter* pub,
     NfcHost* host)
 {
+    DBusServiceAdapterPriv* self = dbus_service_tag_cast(pub);
+
     if (G_LIKELY(self)) {
         GHashTableIter it;
         gpointer value;
@@ -1044,27 +1054,21 @@ dbus_service_adapter_find_host(
     return NULL;
 }
 
-const char*
-dbus_service_adapter_path(
-    DBusServiceAdapter* self)
-{
-    return self->path;
-}
-
 DBusServiceAdapter*
 dbus_service_adapter_new(
     NfcAdapter* adapter,
     GDBusConnection* connection)
 {
-    DBusServiceAdapter* self = g_new0(DBusServiceAdapter, 1);
+    DBusServiceAdapterPriv* self = g_new0(DBusServiceAdapterPriv, 1);
+    DBusServiceAdapter* pub = &self->pub;
     NfcTag** tags;
     NfcPeer** peers;
     NfcHost** hosts;
     GError* error = NULL;
 
     g_object_ref(self->connection = connection);
-    self->path = g_strconcat("/", adapter->name, NULL);
-    self->adapter = nfc_adapter_ref(adapter);
+    pub->adapter = nfc_adapter_ref(adapter);
+    pub->path = self->path = g_strconcat("/", adapter->name, NULL);
     self->pool = gutil_idle_pool_new();
     self->iface = org_sailfishos_nfc_adapter_skeleton_new();
     self->tags = g_hash_table_new_full(g_str_hash, g_str_equal,
@@ -1131,7 +1135,7 @@ dbus_service_adapter_new(
     if (g_dbus_interface_skeleton_export(G_DBUS_INTERFACE_SKELETON
         (self->iface), connection, self->path, &error)) {
         GDEBUG("Created D-Bus object %s", self->path);
-        return self;
+        return pub;
     } else {
         GERR("%s: %s", self->path, GERRMSG(error));
         g_error_free(error);
@@ -1142,8 +1146,10 @@ dbus_service_adapter_new(
 
 void
 dbus_service_adapter_free(
-    DBusServiceAdapter* self)
+    DBusServiceAdapter* pub)
 {
+    DBusServiceAdapterPriv* self = dbus_service_tag_cast(pub);
+
     if (self) {
         GDEBUG("Removing D-Bus object %s", self->path);
         g_dbus_interface_skeleton_unexport(G_DBUS_INTERFACE_SKELETON

@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2019-2022 Jolla Ltd.
  * Copyright (C) 2019-2022 Slava Monich <slava.monich@jolla.com>
  *
@@ -32,7 +33,9 @@
 
 #include "test_dbus.h"
 
+#include <gutil_idlepool.h>
 #include <gutil_log.h>
+#include <gutil_misc.h>
 
 #include <gio/gunixinputstream.h>
 #include <gio/gunixoutputstream.h>
@@ -215,9 +218,7 @@ test_dbus_free(
     TestDBus* self)
 {
     if (self) {
-        if (self->start_id) {
-            g_source_remove(self->start_id);
-        }
+        gutil_source_remove(self->start_id);
         g_assert(g_dbus_connection_close_sync(self->client_connection,
             NULL, NULL));
         g_assert(g_dbus_connection_close_sync(self->server_connection,
@@ -229,6 +230,77 @@ test_dbus_free(
         g_free(self);
     }
 }
+
+/*
+ * Simulation of libdbusaccess access control. Unit tests don't link
+ * with libdbusaccess. These functions get linked instead.
+ */
+#ifdef HAVE_DBUSACCESS
+
+#include <dbusaccess_policy.h>
+#include <dbusaccess_peer.h>
+
+/*
+ * The access control simulation could be more sophisticated but this
+ * suffices for now.
+ */
+DA_ACCESS test_dbus_access = DA_ACCESS_ALLOW;
+
+struct da_policy {
+    gint refcount;
+};
+
+DAPeer*
+da_peer_get(
+    DA_BUS bus,
+    const char* name)
+{
+    static GUtilIdlePool* peer_pool = NULL;
+
+    gsize name_len = strlen(name);
+    DAPeer* peer = g_malloc0(sizeof(DAPeer) + name_len + 1);
+    char* name_copy = (char*)(peer + 1);
+
+    memcpy(name_copy, name, name_len);
+    peer->name = name_copy;
+    gutil_idle_pool_add(gutil_idle_pool_get(&peer_pool), peer, g_free);
+    return peer;
+}
+
+DAPolicy*
+da_policy_new_full(
+    const char* spec,
+    const DA_ACTION* actions)
+{
+    DAPolicy* policy = g_new0(DAPolicy, 1);
+
+    g_atomic_int_set(&policy->refcount, 1);
+    return policy;
+}
+
+void
+da_policy_unref(
+    DAPolicy* policy)
+{
+    if (policy && g_atomic_int_dec_and_test(&policy->refcount)) {
+        g_free(policy);
+    }
+}
+
+DA_ACCESS
+da_policy_check(
+    const DAPolicy* policy,
+    const DACred* cred,
+    guint action,
+    const char* arg,
+    DA_ACCESS def)
+{
+    GDEBUG("%s action %u", (test_dbus_access == DA_ACCESS_ALLOW) ?
+        "Allowing" : "Not allowing", action);
+    return test_dbus_access;
+}
+
+#endif /* HAVE_DBUSACCESS */
 
 /*
  * Local Variables:

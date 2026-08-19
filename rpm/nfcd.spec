@@ -8,12 +8,18 @@ URL: https://github.com/sailfishos/nfcd
 Source: %{name}-%{version}.tar.bz2
 
 %define glib_version 2.38
-%define libglibutil_version 1.0.74
+%define libglibutil_version 1.0.78
+
+# Link with libdbusaccess by default
+%if %{?with_libdbusaccess}%{!?with_libdbusaccess:1}
+BuildRequires: pkgconfig(libdbusaccess)
+%else
+%define have_dbusaccess HAVE_DBUSACCESS=0
+%endif
 
 BuildRequires: pkgconfig
 BuildRequires: pkgconfig(glib-2.0) >= %{glib_version}
 BuildRequires: pkgconfig(libglibutil) >= %{libglibutil_version}
-BuildRequires: pkgconfig(libdbusaccess)
 BuildRequires: pkgconfig(libnfcdef)
 BuildRequires: file-devel
 
@@ -54,7 +60,7 @@ This package contains command line NFC tools.
 %setup -q
 
 %build
-%make_build LIBDIR=%{_libdir} KEEP_SYMBOLS=1 release pkgconfig
+%make_build LIBDIR=%{_libdir} %{?have_dbusaccess} KEEP_SYMBOLS=1 release pkgconfig
 
 %install
 %define target_wants_dir %{_unitdir}/network.target.wants
@@ -66,7 +72,7 @@ mkdir -p %{buildroot}/%{target_wants_dir}
 ln -s ../nfcd.service %{buildroot}/%{target_wants_dir}/nfcd.service
 
 %check
-make -C unit test
+make %{?have_dbusaccess} -C unit test
 
 %pre
 systemctl stop nfcd ||:

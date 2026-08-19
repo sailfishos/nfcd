@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
  *
@@ -62,6 +63,8 @@ struct nfc_manager {
     NfcPeerService* const* services;
     /* Since 1.2.0 */
     NFC_TECHNOLOGY techs;
+    /* Since 1.2.7 */
+    gboolean blocked;
 };
 
 GType nfc_manager_get_type() NFCD_EXPORT;
@@ -235,6 +238,13 @@ nfc_manager_add_techs_changed_handler(
     void* user_data) /* Since 1.2.0 */
     NFCD_EXPORT;
 
+gulong
+nfc_manager_add_blocked_changed_handler(
+    NfcManager* manager,
+    NfcManagerFunc func,
+    void* user_data) /* Since 1.2.7 */
+    NFCD_EXPORT;
+
 void
 nfc_manager_remove_handler(
     NfcManager* manager,
@@ -293,6 +303,41 @@ nfc_manager_tech_request_new(
 void
 nfc_manager_tech_request_free(
     NfcTechRequest* req) /* Since 1.2.0 */
+    NFCD_EXPORT;
+
+/*
+ * In addition to being enabled/disabled (which is supposed to be a global
+ * system-wide switch), NfcManager can be blocked by plugins for a number
+ * of reasons and purposes.
+ *
+ * There's a separate power on/off switch for historical reasons. One could
+ * argue that power-off could be implemented a kind of a block. But first,
+ * it was done the way it's done before the block API was introduced,
+ * meaning that the power API has to be kept backward compatibile. Secondly,
+ * it's a special kind of block (more like unblock) - the power is off (i.e.
+ * blocked) by default.
+ *
+ * The bottom line is that NfcAdapters are really powered on if all the
+ * following conditions hold true:
+ *
+ * 1. NfcManager is enabled
+ * 2. Power is on
+ * 3. There are no active blocks.
+ *
+ * Each NfcBlockRequest carries an implicit reference to NfcManager.
+ */
+
+typedef struct nfc_block_request NfcBlockRequest; /* Since 1.2.7 */
+
+NfcBlockRequest*
+nfc_manager_block_request_new(
+    NfcManager* manager) /* Since 1.2.7 */
+    G_GNUC_WARN_UNUSED_RESULT
+    NFCD_EXPORT;
+
+void
+nfc_manager_block_request_free(
+    NfcBlockRequest* req) /* Since 1.2.7 */
     NFCD_EXPORT;
 
 G_END_DECLS

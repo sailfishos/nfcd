@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2018-2026 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
  *
@@ -47,6 +48,11 @@
 #include <nfc_peer_service.h>
 #include <nfc_plugin_impl.h>
 
+#ifdef HAVE_DBUSACCESS
+#include <dbusaccess_policy.h>
+#include <dbusaccess_peer.h>
+#endif
+
 #include <gutil_idlepool.h>
 #include <gutil_macros.h>
 #include <gutil_misc.h>
@@ -83,13 +89,18 @@ GLOG_MODULE_DEFINE("dbus-service");
     x(UNREGISTER_LOCAL_HOST_APP, unregister_local_host_app, \
       unregister-local-host-app) \
     x(REGISTER_LOCAL_HOST_SERVICE2, register_local_host_service2, \
-      register-local-host-service2)
+      register-local-host-service2) \
+    x(GET_ALL6, get_all6, get-all6) \
+    x(GET_BLOCKED, get_blocked, get-blocked) \
+    x(REQUEST_BLOCK, request_block, request-block) \
+    x(RELEASE_BLOCK, release_block, release-block)
 
 enum {
     EVENT_ADAPTER_ADDED,
     EVENT_ADAPTER_REMOVED,
     EVENT_MODE_CHANGED,
     EVENT_TECHS_CHANGED,
+    EVENT_BLOCKED_CHANGED,
     EVENT_COUNT
 };
 
@@ -104,12 +115,21 @@ typedef struct dbus_service_client {
     char* dbus_name;
     guint watch_id;
     DBusServicePlugin* plugin;
-    GHashTable* peer_services;  /* objpath => DBusServiceLocal */
-    GHashTable* host_services;  /* objpath => DBusServiceLocalHost */
-    GHashTable* host_apps;      /* objpath => DBusServiceLocalApp */
-    GHashTable* mode_requests;  /* id => NfcModeRequest */
-    GHashTable* tech_requests;  /* id => NfcTechRequest */
+    GHashTable* peer_services;    /* objpath => DBusServiceLocal */
+    GHashTable* host_services;    /* objpath => DBusServiceLocalHost */
+    GHashTable* host_apps;        /* objpath => DBusServiceLocalApp */
+    GHashTable* mode_requests;    /* id => NfcModeRequest */
+    GHashTable* tech_requests;    /* id => NfcTechRequest */
+    GHashTable* block_requests;   /* id => NfcBlockRequest */
+    GHashTable* block_calls;      /* id => pending block calls */
 } DBusServiceClient;
+
+typedef struct dbus_service_client_request_block_pending_call {
+    DBusServiceClient* client;
+    GDBusMethodInvocation* call;
+    guint id;
+    GHashTable* waiters;          /* NfcAdapter* => wait id */
+} DBusServiceClientRequestBlockPendingCall;
 
 typedef NfcPluginClass DBusServicePluginClass;
 struct dbus_service_plugin {
@@ -124,6 +144,9 @@ struct dbus_service_plugin {
     OrgSailfishosNfcDaemon* iface;
     gulong event_id[EVENT_COUNT];
     gulong call_id[CALL_COUNT];
+#ifdef HAVE_DBUSACCESS
+    DAPolicy* policy;
+#endif
 };
 
 #define PARENT_TYPE NFC_TYPE_PLUGIN
@@ -134,10 +157,65 @@ struct dbus_service_plugin {
 G_DEFINE_TYPE(DBusServicePlugin, dbus_service_plugin, PARENT_TYPE)
 
 #define NFC_BUS         G_BUS_TYPE_SYSTEM
+#define NFC_DA_BUS      DA_BUS_SYSTEM
 #define NFC_SERVICE     "org.sailfishos.nfc.daemon"
 #define NFC_DAEMON_PATH "/"
 
-#define NFC_DBUS_PLUGIN_INTERFACE_VERSION  (5)
+#define NFC_DBUS_PLUGIN_INTERFACE_VERSION  (6)
+
+#ifdef HAVE_DBUSACCESS
+
+typedef enum dbus_service_plugin_action {
+    DBUS_SERVICE_PLUGIN_ACTION_REQUEST_BLOCK = 1,
+    DBUS_SERVICE_PLUGIN_ACTION_RELEASE_BLOCK
+} DBUS_SERVICE_PLUGIN_ACTION;
+
+static const DA_ACTION dbus_service_plugin_policy_actions[] = {
+    { "RequestBlock", DBUS_SERVICE_PLUGIN_ACTION_REQUEST_BLOCK, 0 },
+    { "ReleaseBlock", DBUS_SERVICE_PLUGIN_ACTION_RELEASE_BLOCK, 0 },
+    { NULL }
+};
+
+#define DBUS_SERVICE_PLUGIN_DEFAULT_ACCESS_REQUEST_BLOCK DA_ACCESS_DENY
+#define DBUS_SERVICE_PLUGIN_DEFAULT_ACCESS_RELEASE_BLOCK DA_ACCESS_DENY
+
+/* Only privileged processes are allowed to block (and unblock) NFC */
+static const char dbus_service_plugin_default_policy[] =
+    DA_POLICY_VERSION ";group(privileged)=allow";
+
+/*
+ * N.B. If dbus_service_plugin_access_allowed() denies the access,
+ * it completes the call with AccessDenied error and returns FALSE.
+ * In other words, if dbus_service_plugin_access_allowed() returns
+ * FALSE, the call is already completed.
+ */
+static
+gboolean
+dbus_service_plugin_access_allowed(
+    DBusServicePlugin* self,
+    GDBusMethodInvocation* call,
+    DBUS_SERVICE_PLUGIN_ACTION action,
+    DA_ACCESS def)
+{
+    const char* sender = g_dbus_method_invocation_get_sender(call);
+    DAPeer* peer = da_peer_get(NFC_DA_BUS, sender);
+
+    /* If we get no peer information from dbus-daemon, it means that
+     * the peer is gone so it doesn't really matter what we do in this
+     * case - the reply will be dropped anyway. */
+    if (peer && da_policy_check(self->policy, &peer->cred, action, NULL, def) ==
+        DA_ACCESS_ALLOW) {
+        return TRUE;
+    }
+
+    g_dbus_method_invocation_return_error_literal(call, DBUS_SERVICE_ERROR,
+        DBUS_SERVICE_ERROR_ACCESS_DENIED, "D-Bus access denied");
+    return FALSE;
+}
+
+#else  /* HAVE_DBUSACCESS */
+#  define dbus_service_plugin_access_allowed(self,call,action,def) (TRUE)
+#endif /* !HAVE_DBUSACCESS */
 
 static
 gboolean
@@ -229,6 +307,12 @@ dbus_service_plugin_client_destroy(
     if (client->tech_requests) {
         g_hash_table_destroy(client->tech_requests);
     }
+    if (client->block_requests) {
+        g_hash_table_destroy(client->block_requests);
+    }
+    if (client->block_calls) {
+        g_hash_table_destroy(client->block_calls);
+    }
     g_bus_unwatch_name(client->watch_id);
     g_free(client->dbus_name);
     gutil_slice_free(client);
@@ -255,7 +339,7 @@ dbus_service_plugin_get_adapter_paths(
 
     g_hash_table_iter_init(&it, self->adapters);
     while (g_hash_table_iter_next(&it, NULL, &value)) {
-        out[n++] = dbus_service_adapter_path((DBusServiceAdapter*)value);
+        out[n++] = ((DBusServiceAdapter*)value)->path;
     }
     out[n] = NULL;
     qsort(out, n, sizeof(char*), dbus_service_plugin_compare_strings);
@@ -295,6 +379,7 @@ dbus_service_plugin_client_new(
 {
     DBusServiceClient* client = g_slice_new0(DBusServiceClient);
 
+    client->plugin = self;
     client->dbus_name = g_strdup(dbus_name);
     client->watch_id = g_bus_watch_name_on_connection(self->connection,
         client->dbus_name, G_BUS_NAME_WATCHER_FLAGS_NONE, NULL,
@@ -442,12 +527,158 @@ dbus_service_plugin_next_request_id(
             g_hash_table_contains(client->mode_requests, key)) ||
            (client->tech_requests &&
             g_hash_table_contains(client->tech_requests, key)) ||
+           (client->block_requests &&
+            g_hash_table_contains(client->block_requests, key)) ||
            !self->last_request_id) {
         self->last_request_id++;
         key = GUINT_TO_POINTER(self->last_request_id);
     }
 
     return self->last_request_id;
+}
+
+/*==========================================================================*
+ * Pending RequestBlock call
+ *==========================================================================*/
+
+static
+gboolean
+dbus_service_client_request_block_pending_call_wait_done(
+    DBusServiceClientRequestBlockPendingCall* pending,
+    NfcAdapter* adapter)
+{
+    gpointer id = g_hash_table_lookup(pending->waiters, adapter);
+
+    if (id) {
+        nfc_adapter_remove_handler(adapter, (gulong) id);
+        g_hash_table_remove(pending->waiters,  adapter);
+        if (!g_hash_table_size(pending->waiters)) {
+            if (pending->call) {
+                DBusServiceClient* client = pending->client;
+
+                GDEBUG("Block request %s/%u completed",client->dbus_name,
+                    pending->id);
+                org_sailfishos_nfc_daemon_complete_request_block(client->
+                    plugin->iface, pending->call, pending->id);
+                g_object_unref(pending->call);
+                pending->call = NULL;
+            }
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+static
+void
+dbus_service_client_request_block_pending_call_wait_cb(
+    NfcAdapter* adapter,
+    void* user_data)
+{
+    if (!adapter->powered) {
+        DBusServiceClientRequestBlockPendingCall* pending = user_data;
+
+        if (dbus_service_client_request_block_pending_call_wait_done(pending,
+            adapter)) {
+            /* Done with this pending call */
+            g_hash_table_remove(pending->client->block_calls,
+                GUINT_TO_POINTER(pending->id));
+        }
+    }
+}
+
+static
+void
+dbus_service_client_request_block_pending_call_wait_adapter(
+    DBusServiceClientRequestBlockPendingCall* pending,
+    NfcAdapter* adapter)
+{
+    gulong id = nfc_adapter_add_powered_changed_handler(adapter,
+        dbus_service_client_request_block_pending_call_wait_cb, pending);
+
+    /* Caller makes sure that the adapter is powered */
+    GASSERT(adapter->powered);
+    g_hash_table_insert(pending->waiters, adapter, (gpointer) id);
+}
+
+static
+void
+dbus_service_client_request_block_pending_call_free(
+    DBusServiceClientRequestBlockPendingCall* pending)
+{
+    GHashTableIter it;
+    gpointer adapter, id;
+
+    g_hash_table_iter_init(&it, pending->waiters);
+    while (g_hash_table_iter_next(&it, &adapter, &id)) {
+        nfc_adapter_remove_handler(adapter, (gulong) id);
+    }
+    g_hash_table_destroy(pending->waiters);
+    if (pending->call) {
+        GDEBUG("Block request %s/%u cancelled", pending->client->dbus_name,
+            pending->id);
+        g_dbus_method_invocation_return_error_literal(pending->call,
+            DBUS_SERVICE_ERROR, DBUS_SERVICE_ERROR_CANCELLED, "Cancelled");
+        g_object_unref(pending->call);
+    }
+    gutil_slice_free(pending);
+}
+
+static
+DBusServiceClientRequestBlockPendingCall*
+dbus_service_client_request_block_pending_call_new(
+   DBusServiceClient* client,
+   GDBusMethodInvocation* call,
+   guint id,
+   NfcAdapter* adapter)
+{
+    DBusServiceClientRequestBlockPendingCall* pending =
+        g_slice_new(DBusServiceClientRequestBlockPendingCall);
+
+    g_object_ref(pending->call = call);
+    pending->client = client;
+    pending->id = id;
+    pending->waiters = g_hash_table_new(g_direct_hash, g_direct_equal);
+
+    if (!client->block_calls) {
+        client->block_calls = g_hash_table_new_full(g_direct_hash,
+            g_direct_equal, NULL, (GDestroyNotify)
+            dbus_service_client_request_block_pending_call_free);
+    }
+
+    g_hash_table_insert(client->block_calls, GUINT_TO_POINTER(id), pending);
+    dbus_service_client_request_block_pending_call_wait_adapter(pending,
+        adapter);
+    return pending;
+}
+
+static
+void
+dbus_service_plugin_adapter_cleanup(
+    DBusServicePlugin* self,
+    NfcAdapter* adapter)
+{
+    if (self->clients) {
+        GHashTableIter clients;
+        gpointer value;
+
+        g_hash_table_iter_init(&clients, self->clients);
+        while (g_hash_table_iter_next(&clients, NULL, &value)) {
+            DBusServiceClient* client = value;
+
+            if (client->block_calls) {
+                GHashTableIter calls;
+
+                g_hash_table_iter_init(&calls, client->block_calls);
+                while (g_hash_table_iter_next(&calls, NULL, &value)) {
+                    if (dbus_service_client_request_block_pending_call_wait_done
+                        (value, adapter)) {
+                        g_hash_table_iter_remove(&calls);
+                    }
+                }
+            }
+        }
+    }
 }
 
 /*==========================================================================*
@@ -480,6 +711,7 @@ dbus_service_plugin_event_adapter_removed(
     DBusServicePlugin* self = THIS(plugin);
 
     if (g_hash_table_remove(self->adapters, (void*)adapter->name)) {
+        dbus_service_plugin_adapter_cleanup(self, adapter);
         dbus_service_plugin_adapters_changed(self);
     }
 }
@@ -506,6 +738,18 @@ dbus_service_plugin_event_techs_changed(
 
     org_sailfishos_nfc_daemon_emit_techs_changed(self->iface,
         self->manager->techs);
+}
+
+static
+void
+dbus_service_plugin_event_blocked_changed(
+    NfcManager* manager,
+    void* plugin)
+{
+    DBusServicePlugin* self = THIS(plugin);
+
+    org_sailfishos_nfc_daemon_emit_blocked_changed(self->iface,
+        self->manager->blocked);
 }
 
 /*==========================================================================*
@@ -877,21 +1121,6 @@ dbus_service_plugin_handle_register_local_host_service(
 
 static
 gboolean
-dbus_service_plugin_handle_register_local_host_service2(
-    OrgSailfishosNfcDaemon* iface,
-    GDBusMethodInvocation* call,
-    const char* obj_path,
-    const char* name,
-    gint version,
-    DBusServicePlugin* self)
-{
-    return dbus_service_plugin_handle_register_local_host_service_impl(iface,
-        call, obj_path, name, version, self,
-        org_sailfishos_nfc_daemon_complete_register_local_host_service2);
-}
-
-static
-gboolean
 dbus_service_plugin_handle_unregister_local_host_service(
     OrgSailfishosNfcDaemon* iface,
     GDBusMethodInvocation* call,
@@ -995,6 +1224,155 @@ dbus_service_plugin_handle_unregister_local_host_app(
     return TRUE;
 }
 
+/* Interface version 5 */
+
+static
+gboolean
+dbus_service_plugin_handle_register_local_host_service2(
+    OrgSailfishosNfcDaemon* iface,
+    GDBusMethodInvocation* call,
+    const char* obj_path,
+    const char* name,
+    gint version,
+    DBusServicePlugin* self)
+{
+    return dbus_service_plugin_handle_register_local_host_service_impl(iface,
+        call, obj_path, name, version, self,
+        org_sailfishos_nfc_daemon_complete_register_local_host_service2);
+}
+
+/* Interface version 6 */
+
+static
+gboolean
+dbus_service_plugin_handle_get_all6(
+    OrgSailfishosNfcDaemon* iface,
+    GDBusMethodInvocation* call,
+    DBusServicePlugin* self)
+{
+    NfcManager* manager = self->manager;
+
+    org_sailfishos_nfc_daemon_complete_get_all6(iface, call,
+        NFC_DBUS_PLUGIN_INTERFACE_VERSION,
+        dbus_service_plugin_get_adapter_paths(self),
+        nfc_core_version(), manager->mode, manager->techs,
+        manager->blocked);
+    return TRUE;
+}
+
+static
+gboolean
+dbus_service_plugin_handle_get_blocked(
+    OrgSailfishosNfcDaemon* iface,
+    GDBusMethodInvocation* call,
+    DBusServicePlugin* self)
+{
+    org_sailfishos_nfc_daemon_complete_get_blocked(iface, call,
+        self->manager->blocked);
+    return TRUE;
+}
+
+static
+gboolean
+dbus_service_plugin_handle_request_block(
+    OrgSailfishosNfcDaemon* iface,
+    GDBusMethodInvocation* call,
+    DBusServicePlugin* self)
+{
+    /*
+     * N.B. If dbus_service_plugin_access_allowed() denies the access,
+     * it completes the call with AccessDenied error and returns FALSE.
+     * In other words, if dbus_service_plugin_access_allowed() returns
+     * FALSE, the call is already completed.
+     */
+    if (dbus_service_plugin_access_allowed(self, call,
+        DBUS_SERVICE_PLUGIN_ACTION_REQUEST_BLOCK,
+        DBUS_SERVICE_PLUGIN_DEFAULT_ACCESS_REQUEST_BLOCK)) {
+        const char* sender = g_dbus_method_invocation_get_sender(call);
+        guint id = dbus_service_plugin_next_request_id(self, sender);
+        NfcBlockRequest* req = nfc_manager_block_request_new(self->manager);
+        DBusServiceClient* client = dbus_service_plugin_client_get(self,
+            sender);
+        DBusServiceClientRequestBlockPendingCall* pending = NULL;
+        GHashTableIter it;
+        gpointer value;
+
+        if (!client->block_requests) {
+            client->block_requests = g_hash_table_new_full(g_direct_hash,
+                g_direct_equal, NULL, (GDestroyNotify)
+                nfc_manager_block_request_free);
+        }
+        g_hash_table_insert(client->block_requests, GUINT_TO_POINTER(id), req);
+
+        /* Check if we need to wait for the adapter(s) to get powered off */
+        g_hash_table_iter_init(&it, self->adapters);
+        while (g_hash_table_iter_next(&it, NULL, &value)) {
+            NfcAdapter* adapter = ((DBusServiceAdapter*)value)->adapter;
+
+            if (adapter->powered) {
+                /* This adapter is powered on, don't complete the call yet */
+                if (G_UNLIKELY(pending)) {
+                    dbus_service_client_request_block_pending_call_wait_adapter
+                        (pending, adapter);
+                } else {
+                    GDEBUG("Block request %s/%u pending", sender, id);
+                    pending = dbus_service_client_request_block_pending_call_new
+                        (client, call, id, adapter);
+                }
+            }
+        }
+
+        if (!pending) {
+            /* There's nothing to wait for, we are done */
+            GDEBUG("Block request %s/%u ok", sender, id);
+            org_sailfishos_nfc_daemon_complete_request_block(iface, call, id);
+        }
+    }
+    return TRUE;
+}
+
+static
+gboolean
+dbus_service_plugin_handle_release_block(
+    OrgSailfishosNfcDaemon* iface,
+    GDBusMethodInvocation* call,
+    guint id,
+    DBusServicePlugin* self)
+{
+    /*
+     * N.B. If dbus_service_plugin_access_allowed() denies the access,
+     * it completes the call with AccessDenied error and returns FALSE.
+     * In other words, if dbus_service_plugin_access_allowed() returns
+     * FALSE, the call is already completed.
+     */
+    if (dbus_service_plugin_access_allowed(self, call,
+        DBUS_SERVICE_PLUGIN_ACTION_RELEASE_BLOCK,
+        DBUS_SERVICE_PLUGIN_DEFAULT_ACCESS_RELEASE_BLOCK)) {
+        const char* sender = g_dbus_method_invocation_get_sender(call);
+        gboolean released = FALSE;
+
+        if (self->clients) {
+            DBusServiceClient* client = g_hash_table_lookup(self->clients,
+                sender);
+
+            released = (client && client->block_requests &&
+                g_hash_table_remove(client->block_requests,
+                GUINT_TO_POINTER(id)));
+        }
+
+        if (released) {
+            GDEBUG("Block %s/%u released", sender, id);
+            org_sailfishos_nfc_daemon_complete_release_block(iface, call);
+        } else {
+            GDEBUG("Block %s/%u not found", sender, id);
+            g_dbus_method_invocation_return_error(call,
+                DBUS_SERVICE_ERROR, DBUS_SERVICE_ERROR_NOT_FOUND,
+                    "Invalid block %s/%u", sender, id);
+        }
+    }
+    return TRUE;
+}
+
 /*==========================================================================*
  * Name watching
  *==========================================================================*/
@@ -1083,6 +1461,9 @@ dbus_service_plugin_start(
     self->event_id[EVENT_TECHS_CHANGED] =
         nfc_manager_add_techs_changed_handler(manager,
             dbus_service_plugin_event_techs_changed, self);
+    self->event_id[EVENT_BLOCKED_CHANGED] =
+        nfc_manager_add_blocked_changed_handler(manager,
+            dbus_service_plugin_event_blocked_changed, self);
 
     /* Hook up D-Bus calls */
     #define CONNECT_HANDLER(CALL,call,name) self->call_id[CALL_##CALL] = \
@@ -1175,6 +1556,10 @@ dbus_service_plugin_init(
     self->pool = gutil_idle_pool_new();
     self->adapters = g_hash_table_new_full(g_str_hash, g_str_equal,
         g_free, dbus_service_plugin_free_adapter);
+#ifdef HAVE_DBUSACCESS
+    self->policy = da_policy_new_full(dbus_service_plugin_default_policy,
+        dbus_service_plugin_policy_actions);
+#endif
 }
 
 static
@@ -1184,6 +1569,9 @@ dbus_service_plugin_finalize(
 {
     DBusServicePlugin* self = THIS(plugin);
 
+#ifdef HAVE_DBUSACCESS
+    da_policy_unref(self->policy);
+#endif
     if (self->clients) {
         g_hash_table_destroy(self->clients);
     }

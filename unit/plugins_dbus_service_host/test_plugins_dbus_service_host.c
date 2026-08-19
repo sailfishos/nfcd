@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2023 Slava Monich <slava@monich.com>
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -141,8 +142,7 @@ test_host_path(
 
     g_assert(test->service);
     g_assert(host);
-    path = g_strconcat(dbus_service_adapter_path(test->service), "/",
-        host->name, NULL);
+    path = g_strconcat(test->service->path, "/", host->name, NULL);
     gutil_idle_pool_add(test->pool, path, g_free);
     return path;
 }
