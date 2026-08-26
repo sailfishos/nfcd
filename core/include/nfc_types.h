@@ -110,7 +110,8 @@ typedef enum nfc_protocol {
     NFC_PROTOCOL_T3_TAG  = 0x04,   /* Type 3 Tag */
     NFC_PROTOCOL_T4A_TAG = 0x08,   /* Type 4A Tag (ISO-DEP, ISO 14443) */
     NFC_PROTOCOL_T4B_TAG = 0x10,   /* Type 4B Tag (ISO-DEP, ISO 14443) */
-    NFC_PROTOCOL_NFC_DEP = 0x20    /* NFC-DEP Protocol (ISO 18092) */
+    NFC_PROTOCOL_NFC_DEP = 0x20,   /* NFC-DEP Protocol (ISO 18092) */
+    NFC_PROTOCOL_MIFARE_CLASSIC = 0x40 /* Since 1.2.8, NCI proprietary RF interface */
 } NFC_PROTOCOL;
 
 typedef enum nfc_tag_type {
