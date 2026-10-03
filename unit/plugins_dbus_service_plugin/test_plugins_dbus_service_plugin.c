@@ -41,6 +41,7 @@
 #include "nfc_types_p.h"
 #include "internal/nfc_manager_i.h"
 #include "nfc_adapter.h"
+#include "nfc_adapter_impl.h"
 #include "nfc_version.h"
 
 #include "dbus_service/dbus_service.h"
@@ -70,6 +71,7 @@ typedef struct test_data {
     NfcManager* manager;
     NfcAdapter* adapter;
     GDBusConnection* client; /* Owned by TestDBus */
+    guint signal_id;
     void* ext;
 } TestData;
 
@@ -120,6 +122,11 @@ void
 test_data_cleanup(
     TestData* test)
 {
+    /* Queued signals must not outlive the stack-allocated test data. */
+    if (test->signal_id) {
+        g_dbus_connection_signal_unsubscribe(test->client, test->signal_id);
+        test->signal_id = 0;
+    }
     nfc_adapter_unref(test->adapter);
     nfc_manager_stop(test->manager, 0);
     nfc_manager_unref(test->manager);
@@ -312,9 +319,11 @@ test_signal_subscribe(
     const char* name,
     GDBusSignalCallback handler)
 {
-    g_assert(g_dbus_connection_signal_subscribe(test->client, NULL,
+    g_assert(!test->signal_id);
+    test->signal_id = g_dbus_connection_signal_subscribe(test->client, NULL,
         NFC_DAEMON_INTERFACE, name, NFC_DAEMON_PATH, NULL,
-        G_DBUS_SIGNAL_FLAGS_NO_MATCH_RULE, handler, test, NULL));
+        G_DBUS_SIGNAL_FLAGS_NO_MATCH_RULE, handler, test, NULL);
+    g_assert(test->signal_id);
 }
 
 static
@@ -1925,6 +1934,7 @@ test_blocked_changed_handler(
     TestDataExtRequestBlock* ext = test->ext;
     gboolean blocked = FALSE;
 
+    g_assert(connection == test->client);
     g_variant_get(args, "(b)", &blocked);
     GDEBUG("blocked => %d", blocked);
     ext->blocked = blocked;
@@ -2090,8 +2100,30 @@ test_request_block3_remove_adapter(
     test_expect_reply_boolean(object, result, &ext->blocked);
     g_assert_true(ext->blocked);
 
-    /* This should complete the block request */
+    /* Losing an adapter must fail the request, never acknowledge closure. */
     nfc_manager_remove_adapter(test->manager, test->adapter->name);
+}
+
+static
+void
+test_request_block_removed(
+    GObject* object,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    GError* error = NULL;
+    char* name;
+
+    g_assert_null(g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),
+        result, &error));
+    g_assert_nonnull(error);
+    name = g_dbus_error_get_remote_error(error);
+    g_assert_cmpstr(name, == , "org.sailfishos.nfc.Error.Failed");
+    g_free(name);
+    g_error_free(error);
+    g_assert_false(test->manager->blocked);
+    test_quit_later(test->loop);
 }
 
 static
@@ -2107,7 +2139,7 @@ test_request_block3_start(
     test->client = client;
     g_assert_false(manager->blocked);
     test_signal_subscribe(test, "BlockedChanged", test_blocked_changed_handler);
-    test_call(test, "RequestBlock", NULL, test_request_block3_done);
+    test_call(test, "RequestBlock", NULL, test_request_block_removed);
     test_call(test, "GetBlocked", NULL, test_request_block3_remove_adapter);
 }
 
@@ -2126,6 +2158,62 @@ test_request_block3(
          TEST_ADAPTER_FLAG_ASYNC_POWER_STUCK), TRUE)->ext = &ext;
     nfc_adapter_request_power(test.adapter, TRUE); /* Request power */
     dbus = test_dbus_new2(test_start, test_request_block3_start, &test);
+    test_run(&test_opt, test.loop);
+    test_data_cleanup(&test);
+    test_dbus_free(dbus);
+}
+
+
+/* A cancelled open can still be closing while powered is FALSE. */
+static
+void
+test_request_block_open_finish(
+    GObject* object,
+    GAsyncResult* result,
+    gpointer user_data)
+{
+    TestData* test = user_data;
+    TestDataExtRequestBlock* ext = test->ext;
+
+    test_expect_reply_boolean(object, result, &ext->blocked);
+    g_assert_true(ext->blocked);
+    g_assert_cmpuint(ext->req_id, == ,0);
+    g_assert_false(test->adapter->powered);
+    /* Only this hardware acknowledgement may complete RequestBlock. */
+    nfc_adapter_power_notify(test->adapter, FALSE, TRUE);
+}
+
+static
+void
+test_request_block_open_start(
+    GDBusConnection* client,
+    GDBusConnection* server,
+    void* user_data)
+{
+    TestData* test = user_data;
+
+    test->client = client;
+    test_signal_subscribe(test, "BlockedChanged", test_blocked_changed_handler);
+    test_call(test, "RequestBlock", NULL, test_request_block3_done);
+    test_call(test, "GetBlocked", NULL, test_request_block_open_finish);
+}
+
+static
+void
+test_request_block_open(
+    void)
+{
+    TestDataExtRequestBlock ext;
+    TestData test;
+    TestDBus* dbus;
+
+    memset(&ext, 0, sizeof(ext));
+    test_data_init3(&test, test_adapter_new_with_flags
+        (TEST_ADAPTER_FLAG_ASYNC_POWER | TEST_ADAPTER_FLAG_ASYNC_POWER_STUCK),
+        TRUE)->ext = &ext;
+    nfc_adapter_request_power(test.adapter, TRUE);
+    g_assert_false(test.adapter->powered);
+    dbus = test_dbus_new2(test_start, test_request_block_open_start, &test);
     test_run(&test_opt, test.loop);
     test_data_cleanup(&test);
     test_dbus_free(dbus);
@@ -2233,6 +2321,7 @@ int main(int argc, char* argv[])
     g_test_add_data_func(TEST_("request_block/2"), (gpointer)
         TEST_ADAPTER_FLAG_ASYNC_POWER_OFF, test_request_block);
     g_test_add_func(TEST_("request_block/3"), test_request_block3);
+    g_test_add_func(TEST_("request_block/open_pending"), test_request_block_open);
 
 #ifdef HAVE_DBUSACCESS
     g_test_add_func(TEST_("request_block_denied"), test_request_block_denied);

@@ -100,6 +100,7 @@ enum nfc_adapter_signal {
     SIGNAL_TAG_REMOVED,
     SIGNAL_ENABLED_CHANGED,
     SIGNAL_POWERED,
+    SIGNAL_POWER_BUSY,
     SIGNAL_POWER_REQUESTED,
     SIGNAL_MODE,
     SIGNAL_MODE_REQUESTED,
@@ -117,6 +118,7 @@ enum nfc_adapter_signal {
 #define SIGNAL_TAG_ADDED_NAME           "nfc-adapter-tag-added"
 #define SIGNAL_TAG_REMOVED_NAME         "nfc-adapter-tag-removed"
 #define SIGNAL_ENABLED_CHANGED_NAME     "nfc-adapter-enabled-changed"
+#define SIGNAL_POWER_BUSY_NAME          "nfc-adapter-power-busy"
 #define SIGNAL_POWERED_NAME             "nfc-adapter-powered"
 #define SIGNAL_POWER_REQUESTED_NAME     "nfc-adapter-power-requested"
 #define SIGNAL_MODE_NAME                "nfc-adapter-mode"
@@ -365,6 +367,7 @@ nfc_adapter_update_power(
     NfcAdapterClass* c = GET_THIS_CLASS(self);
     NfcAdapterPriv* priv = self->priv;
     const gboolean on = (self->power_requested && self->enabled);
+    const gboolean was_busy = priv->power_pending;
 
     /* Cancel mode change if we are about to power the whole thing off */
     if (!on && priv->mode_pending) {
@@ -390,6 +393,9 @@ nfc_adapter_update_power(
         if (!c->submit_power_request(self, on)) {
             priv->power_pending = FALSE;
         }
+    }
+    if (priv->power_pending != was_busy) {
+        nfc_adapter_queue_signal(self, SIGNAL_POWER_BUSY);
     }
 }
 
@@ -1147,6 +1153,24 @@ nfc_adapter_add_host_removed_handler(
         SIGNAL_HOST_REMOVED_NAME, G_CALLBACK(func), user_data) : 0;
 }
 
+/* TRUE while a submitted power request has not completed. */
+gboolean
+nfc_adapter_power_busy(
+    NfcAdapter* self) /* Since 1.2.8 */
+{
+    return self && self->priv->power_pending;
+}
+
+gulong
+nfc_adapter_add_power_busy_handler(
+    NfcAdapter* self,
+    NfcAdapterFunc func,
+    void* user_data) /* Since 1.2.8 */
+{
+    return (G_LIKELY(self) && G_LIKELY(func)) ? g_signal_connect(self,
+        SIGNAL_POWER_BUSY_NAME, G_CALLBACK(func), user_data) : 0;
+}
+
 gulong
 nfc_adapter_add_powered_changed_handler(
     NfcAdapter* self,
@@ -1258,9 +1282,10 @@ nfc_adapter_power_notify(
     if (G_LIKELY(self)) {
         NfcAdapterPriv* priv = self->priv;
 
-        if (was_requested) {
+        if (was_requested && priv->power_pending) {
             /* Request has completed */
             priv->power_pending = FALSE;
+            nfc_adapter_queue_signal(self, SIGNAL_POWER_BUSY);
         }
         if (self->powered != on) {
             self->powered = on;
@@ -1597,6 +1622,7 @@ nfc_adapter_class_init(
 
     NEW_SIGNAL(ENABLED_CHANGED, type);
     NEW_SIGNAL(POWERED, type);
+    NEW_SIGNAL(POWER_BUSY, type);
     NEW_SIGNAL(POWER_REQUESTED, type);
     NEW_SIGNAL(MODE, type);
     NEW_SIGNAL(MODE_REQUESTED, type);
