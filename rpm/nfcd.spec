@@ -1,6 +1,6 @@
 Name: nfcd
 
-Version: 1.2.7
+Version: 1.2.8
 Release: 0
 Summary: NFC daemon
 License: BSD
@@ -89,7 +89,6 @@ systemctl start nfcd ||:
 systemctl daemon-reload ||:
 
 %files
-%defattr(-,root,root,-)
 %dir %attr(700,nfc,nfc) %{settings_dir}
 %{_sbindir}/*
 %{_sysconfdir}/dbus-1/system.d/*.conf
@@ -103,7 +102,6 @@ systemctl daemon-reload ||:
 %{_bindir}/*
 
 %files plugin-devel
-%defattr(-,root,root,-)
 %dir %{_includedir}/nfcd
 %{_includedir}/nfcd/*.h
 %{_libdir}/pkgconfig/*.pc
