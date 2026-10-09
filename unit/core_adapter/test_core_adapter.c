@@ -1137,6 +1137,99 @@ test_host(
     nfc_initiator_unref(initiator);
 }
 
+static
+void
+test_power_busy(
+    void)
+{
+    TestAdapter* test = test_adapter_new();
+    NfcAdapter* adapter = &test->adapter;
+    int changes = 0;
+    gulong id = nfc_adapter_add_power_busy_handler(adapter,
+        test_adapter_inc, &changes);
+
+    g_assert_false(nfc_adapter_power_busy(NULL));
+    g_assert(!nfc_adapter_add_power_busy_handler(NULL, test_adapter_inc, NULL));
+    g_assert(!nfc_adapter_add_power_busy_handler(adapter, NULL, NULL));
+    g_assert_false(nfc_adapter_power_busy(adapter));
+    nfc_adapter_set_enabled(adapter, TRUE);
+    nfc_adapter_request_power(adapter, TRUE);
+    g_assert_true(nfc_adapter_power_busy(adapter));
+    g_assert_cmpint(changes, == ,1);
+
+    /* Repeated requests and unsolicited notifications aren't busy changes. */
+    nfc_adapter_request_power(adapter, TRUE);
+    nfc_adapter_power_notify(adapter, FALSE, FALSE);
+    g_assert_cmpint(changes, == ,1);
+
+    /* Replacing a pending open with a close keeps the adapter busy. */
+    nfc_adapter_request_power(adapter, FALSE);
+    g_assert_true(nfc_adapter_power_busy(adapter));
+    g_assert_cmpint(changes, == ,1);
+    test_adapter_complete_power_request(test);
+    g_assert_false(nfc_adapter_power_busy(adapter));
+    g_assert_cmpint(changes, == ,2);
+    nfc_adapter_power_notify(adapter, FALSE, TRUE);
+    g_assert_cmpint(changes, == ,2);
+
+    /* A powered adapter with no pending request isn't busy. */
+    nfc_adapter_request_power(adapter, TRUE);
+    test_adapter_complete_power_request(test);
+    g_assert_true(adapter->powered);
+    g_assert_false(nfc_adapter_power_busy(adapter));
+    g_assert_cmpint(changes, == ,4);
+    nfc_adapter_request_power(adapter, FALSE);
+    test_adapter_complete_power_request(test);
+    g_assert_cmpint(changes, == ,6);
+
+    /* A rejected submission never becomes observably busy. */
+    test->fail_power_request = TRUE;
+    nfc_adapter_request_power(adapter, TRUE);
+    g_assert_false(nfc_adapter_power_busy(adapter));
+    g_assert_cmpint(changes, == ,6);
+    test->fail_power_request = FALSE;
+    nfc_adapter_request_power(adapter, TRUE);
+    g_assert_true(nfc_adapter_power_busy(adapter));
+    test->fail_power_request = TRUE;
+    nfc_adapter_request_power(adapter, FALSE);
+    g_assert_false(nfc_adapter_power_busy(adapter));
+    g_assert_cmpint(changes, == ,8);
+
+    nfc_adapter_remove_handler(adapter, id);
+    nfc_adapter_unref(adapter);
+}
+
+/* The original owner may release the adapter from the powered handler. */
+static
+void
+test_power_notify_release(
+    NfcAdapter* adapter,
+    void* data)
+{
+    nfc_adapter_unref(adapter);
+}
+
+static
+void
+test_power_notify_lifetime(
+    void)
+{
+    NfcAdapter* adapter = &test_adapter_new()->adapter;
+    gpointer weak = adapter;
+    int notified = 0;
+
+    nfc_adapter_set_enabled(adapter, TRUE);
+    nfc_adapter_request_power(adapter, TRUE);
+    g_assert_true(nfc_adapter_power_busy(adapter));
+    g_object_add_weak_pointer(G_OBJECT(adapter), &weak);
+    nfc_adapter_add_powered_changed_handler(adapter,
+        test_power_notify_release, NULL);
+    nfc_adapter_add_power_busy_handler(adapter, test_adapter_inc, &notified);
+    nfc_adapter_power_notify(adapter, TRUE, TRUE);
+    g_assert_cmpint(notified, == ,1);
+    g_assert_null(weak);
+}
+
 /*==========================================================================*
  * Common
  *==========================================================================*/
@@ -1155,6 +1248,8 @@ int main(int argc, char* argv[])
     g_test_add_func(TEST_("params"), test_params);
     g_test_add_func(TEST_("enabled"), test_enabled);
     g_test_add_func(TEST_("power"), test_power);
+    g_test_add_func(TEST_("power_busy"), test_power_busy);
+    g_test_add_func(TEST_("power_notify_lifetime"), test_power_notify_lifetime);
     g_test_add_func(TEST_("mode"), test_mode);
     g_test_add_func(TEST_("tags"), test_tags);
     g_test_add_func(TEST_("peer"), test_peer);

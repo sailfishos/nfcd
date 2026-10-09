@@ -128,7 +128,7 @@ typedef struct dbus_service_client_request_block_pending_call {
     DBusServiceClient* client;
     GDBusMethodInvocation* call;
     guint id;
-    GHashTable* waiters;          /* NfcAdapter* => wait id */
+    GHashTable* waiters;          /* NfcAdapter* => two handler ids */
 } DBusServiceClientRequestBlockPendingCall;
 
 typedef NfcPluginClass DBusServicePluginClass;
@@ -547,10 +547,10 @@ dbus_service_client_request_block_pending_call_wait_done(
     DBusServiceClientRequestBlockPendingCall* pending,
     NfcAdapter* adapter)
 {
-    gpointer id = g_hash_table_lookup(pending->waiters, adapter);
+    gulong* ids = g_hash_table_lookup(pending->waiters, adapter);
 
-    if (id) {
-        nfc_adapter_remove_handler(adapter, (gulong) id);
+    if (ids) {
+        nfc_adapter_remove_handlers(adapter, ids, 2);
         g_hash_table_remove(pending->waiters,  adapter);
         if (!g_hash_table_size(pending->waiters)) {
             if (pending->call) {
@@ -575,7 +575,7 @@ dbus_service_client_request_block_pending_call_wait_cb(
     NfcAdapter* adapter,
     void* user_data)
 {
-    if (!adapter->powered) {
+    if (!adapter->powered && !nfc_adapter_power_busy(adapter)) {
         DBusServiceClientRequestBlockPendingCall* pending = user_data;
 
         if (dbus_service_client_request_block_pending_call_wait_done(pending,
@@ -593,12 +593,17 @@ dbus_service_client_request_block_pending_call_wait_adapter(
     DBusServiceClientRequestBlockPendingCall* pending,
     NfcAdapter* adapter)
 {
-    gulong id = nfc_adapter_add_powered_changed_handler(adapter,
+    gulong* ids = g_new(gulong, 2);
+
+    ids[0] = nfc_adapter_add_power_busy_handler(adapter,
         dbus_service_client_request_block_pending_call_wait_cb, pending);
 
-    /* Caller makes sure that the adapter is powered */
-    GASSERT(adapter->powered);
-    g_hash_table_insert(pending->waiters, adapter, (gpointer) id);
+    ids[1] = nfc_adapter_add_powered_changed_handler(adapter,
+        dbus_service_client_request_block_pending_call_wait_cb, pending);
+
+    /* Wait for pending opens and closes as well as powered adapters. */
+    GASSERT(adapter->powered || nfc_adapter_power_busy(adapter));
+    g_hash_table_insert(pending->waiters, adapter, ids);
 }
 
 static
@@ -611,7 +616,7 @@ dbus_service_client_request_block_pending_call_free(
 
     g_hash_table_iter_init(&it, pending->waiters);
     while (g_hash_table_iter_next(&it, &adapter, &id)) {
-        nfc_adapter_remove_handler(adapter, (gulong) id);
+        nfc_adapter_remove_handlers(adapter, id, 2);
     }
     g_hash_table_destroy(pending->waiters);
     if (pending->call) {
@@ -638,7 +643,8 @@ dbus_service_client_request_block_pending_call_new(
     g_object_ref(pending->call = call);
     pending->client = client;
     pending->id = id;
-    pending->waiters = g_hash_table_new(g_direct_hash, g_direct_equal);
+    pending->waiters = g_hash_table_new_full(g_direct_hash, g_direct_equal,
+        NULL, g_free);
 
     if (!client->block_calls) {
         client->block_calls = g_hash_table_new_full(g_direct_hash,
@@ -671,9 +677,21 @@ dbus_service_plugin_adapter_cleanup(
 
                 g_hash_table_iter_init(&calls, client->block_calls);
                 while (g_hash_table_iter_next(&calls, NULL, &value)) {
-                    if (dbus_service_client_request_block_pending_call_wait_done
-                        (value, adapter)) {
+                    DBusServiceClientRequestBlockPendingCall* pending = value;
+
+                    if (g_hash_table_contains(pending->waiters, adapter)) {
+                        const guint id = pending->id;
+
+                        /* Disappearance is not confirmation of HAL closure. */
+                        g_dbus_method_invocation_return_error_literal
+                            (pending->call, DBUS_SERVICE_ERROR,
+                             DBUS_SERVICE_ERROR_FAILED,
+                             "Adapter disappeared before power-off completed");
+                        g_object_unref(pending->call);
+                        pending->call = NULL;
                         g_hash_table_iter_remove(&calls);
+                        g_hash_table_remove(client->block_requests,
+                            GUINT_TO_POINTER(id));
                     }
                 }
             }
@@ -1309,8 +1327,8 @@ dbus_service_plugin_handle_request_block(
         while (g_hash_table_iter_next(&it, NULL, &value)) {
             NfcAdapter* adapter = ((DBusServiceAdapter*)value)->adapter;
 
-            if (adapter->powered) {
-                /* This adapter is powered on, don't complete the call yet */
+            if (adapter->powered || nfc_adapter_power_busy(adapter)) {
+                /* Power is on or changing, don't complete the call yet */
                 if (G_UNLIKELY(pending)) {
                     dbus_service_client_request_block_pending_call_wait_adapter
                         (pending, adapter);

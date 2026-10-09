@@ -320,6 +320,19 @@ nfc_adapter_add_host_removed_handler(
     void* user_data) /* Since 1.2.0 */
     NFCD_EXPORT;
 
+/* TRUE while a submitted power request has not completed. */
+gboolean
+nfc_adapter_power_busy(
+    NfcAdapter* adapter) /* Since 1.2.8 */
+    NFCD_EXPORT;
+
+gulong
+nfc_adapter_add_power_busy_handler(
+    NfcAdapter* adapter,
+    NfcAdapterFunc func,
+    void* user_data) /* Since 1.2.8 */
+    NFCD_EXPORT;
+
 gulong
 nfc_adapter_add_powered_changed_handler(
     NfcAdapter* adapter,
