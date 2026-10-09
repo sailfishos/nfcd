@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2022 Jolla Ltd.
  *
@@ -50,10 +51,6 @@ test_init(
     char* argv[]);
 
 /* Run loop with a timeout */
-gboolean
-test_timeout_expired(
-    gpointer data);
-
 void
 test_run(
     const TestOpt* opt,
@@ -83,6 +80,10 @@ test_idle_add_full(
 int
 test_rmdir(
     const char* path);
+
+gboolean
+test_timeout_not_reached(
+    gpointer data);
 
 #endif /* TEST_COMMON_H */
 

@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 Jolla Mobile Ltd
  * Copyright (C) 2018-2023 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2022 Jolla Ltd.
  *
@@ -79,7 +80,7 @@ test_rmdir(
 }
 
 gboolean
-test_timeout_expired(
+test_timeout_not_reached(
     gpointer data)
 {
     g_assert_not_reached();
@@ -146,10 +147,19 @@ test_run(
     if (opt->flags & TEST_FLAG_DEBUG) {
         g_main_loop_run(loop);
     } else {
-        const guint timeout_id = g_timeout_add_seconds(TEST_TIMEOUT_SEC,
-            test_timeout_expired, NULL);
+        static guint depth = 0;
+
+        /*
+         * SIGALRM terminates the process even if the main thread is stuck.
+         * Nested loops must neither extend nor cancel the outer timeout.
+         */
+        if (!depth++) {
+            alarm(TEST_TIMEOUT_SEC);
+        }
         g_main_loop_run(loop);
-        g_source_remove(timeout_id);
+        if (!--depth) {
+            alarm(0);
+        }
     }
 }
 
