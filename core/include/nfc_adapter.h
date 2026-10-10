@@ -186,6 +186,13 @@ nfc_adapter_add_tag_t4b(
     NFCD_EXPORT;
 
 NfcTag*
+nfc_adapter_add_tag_mifare_classic(
+    NfcAdapter* adapter,
+    NfcTarget* target,
+    const NfcParamPollA* tech_param) /* Since 1.2.8 */
+    NFCD_EXPORT;
+
+NfcTag*
 nfc_adapter_add_other_tag(
     NfcAdapter* adapter,
     NfcTarget* target)

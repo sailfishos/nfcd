@@ -885,6 +885,33 @@ nfc_adapter_add_tag_t4b(
 }
 
 NfcTag*
+nfc_adapter_add_tag_mifare_classic(
+    NfcAdapter* self,
+    NfcTarget* target,
+    const NfcParamPollA* tech_param) /* Since 1.2.8 */
+{
+    if (G_LIKELY(self) && G_LIKELY(target)) {
+        NfcParamPoll poll;
+        NfcTag* tag;
+
+        memset(&poll, 0, sizeof(poll));
+        if (tech_param) {
+            poll.a = *tech_param;
+        }
+
+        tag = nfc_tag_new(target, &poll);
+        if (tag) {
+            /* No NDEF-format detection step to wait for here, unlike
+             * NfcTagType2/NfcTagType4, so mark it initialized now. */
+            tag->type = NFC_TAG_TYPE_MIFARE_CLASSIC;
+            nfc_tag_set_initialized(tag);
+            return nfc_adapter_add_tag(self, tag);
+        }
+    }
+    return NULL;
+}
+
+NfcTag*
 nfc_adapter_add_other_tag(
     NfcAdapter* self,
     NfcTarget* target)
